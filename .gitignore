@@ -1,0 +1,21 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# Windows / WSL metadata
+*:Zone.Identifier
+*Zone.Identifier
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# node
+node_modules/
+.next/
+
+# sam
+.aws-sam/
