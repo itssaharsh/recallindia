@@ -12,6 +12,8 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Callable
+from decimal import Decimal
+from typing import Any
 from urllib.parse import unquote
 
 from common import dynamo
@@ -26,11 +28,18 @@ CORS_HEADERS = {
 }
 
 
+def _json_default(value: Any) -> Any:
+    """DynamoDB hands numbers back as ``Decimal``; emit them as JSON numbers, not strings."""
+    if isinstance(value, Decimal):
+        return int(value) if value == value.to_integral_value() else float(value)
+    return str(value)
+
+
 def respond(status: int, body: dict | list) -> dict:
     return {
         "statusCode": status,
         "headers": dict(CORS_HEADERS),
-        "body": json.dumps(body, ensure_ascii=False, default=str),
+        "body": json.dumps(body, ensure_ascii=False, default=_json_default),
     }
 
 

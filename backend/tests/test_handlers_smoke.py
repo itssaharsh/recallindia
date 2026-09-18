@@ -297,3 +297,14 @@ def test_matcher_placeholders_passthrough():
 
 def test_demo_mode_is_on():
     assert os.environ["DEMO_MODE"] == "1"
+
+
+def test_api_encodes_dynamodb_decimals_as_numbers():
+    """Live DynamoDB returns Decimal for every number; the API must not stringify them."""
+    import json
+    from decimal import Decimal
+
+    from api import app
+
+    body = json.loads(app.respond(200, {"row": Decimal("45"), "score": Decimal("0.5")})["body"])
+    assert body == {"row": 45, "score": 0.5}
