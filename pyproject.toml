@@ -1,0 +1,32 @@
+[project]
+name = "recallindia"
+version = "0.1.0"
+description = "India's recalls and drug-quality failures as a live machine-readable feed, with per-item alerts."
+requires-python = ">=3.12"
+
+# Lambdas ship their own backend/<area>/requirements.txt; the dev toolchain lives in requirements-dev.txt.
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# backend/ is a source root: `from common.<mod> import ...` is first-party everywhere.
+src = [".", "backend"]
+exclude = [".venv", ".aws-sam", "node_modules", "app", ".demo_store"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "W"]
+
+[tool.ruff.lint.per-file-ignores]
+"backend/tests/*" = ["B011"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["common"]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+pythonpath = ["backend"]
+addopts = "-q -p no:cacheprovider"
+filterwarnings = [
+  "ignore::DeprecationWarning:pdfminer",
+  "ignore::DeprecationWarning:botocore",
+]

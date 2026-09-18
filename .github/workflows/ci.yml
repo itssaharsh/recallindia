@@ -1,0 +1,51 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+# CI runs in demo mode only: fixtures stand in for every external call. No AWS credentials here.
+env:
+  DEMO_MODE: "1"
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install
+        run: make install
+
+      - name: Lint (ruff check + format --check)
+        run: make lint
+
+      - name: Test (DEMO_MODE=1, fixtures only)
+        run: make test
+        env:
+          DEMO_MODE: "1"
+
+      - name: cfn-lint template.yaml
+        run: .venv/bin/cfn-lint template.yaml
+
+      # The Next.js app arrives in P06; until app/package-lock.json is committed (setup-node's
+      # cache and `npm ci` both need the lockfile) these steps are skipped.
+      - uses: actions/setup-node@v4
+        if: hashFiles('app/package-lock.json') != ''
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Build app
+        if: hashFiles('app/package-lock.json') != ''
+        run: cd app && npm ci && npm run build

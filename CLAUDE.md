@@ -21,7 +21,7 @@ India publishes product recalls and drug-quality failures as PDFs and web forms 
 ## Models (Bedrock)
 | Use | Env | ap-south-1 id | us-east-1 fallback id |
 |---|---|---|---|
-| Verify (notice covers item?) + claim letter | `MODEL_VERIFY` | `global.anthropic.claude-haiku-4-5-20251001-v1:0` (Claude Haiku 4.5) | `us.anthropic.claude-haiku-4-5-20251001-v1:0` |
+| Verify (notice covers item?) + claim letter | `MODEL_VERIFY` | `global.anthropic.claude-haiku-4-5-20251001-v1:0` (Claude Haiku 4.5) | same id (`global.` profiles are invocable from us-east-1; `us.anthropic.claude-haiku-4-5-20251001-v1:0` also exists) |
 | Normalise (CDSCO rows → schema) | `MODEL_NORMALISE` | `apac.amazon.nova-lite-v1:0` (Nova Lite) | `us.amazon.nova-lite-v1:0` |
 
 - All calls go through `backend/common/bedrock.py` (`converse`, temperature 0, strict JSON where a schema is expected). Region fallback swaps the inference-profile prefix (`apac.`→`us.`; `global.` unchanged).

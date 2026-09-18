@@ -19,3 +19,12 @@ node_modules/
 
 # sam
 .aws-sam/
+
+# local demo store (DEMO_MODE stand-in for DynamoDB + S3)
+.demo_store/
+
+# tool caches
+.pytest_cache/
+.ruff_cache/
+
+# note: .secrets.baseline stays tracked (pre-commit detect-secrets reads it)

@@ -1,0 +1,12 @@
+# Dev / CI toolchain. Lambdas ship their own backend/<area>/requirements.txt (see template.yaml);
+# the CommonLayer installs backend/common/requirements.txt.
+ruff==0.16.8
+pytest>=7,<9
+pydantic>=2,<3
+boto3>=1.34
+pdfplumber>=0.11,<0.12
+rapidfuzz>=3            # P04 candidates (fuzzy product/model match)
+cfn-lint>=1.30
+pre-commit>=3
+detect-secrets>=1.5
+moto[dynamodb,s3]>=5    # for later tests: live-shaped DynamoDB/S3 without credentials
