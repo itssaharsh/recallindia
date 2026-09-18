@@ -23,7 +23,8 @@ VENV := .venv
 PY := $(VENV)/bin/python
 
 .DEFAULT_GOAL := help
-.PHONY: help install lint fmt test validate-template build deploy deploy-guided seed validate clean
+.PHONY: help install lint fmt test validate-template build deploy deploy-guided seed validate \
+	backfill backfill-mock poll-live clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -71,6 +72,21 @@ seed: ## Seed the 15-item demo world into the local store (DEMO_MODE)
 
 validate: ## Check all seeded items in mock mode and print PASS/FAIL
 	DEMO_MODE=1 $(PY) scripts/validate.py --mock
+
+SOURCE ?= cpsc
+YEARS ?= 5
+ACCOUNT_ID = $(shell aws sts get-caller-identity --query Account --output text --profile $(AWS_PROFILE))
+
+backfill: ## Live backfill: make backfill SOURCE=cpsc|nhtsa|openfda|cdsco_portal YEARS=5 (resumable cursor in .backfill/)
+	DEMO_MODE=0 $(PY) scripts/backfill.py --source $(SOURCE) --years $(YEARS) --profile $(AWS_PROFILE)
+
+backfill-mock: ## Same backfill against fixtures and the local demo store (DEMO_MODE=1, no sleep)
+	$(PY) scripts/backfill.py --source $(SOURCE) --years $(YEARS) --mock --sleep 0
+
+poll-live: ## Invoke one deployed poller Lambda once: make poll-live SOURCE=cpsc|nhtsa|openfda|cdsco-portal
+	aws lambda invoke --profile $(AWS_PROFILE) --region $(AWS_REGION) \
+		--function-name recallindia-poller-$(SOURCE)-$(ACCOUNT_ID) \
+		--cli-binary-format raw-in-base64-out --payload '{}' /dev/stdout
 
 clean: ## Remove venv, SAM build output, caches and the local demo store
 	rm -rf $(VENV) .aws-sam .demo_store .pytest_cache .ruff_cache
