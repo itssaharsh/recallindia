@@ -27,14 +27,11 @@ import time
 from typing import Any
 
 from common import s3
+from common.cdsco import JUNE_2025_PDF_URL
 from common.demo_mode import fetch_bytes, is_demo
 
 log = logging.getLogger(__name__)
 
-JUNE_2025_PDF_URL = (
-    "https://cdsco.gov.in/opencms/resources/UploadCDSCOWeb/2018/UploadAlertsFiles/"
-    "CDSCO%20NSQ%20june25.pdf"
-)
 MIN_TEXTRACT_ROWS = 5
 TEXTRACT_POLL_SECONDS = 3
 TEXTRACT_TIMEOUT_SECONDS = 240

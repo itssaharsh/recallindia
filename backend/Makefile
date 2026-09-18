@@ -1,11 +1,16 @@
 # SAM custom build for the CommonLayer (template.yaml: Metadata.BuildMethod = makefile).
-# `sam build` runs `make build-CommonLayer` in this directory with ARTIFACTS_DIR set.
+# `sam build` runs `make --makefile <this file> build-CommonLayer` with ARTIFACTS_DIR set, but
+# with the cwd in a SCRATCH COPY of backend/ (not this directory), so anything outside
+# backend/ must be resolved from this Makefile's own location (THIS_DIR), never from cwd.
 # Result: $(ARTIFACTS_DIR)/python/common  (Lambda resolves `common` from /opt/python)
 #         $(ARTIFACTS_DIR)/python/<deps>   (backend/common/requirements.txt: pydantic>=2)
 #         $(ARTIFACTS_DIR)/fixtures        (/opt/fixtures: FIXTURES_DIR for DemoMode=1 stacks)
 # Wheels are pinned to the Lambda runtime (CPython 3.12, manylinux2014 x86_64) so the layer does
 # not silently follow the host interpreter (macOS arm64 / 3.13 would break pydantic_core).
 
+THIS_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+REPO_ROOT := $(abspath $(THIS_DIR)..)
+FIXTURES_SRC ?= $(REPO_ROOT)/fixtures
 ARTIFACTS_DIR ?= .aws-sam/build/CommonLayer
 PYTHON ?= python3
 PIP_TARGET_FLAGS := --platform manylinux2014_x86_64 --only-binary=:all: \
@@ -15,11 +20,12 @@ PIP_TARGET_FLAGS := --platform manylinux2014_x86_64 --only-binary=:all: \
 
 build-CommonLayer:
 	mkdir -p "$(ARTIFACTS_DIR)/python"
-	$(PYTHON) -m pip install -r common/requirements.txt $(PIP_TARGET_FLAGS) \
+	$(PYTHON) -m pip install -r "$(THIS_DIR)common/requirements.txt" $(PIP_TARGET_FLAGS) \
 		-t "$(ARTIFACTS_DIR)/python"
 	rm -rf "$(ARTIFACTS_DIR)/python/common"
-	cp -r common "$(ARTIFACTS_DIR)/python/common"
+	cp -r "$(THIS_DIR)common" "$(ARTIFACTS_DIR)/python/common"
 	rm -rf "$(ARTIFACTS_DIR)/python/common/tests"
 	rm -rf "$(ARTIFACTS_DIR)/fixtures"
-	cp -r ../fixtures "$(ARTIFACTS_DIR)/fixtures"
+	@test -d "$(FIXTURES_SRC)" || { echo "backend/Makefile: fixtures not found at $(FIXTURES_SRC)"; exit 1; }
+	cp -r "$(FIXTURES_SRC)" "$(ARTIFACTS_DIR)/fixtures"
 	find "$(ARTIFACTS_DIR)" -type d -name __pycache__ -prune -exec rm -rf {} +

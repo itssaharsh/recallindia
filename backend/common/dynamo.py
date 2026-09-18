@@ -62,10 +62,30 @@ def _region() -> str:
     return os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "ap-south-1"
 
 
-def _table(kind: TableKind) -> Any:
-    import boto3  # lazy: demo mode must not need boto3 credentials
+# One boto3 resource per region and one Table per (region, name), reused across calls: a poll
+# does hundreds of get+put round trips and a fresh client per call would open a new HTTPS
+# connection each time.
+_RESOURCES: dict[str, Any] = {}
+_TABLES: dict[tuple[str, str], Any] = {}
 
-    return boto3.resource("dynamodb", region_name=_region()).Table(table_name(kind))
+
+def _table(kind: TableKind) -> Any:
+    region, name = _region(), table_name(kind)
+    table = _TABLES.get((region, name))
+    if table is None:
+        import boto3  # lazy: demo mode must not need boto3 credentials
+
+        resource = _RESOURCES.get(region)
+        if resource is None:
+            resource = _RESOURCES[region] = boto3.resource("dynamodb", region_name=region)
+        table = _TABLES[(region, name)] = resource.Table(name)
+    return table
+
+
+def reset_clients() -> None:
+    """Drop the cached boto3 resources/tables (tests, or after changing region/table env)."""
+    _RESOURCES.clear()
+    _TABLES.clear()
 
 
 def _to_dynamo(item: dict) -> dict:
@@ -88,10 +108,15 @@ def put(kind: TableKind, item: dict) -> None:
 
 
 def get(kind: TableKind, pk: str) -> dict | None:
-    """Fetch one item by pk, or None."""
+    """Fetch one item by pk, or None.
+
+    Strongly consistent: ``upsert_notice`` reads then writes the same pk back to back (NHTSA
+    sees one campaign under consecutive model years), and an eventually consistent read could
+    hand back the pre-merge item and drop a vehicle year.
+    """
     if is_demo():
         return _load(kind).get(pk)
-    return _table(kind).get_item(Key={"pk": pk}).get("Item")
+    return _table(kind).get_item(Key={"pk": pk}, ConsistentRead=True).get("Item")
 
 
 def delete(kind: TableKind, pk: str) -> None:

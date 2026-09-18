@@ -43,6 +43,13 @@ def test_brand_lc_is_derived_when_empty() -> None:
     assert _notice(brand_lc="custom").brand_lc == "custom"
 
 
+def test_blank_brand_becomes_unknown_so_the_gsi_key_is_never_empty() -> None:
+    for blank in ("", "   "):
+        n = _notice(brand=blank)
+        assert n.brand == "unknown" and n.brand_lc == "unknown"
+    assert _notice(brand="Acme", brand_lc="  ").brand_lc == "acme"
+
+
 def test_raw_excerpt_truncated_to_4096() -> None:
     notice = _notice(raw_excerpt="x" * (RAW_EXCERPT_MAX + 500))
     assert len(notice.raw_excerpt) == RAW_EXCERPT_MAX

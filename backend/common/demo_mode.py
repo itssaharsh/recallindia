@@ -7,6 +7,8 @@ Live calls use stdlib ``urllib`` with a browser-like User-Agent and exponential 
 
 from __future__ import annotations
 
+import copy
+import http.client
 import json
 import os
 import re
@@ -29,32 +31,38 @@ _DEFAULT_HEADERS = {
 }
 
 # Ordered (regex, target). ``target`` is a fixture path relative to ``fixtures_dir()`` or a
-# Python literal (list) returned as-is. First match wins, so specific routes go first.
-FIXTURE_ROUTES: list[tuple[str, str | list]] = [
+# Python literal (list/dict) returned as a deep copy. First match wins, so specific routes go
+# first. Regexes match case-insensitively, so make/model names are written lower-case.
+_NHTSA = r"api\.nhtsa\.gov/recalls/recallsByVehicle"
+_PORTAL = r"cdscoonline\.gov\.in/CDSCO"
+_TWELVE_MONTHS = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split()
+NHTSA_EMPTY = {"Count": 0, "Message": "Results returned successfully", "results": []}
+
+FIXTURE_ROUTES: list[tuple[str, str | list | dict]] = [
+    # CPSC: any RecallDateStart/End window -> the 2026 snapshot (451 recalls)
     (r"saferproducts\.gov/RestWebServices/Recall", "cpsc/recent.json"),
+    # NHTSA: real results for the US-market names, the documented 400-with-JSON body otherwise
+    (_NHTSA + r"\?(?=.*\bmake=honda\b)(?=.*\bmodel=city\b)", "nhtsa/honda_city_2024.json"),
+    (_NHTSA + r"\?(?=.*\bmake=honda\b)(?=.*\bmodel=accord\b)", "nhtsa/honda_accord_2024.json"),
+    (_NHTSA + r"\?(?=.*\bmake=jeep\b)(?=.*\bmodel=compass\b)", "nhtsa/jeep_compass_2022.json"),
+    (_NHTSA + r"\?(?=.*\bmake=kia\b)(?=.*\bmodel=seltos\b)", "nhtsa/kia_seltos_2023.json"),
+    (_NHTSA + r"\?(?=.*\bmake=hyundai\b)(?=.*\bmodel=venue\b)", "nhtsa/hyundai_venue_2022.json"),
+    (_NHTSA, NHTSA_EMPTY),
+    # openFDA: the 30-day windowed poll gets the recent snapshot, anything else the P00 one
+    (r"api\.fda\.gov/device/enforcement\.json", "openfda/device_enforcement.json"),
     (
-        r"api\.nhtsa\.gov/recalls/recallsByVehicle\?(?=.*\bmake=honda\b)(?=.*\bmodel=city\b)",
-        "nhtsa/honda_city_2024.json",
-    ),
-    (
-        r"api\.nhtsa\.gov/recalls/recallsByVehicle\?(?=.*\bmake=honda\b)(?=.*\bmodel=accord\b)",
-        "nhtsa/honda_accord_2024.json",
+        r"api\.fda\.gov/drug/enforcement\.json\?(?=.*search=report_date)",
+        "openfda/drug_enforcement_recent.json",
     ),
     (r"api\.fda\.gov/drug/enforcement\.json", "openfda/drug_enforcement.json"),
+    # CDSCO portal (served as text/plain ISO-8859-1 live; fixtures may be latin-1 too)
+    (_PORTAL + r"/filteredNsqDrugTable\?(?=.*\bsource=CDL\b)", "cdsco/nsq_jul2026_cdl.json"),
+    (_PORTAL + r"/filteredNsqDrugTable\?(?=.*\bmonth=MAR-2026\b)", "cdsco/nsq_mar2026_all.json"),
+    (_PORTAL + r"/(publicNsqDrugTable|filteredNsqDrugTable)", "cdsco/nsq_jul2026_all.json"),
+    (_PORTAL + r"/publicReportingMonths\?(?=.*\byear=2026\b)", _TWELVE_MONTHS[:7]),
+    (_PORTAL + r"/publicReportingMonths", _TWELVE_MONTHS),
     (
-        r"cdscoonline\.gov\.in/CDSCO/filteredNsqDrugTable\?(?=.*\bsource=CDL\b)",
-        "cdsco/nsq_jul2026_cdl.json",
-    ),
-    (
-        r"cdscoonline\.gov\.in/CDSCO/(publicNsqDrugTable|filteredNsqDrugTable)",
-        "cdsco/nsq_jul2026_all.json",
-    ),
-    (
-        r"cdscoonline\.gov\.in/CDSCO/publicReportingMonths",
-        ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"],
-    ),
-    (
-        r"cdscoonline\.gov\.in/CDSCO/reportingYears",
+        _PORTAL + r"/reportingYears",
         ["2019", "2020", "2021", "2022", "2023", "2024", "2025", "2026"],
     ),
     (r"cdsco\.gov\.in.*(\.pdf|download_file_division\.jsp)", "cdsco/nsq_latest.pdf"),
@@ -92,7 +100,7 @@ def demo_store_dir() -> Path:
     return Path(os.environ.get("DEMO_STORE_DIR") or _REPO_ROOT / ".demo_store")
 
 
-def _route(url: str) -> str | list:
+def _route(url: str) -> str | list | dict:
     """Return the fixture target for ``url`` or raise FixtureMissing."""
     for pattern, target in FIXTURE_ROUTES:
         if re.search(pattern, url, flags=re.IGNORECASE):
@@ -109,6 +117,14 @@ def _fixture_file(url: str) -> Path:
     if not path.is_file():
         raise FixtureMissing(f"{url} -> {path} (file not found)")
     return path
+
+
+def _decode_fixture(url: str, body: bytes) -> str:
+    """Fixtures are UTF-8, except raw portal captures saved as served (ISO-8859-1)."""
+    try:
+        return body.decode("utf-8")
+    except UnicodeDecodeError:
+        return body.decode(_charset_for(url, None), errors="replace")
 
 
 def _charset_for(url: str, headers) -> str:
@@ -131,9 +147,11 @@ def _fetch_live(
 ) -> tuple[bytes, str]:
     """Fetch with backoff. Returns ``(body, charset)``.
 
-    429/5xx, connection errors and timeouts are retried up to ``retries`` attempts. Any other
-    HTTP error status is returned as-is when ``want_json`` (the caller decides whether the
-    body parses -- NHTSA returns HTTP 400 with a valid empty JSON body) and raised otherwise.
+    429/5xx, connection errors and timeouts are retried up to ``retries`` attempts -- including
+    a socket closed mid-response (``RemoteDisconnected`` / ``IncompleteRead`` /
+    ``ConnectionResetError``), which urllib raises outside ``URLError``. Any other HTTP error
+    status is returned as-is when ``want_json`` (the caller decides whether the body parses --
+    NHTSA returns HTTP 400 with a valid empty JSON body) and raised otherwise.
     """
     attempts = max(1, retries)
     last_error: Exception | None = None
@@ -148,7 +166,7 @@ def _fetch_live(
                 return err.read(), _charset_for(url, err.headers)
             else:
                 raise UpstreamError(f"HTTP {err.code} for {url}") from err
-        except (urllib.error.URLError, TimeoutError) as err:
+        except (urllib.error.URLError, TimeoutError, http.client.HTTPException, OSError) as err:
             last_error = err
         if attempt < attempts - 1:
             _sleep(_BACKOFF_SECONDS[min(attempt, len(_BACKOFF_SECONDS) - 1)])
@@ -166,10 +184,9 @@ def fetch_json(
     """
     if is_demo():
         target = _route(url)
-        if isinstance(target, list):
-            return list(target)
-        with _fixture_file(url).open(encoding="utf-8") as fh:
-            return json.load(fh)
+        if isinstance(target, (list, dict)):
+            return copy.deepcopy(target)
+        return json.loads(_decode_fixture(url, _fixture_file(url).read_bytes()))
     body, charset = _fetch_live(
         url, timeout=timeout, headers=headers, retries=retries, want_json=True
     )

@@ -138,6 +138,27 @@ def test_500_then_200_retries_and_succeeds(monkeypatch: pytest.MonkeyPatch, live
     assert calls[0].startswith("Mozilla/5.0")
 
 
+def test_socket_closed_mid_response_is_retried(monkeypatch: pytest.MonkeyPatch, live) -> None:
+    """RemoteDisconnected / IncompleteRead / ConnectionResetError are not URLErrors."""
+    import http.client
+
+    url = f"{PORTAL}/reportingYears?tab=nsq"
+    failures = [
+        http.client.RemoteDisconnected("Remote end closed connection without response"),
+        http.client.IncompleteRead(b'["20'),
+        ConnectionResetError(104, "Connection reset by peer"),
+    ]
+
+    def handler(_request):
+        if failures:
+            raise failures.pop(0)
+        return _Response(b'["2025", "2026"]', "utf-8")
+
+    _patch_urlopen(monkeypatch, handler)
+    assert fetch_json(url, retries=4) == ["2025", "2026"]
+    assert live == [1.0, 2.0, 4.0]
+
+
 def test_non_json_body_after_retries_raises(monkeypatch: pytest.MonkeyPatch, live) -> None:
     url = "https://api.fda.gov/drug/enforcement.json"
 
@@ -155,3 +176,79 @@ def test_cdsco_portal_defaults_to_latin1(monkeypatch: pytest.MonkeyPatch, live) 
     body = '{"aaData": [{"str_product_name": "Café syrup"}]}'.encode("latin-1")
     _patch_urlopen(monkeypatch, lambda _request: _Response(body))
     assert fetch_json(url)["aaData"][0]["str_product_name"] == "Café syrup"
+
+
+# --- P02 routes ------------------------------------------------------------------
+
+NHTSA = "https://api.nhtsa.gov/recalls/recallsByVehicle"
+FDA = "https://api.fda.gov"
+
+
+@pytest.mark.parametrize(
+    ("url", "check"),
+    [
+        (f"{NHTSA}?make=jeep&model=compass&modelYear=2022", lambda d: len(d["results"]) == 4),
+        (f"{NHTSA}?make=kia&model=seltos&modelYear=2023", lambda d: len(d["results"]) == 2),
+        (f"{NHTSA}?make=hyundai&model=venue&modelYear=2022", lambda d: len(d["results"]) == 1),
+        (f"{NHTSA}?make=hyundai&model=creta&modelYear=2024", lambda d: d == demo_mode.NHTSA_EMPTY),
+        (f"{NHTSA}?make=maruti&model=swift&modelYear=2021", lambda d: d["Count"] == 0),
+        (
+            f"{FDA}/device/enforcement.json?sort=report_date:desc&limit=25",
+            lambda d: (
+                len(d["results"]) == 25
+                and d["results"][0]["report_date"] >= d["results"][-1]["report_date"]
+            ),
+        ),
+        (
+            f"{FDA}/drug/enforcement.json?search=report_date:[20260819+TO+20260918]"
+            "&sort=report_date:desc&limit=100&skip=0",
+            lambda d: len(d["results"]) == 89 and d["results"][0]["report_date"] == "20260909",
+        ),
+        (
+            f"{FDA}/drug/enforcement.json?sort=report_date:desc&limit=25",
+            lambda d: len(d["results"]) == 25 and d["results"][0]["report_date"] < "2016",
+        ),
+        (
+            f"{PORTAL}/filteredNsqDrugTable?month=MAR-2026&source=All&tab=nsq",
+            lambda d: (
+                len(d["aaData"]) == 190 and d["aaData"][0]["dt_reporting_month_year"] == "MAR-2026"
+            ),
+        ),
+        (
+            f"{PORTAL}/filteredNsqDrugTable?month=DEC-2025&source=All&tab=nsq",
+            lambda d: len(d["aaData"]) == 239,
+        ),
+        (f"{PORTAL}/publicReportingMonths?year=2025&tab=nsq", lambda d: len(d) == 12),
+        (f"{PORTAL}/publicReportingMonths?year=2019&tab=nsq", lambda d: d[0] == "Jan"),
+        (
+            f"{PORTAL}/publicReportingMonths?year=2026&tab=nsq",
+            lambda d: d == ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"],
+        ),
+        (
+            "https://www.saferproducts.gov/RestWebServices/Recall?format=json"
+            "&RecallDateStart=2021-09-01&RecallDateEnd=2021-09-30",
+            lambda d: len(d) == 451,
+        ),
+    ],
+)
+def test_p02_routes(url: str, check) -> None:
+    assert check(fetch_json(url))
+
+
+def test_nhtsa_generic_empty_is_a_fresh_dict_each_call() -> None:
+    url = f"{NHTSA}?make=tata&model=nexon&modelYear=2022"
+    first = fetch_json(url)
+    assert first == {"Count": 0, "Message": "Results returned successfully", "results": []}
+    first["results"].append({"NHTSACampaignNumber": "X"})
+    first["Count"] = 1
+    second = fetch_json(url)
+    assert second["Count"] == 0 and second["results"] == []
+    assert second is not first
+    assert demo_mode.NHTSA_EMPTY["results"] == []
+
+
+def test_latin1_fixture_decodes() -> None:
+    """The MAR-2026 capture is saved as served (ISO-8859-1); utf-8 must not be assumed."""
+    rows = fetch_json(f"{PORTAL}/filteredNsqDrugTable?month=MAR-2026&source=All&tab=nsq")["aaData"]
+    assert all(isinstance(r["str_product_name"], str) for r in rows)
+    assert not any("�" in r["str_manufactured_by"] for r in rows)

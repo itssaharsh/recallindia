@@ -6,9 +6,10 @@
 * ``cdsco_pdf`` (archive 2010–Jun 2025 + the ``/ingest`` hero): downloads the
   alert PDF and stores it in the raw bucket for ``cdsco_extract``.
 
-Every network call goes through ``common.demo_mode`` (fixtures in DEMO_MODE).
-P03 adds the archive listing scrape (``download_file_division.jsp`` → iframe)
-and the ``meta#cdsco`` record.
+Every network call goes through ``common.demo_mode`` (fixtures in DEMO_MODE). The
+portal client itself lives in ``common.cdsco`` (shared with the ``cdsco_portal``
+poller) and is re-exported here. P03 adds the archive listing scrape
+(``download_file_division.jsp`` → iframe).
 """
 
 from __future__ import annotations
@@ -19,40 +20,29 @@ import time
 from urllib.parse import unquote, urlsplit
 
 from common import s3
-from common.demo_mode import fetch_bytes, fetch_json
-
-SOURCE = "cdsco_nsq"
-PORTAL_BASE = "https://cdscoonline.gov.in/CDSCO"
-JUNE_2025_PDF_URL = (
-    "https://cdsco.gov.in/opencms/resources/UploadCDSCOWeb/2018/UploadAlertsFiles/"
-    "CDSCO%20NSQ%20june25.pdf"
+from common.cdsco import (
+    JUNE_2025_PDF_URL,
+    PORTAL_BASE,
+    SOURCE,
+    fetch_portal_rows,
+    newest_month,
+    reporting_months,
+    reporting_years,
 )
-_MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+from common.demo_mode import fetch_bytes
 
-
-def _month_index(name: str) -> int:
-    key = str(name).strip()[:3].upper()
-    return _MONTHS.index(key) if key in _MONTHS else -1
-
-
-def newest_month() -> str:
-    """Resolve the newest reporting month on the portal as ``MON-YYYY`` (3-letter upper)."""
-    years = fetch_json(f"{PORTAL_BASE}/reportingYears?tab=nsq")
-    year = max(int(y) for y in years if str(y).strip().isdigit())
-    months = fetch_json(f"{PORTAL_BASE}/publicReportingMonths?year={year}&tab=nsq")
-    valid = [m for m in months if _month_index(m) >= 0]
-    if not valid:
-        raise ValueError(f"no reporting months for {year}: {months!r}")
-    newest = max(valid, key=_month_index)
-    return f"{_MONTHS[_month_index(newest)]}-{year}"
-
-
-def fetch_portal_rows(month: str | None = None) -> list[dict]:
-    """Rows (``aaData``) for ``month`` (``MON-YYYY``); newest month when None."""
-    month = (month or newest_month()).upper()
-    payload = fetch_json(f"{PORTAL_BASE}/filteredNsqDrugTable?month={month}&source=All&tab=nsq")
-    rows = payload.get("aaData", []) if isinstance(payload, dict) else payload
-    return [r for r in rows if isinstance(r, dict)]
+__all__ = [
+    "JUNE_2025_PDF_URL",
+    "PORTAL_BASE",
+    "SOURCE",
+    "fetch_archive_pdf",
+    "fetch_portal_rows",
+    "handler",
+    "newest_month",
+    "pdf_key_for",
+    "reporting_months",
+    "reporting_years",
+]
 
 
 def fetch_archive_pdf(url: str) -> bytes:

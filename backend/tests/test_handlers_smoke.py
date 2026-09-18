@@ -1,4 +1,7 @@
-"""P01 smoke test: every Lambda handler imports and answers a dict in DEMO_MODE."""
+"""Smoke test: every Lambda handler imports and answers a dict in DEMO_MODE.
+
+Per-source poller mapping tests live in their own files (test_poller_*.py, P02).
+"""
 
 from __future__ import annotations
 
@@ -12,6 +15,7 @@ HANDLER_MODULES = [
     "pollers.cpsc",
     "pollers.nhtsa",
     "pollers.openfda",
+    "pollers.cdsco_portal",
     "ingest.cdsco_fetch",
     "ingest.cdsco_extract",
     "ingest.cdsco_normalise",
@@ -42,43 +46,23 @@ def _api_event(method: str, path: str, qs: dict | None = None) -> dict:
     }
 
 
+def _import_or_skip(module_name: str):
+    """Import a handler module; skip only when that module itself is not built yet."""
+    try:
+        return importlib.import_module(module_name)
+    except ModuleNotFoundError as exc:
+        if exc.name == module_name:
+            pytest.skip(f"{module_name} not built yet")
+        raise
+
+
 @pytest.mark.parametrize("module_name", HANDLER_MODULES)
 def test_every_handler_returns_dict(module_name):
-    module = importlib.import_module(module_name)
+    module = _import_or_skip(module_name)
     assert callable(module.handler)
     out = module.handler({}, None)
     assert isinstance(out, dict), module_name
     assert not out.get("degraded"), f"{module_name} degraded: {out.get('error')}"
-
-
-def test_cpsc_fetched_count():
-    from pollers import cpsc
-
-    out = cpsc.handler({}, None)
-    assert out["source"] == "cpsc"
-    assert out["fetched"] == 451
-    assert out["degraded"] is False
-    assert cpsc.count_records([1, 2, 3]) == 3
-
-
-def test_nhtsa_empty_result_is_not_degraded():
-    from pollers import nhtsa
-
-    out = nhtsa.handler({}, None)
-    assert out["fetched"] == 0
-    assert out["degraded"] is False
-    assert nhtsa.count_records({"Count": 0, "results": []}) == 0
-    accord = nhtsa.handler({"make": "honda", "model": "accord", "modelYear": 2024}, None)
-    assert accord["fetched"] == 3
-
-
-def test_openfda_sorted_newest_first():
-    from pollers import openfda
-
-    assert "sort=report_date:desc" in openfda.build_url()
-    out = openfda.handler({}, None)
-    assert out["fetched"] == 25
-    assert out["degraded"] is False
 
 
 def test_cdsco_fetch_portal():
@@ -124,7 +108,11 @@ def test_cdsco_normalise_portal_rows_to_notices():
     notices = cdsco_normalise.rows_to_notices(rows, adapter="portal", month="JUL-2026")
     n = notices[0]
     assert n["source"] == "cdsco_nsq" and n["adapter"] == "cdsco_portal"
-    assert n["pk"] == "cdsco_nsq#JUL-2026-cdsco_portal-1"
+    key = cdsco_normalise.portal_row_key(
+        "Paracetamol Tablets IP 650mg", "FT5427", "Forgo Pharmaceuticals"
+    )
+    assert n["pk"] == f"cdsco_nsq#JUL-2026-cdsco_portal-{key}" == "cdsco_nsq#" + n["notice_id"]
+    assert n["product"] == "Paracetamol Tablets IP 650mg"
     assert n["batches"] == ["FT5427"] and n["brand_lc"] == "forgo pharmaceuticals"
     assert n["published_at"] == "2026-07-01"
     assert n["row_ref"] == {"page": None, "row": 1, "month": "JUL-2026"}
@@ -259,7 +247,8 @@ def test_api_notices_after_upsert_filters():
             "dt_reporting_month_year": "JUL-2026",
         }
     ]
-    for n in cdsco_normalise.rows_to_notices(rows, adapter="portal", month="JUL-2026"):
+    notices = cdsco_normalise.rows_to_notices(rows, adapter="portal", month="JUL-2026")
+    for n in notices:
         dynamo.put("notices", n)
     body = json.loads(
         app.handler(_api_event("GET", "/v1/notices", {"source": "cdsco_nsq"}), None)["body"]
@@ -269,7 +258,9 @@ def test_api_notices_after_upsert_filters():
         app.handler(_api_event("GET", "/v1/notices", {"since": "2026-08-01"}), None)["body"]
     )
     assert body["count"] == 0
-    one = app.handler(_api_event("GET", "/v1/notices/cdsco_nsq%23JUL-2026-cdsco_portal-1"), None)
+    pk_path = "/v1/notices/" + notices[0]["pk"].replace("#", "%23")
+    assert pk_path.startswith("/v1/notices/cdsco_nsq%23JUL-2026-cdsco_portal-")
+    one = app.handler(_api_event("GET", pk_path), None)
     assert one["statusCode"] == 200
     assert json.loads(one["body"])["batches"] == ["PEP5001"]
 

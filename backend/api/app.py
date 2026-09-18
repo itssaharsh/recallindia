@@ -16,6 +16,7 @@ from urllib.parse import unquote
 
 from common import dynamo
 from common.demo_mode import is_demo
+from common.notices import is_meta
 
 CORS_HEADERS = {
     "content-type": "application/json",
@@ -49,7 +50,7 @@ def list_notices(_params: dict, event: dict) -> dict:
     source = (qs.get("source") or "").strip()
     since = (qs.get("since") or "").strip()
     q = (qs.get("q") or "").strip().lower()
-    notices = dynamo.scan_all("notices")
+    notices = [n for n in dynamo.scan_all("notices") if not is_meta(n)]
     if source:
         notices = [n for n in notices if n.get("source") == source]
     if since:

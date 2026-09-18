@@ -22,6 +22,8 @@ node_modules/
 
 # local demo store (DEMO_MODE stand-in for DynamoDB + S3)
 .demo_store/
+# scripts/backfill.py resumable cursors
+.backfill/
 
 # tool caches
 .pytest_cache/

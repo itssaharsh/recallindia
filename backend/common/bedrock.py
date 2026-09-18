@@ -4,12 +4,17 @@ Model ids come from ``MODEL_VERIFY`` / ``MODEL_NORMALISE``. Calls go to ``BEDROC
 and fall back once to ``BEDROCK_FALLBACK_REGION``, swapping the inference-profile prefix
 (``apac.`` <-> ``us.``; ``global.`` untouched). In demo mode the reply is read from
 ``fixtures/bedrock/<kind>/<key>.json``.
+
+``BEDROCK_ENABLED`` (default true; ``0``/``false``/``no``/``off`` disable) short-circuits
+every call -- demo or live -- with ``BedrockUnavailable`` so callers take their deterministic
+/ template fallback; one warning is logged per Lambda invocation, not per call.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 from typing import Any, Literal
@@ -35,8 +40,42 @@ _FALLBACK_CODES = frozenset(
 _FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
 
 
+log = logging.getLogger("common.bedrock")
+
+_DISABLED_VALUES = frozenset({"0", "false", "no", "off"})
+DISABLED_WARNING = "Bedrock disabled (BEDROCK_ENABLED=false): using deterministic fallback"
+# One warning per Lambda invocation: keyed on the X-Ray trace id Lambda sets per invocation
+# (``_X_AMZN_TRACE_ID``); without one (local runs, tests) once per process until reset.
+_warned = False
+_warned_key: str | None = None
+
+
 class BedrockError(Exception):
     """Both the primary and the fallback region failed."""
+
+
+class BedrockUnavailable(BedrockError):
+    """``BEDROCK_ENABLED`` is false: no call was attempted; use the deterministic fallback."""
+
+
+def is_enabled() -> bool:
+    """``BEDROCK_ENABLED`` env, default true; ``0``/``false``/``no``/``off`` disable."""
+    return os.environ.get("BEDROCK_ENABLED", "true").strip().lower() not in _DISABLED_VALUES
+
+
+def reset_invocation_warning() -> None:
+    """Re-arm the once-per-invocation warning (tests, or a long-lived local process)."""
+    global _warned, _warned_key
+    _warned, _warned_key = False, None
+
+
+def _warn_disabled_once() -> None:
+    global _warned, _warned_key
+    key = os.environ.get("_X_AMZN_TRACE_ID")
+    if _warned and _warned_key == key:
+        return
+    _warned, _warned_key = True, key
+    log.warning(DISABLED_WARNING)
 
 
 def _region() -> str:
@@ -125,7 +164,11 @@ def converse(
     Demo mode reads ``fixtures/bedrock/<kind>/<fixture_key or sha256(prompt)[:12]>.json``
     (falling back to ``default.json``). Live: primary region, then one retry in the fallback
     region on access/availability errors; raises ``BedrockError`` when both fail.
+    Raises ``BedrockUnavailable`` before doing anything when ``BEDROCK_ENABLED`` is false.
     """
+    if not is_enabled():
+        _warn_disabled_once()
+        raise BedrockUnavailable(DISABLED_WARNING)
     if is_demo():
         return {
             "text": _demo_reply(kind, prompt, fixture_key),

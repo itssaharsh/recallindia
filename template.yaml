@@ -31,6 +31,13 @@ Parameters:
   BedrockFallbackRegion:
     Type: String
     Default: us-east-1
+  BedrockEnabled:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "true"
+    Description: >-
+      false short-circuits every Bedrock call (BedrockUnavailable) so verify/normalise/claim
+      use their deterministic or template fallbacks; use while model access is pending.
   ModelVerify:
     Type: String
     Default: global.anthropic.claude-haiku-4-5-20251001-v1:0
@@ -68,6 +75,7 @@ Globals:
         KMS_KEY_ID: !Ref SigningKey
         BEDROCK_REGION: !Ref BedrockRegion
         BEDROCK_FALLBACK_REGION: !Ref BedrockFallbackRegion
+        BEDROCK_ENABLED: !Ref BedrockEnabled
         MODEL_VERIFY: !Ref ModelVerify
         MODEL_NORMALISE: !Ref ModelNormalise
         NOTIFY_EMAIL: !Ref NotifyEmail
@@ -379,7 +387,7 @@ Resources:
             Path: "/ingest/status/{arn}"
 
   # -------------------------------------------------------------------------
-  # Pollers (cpsc / nhtsa / openfda) - EventBridge Scheduler targets
+  # Pollers (cpsc / nhtsa / openfda / cdsco_portal) - EventBridge Scheduler targets
   # -------------------------------------------------------------------------
   CpscPollerFunction:
     Type: AWS::Serverless::Function
@@ -387,6 +395,7 @@ Resources:
       FunctionName: !Sub recallindia-poller-cpsc-${AWS::AccountId}
       CodeUri: backend/pollers/
       Handler: cpsc.handler
+      Timeout: 180 # one fetch_json can take 63 s (3 x 20 s + backoff) before ~500 get+put round trips
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref NoticesTable
@@ -397,6 +406,7 @@ Resources:
       FunctionName: !Sub recallindia-poller-nhtsa-${AWS::AccountId}
       CodeUri: backend/pollers/
       Handler: nhtsa.handler
+      Timeout: 120 # sequential watchlist (20 models x 5 years) with a pause between calls
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref NoticesTable
@@ -409,6 +419,18 @@ Resources:
       FunctionName: !Sub recallindia-poller-openfda-${AWS::AccountId}
       CodeUri: backend/pollers/
       Handler: openfda.handler
+      Timeout: 180 # up to 20 sequential page requests (2 kinds x 10 pages) then hundreds of upserts
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref NoticesTable
+
+  CdscoPortalPollerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub recallindia-poller-cdsco-portal-${AWS::AccountId}
+      CodeUri: backend/pollers/
+      Handler: cdsco_portal.handler
+      Timeout: 120
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref NoticesTable
@@ -661,7 +683,7 @@ Resources:
                   - !GetAtt CpscPollerFunction.Arn
                   - !GetAtt NhtsaPollerFunction.Arn
                   - !GetAtt OpenfdaPollerFunction.Arn
-                  - !GetAtt CdscoFetchFunction.Arn
+                  - !GetAtt CdscoPortalPollerFunction.Arn
 
   CpscSchedule:
     Type: AWS::Scheduler::Schedule
@@ -702,13 +724,13 @@ Resources:
   CdscoSchedule:
     Type: AWS::Scheduler::Schedule
     Properties:
-      Description: CDSCO NSQ daily fetch (portal JSON newest month; archive PDFs on demand)
+      Description: CDSCO NSQ daily poll (portal JSON, newest month re-pulled; PDFs via /ingest)
       ScheduleExpression: rate(1 day)
       State: !If [SchedulesEnabled, ENABLED, DISABLED]
       FlexibleTimeWindow:
         Mode: "OFF"
       Target:
-        Arn: !GetAtt CdscoFetchFunction.Arn
+        Arn: !GetAtt CdscoPortalPollerFunction.Arn
         RoleArn: !GetAtt SchedulerRole.Arn
 
 # ---------------------------------------------------------------------------
@@ -736,3 +758,11 @@ Outputs:
     Value: !Ref MatchStateMachine
   IngestStateMachineArn:
     Value: !Ref IngestStateMachine
+  CpscPollerFunctionName:
+    Value: !Ref CpscPollerFunction
+  NhtsaPollerFunctionName:
+    Value: !Ref NhtsaPollerFunction
+  OpenfdaPollerFunctionName:
+    Value: !Ref OpenfdaPollerFunction
+  CdscoPortalPollerFunctionName:
+    Value: !Ref CdscoPortalPollerFunction

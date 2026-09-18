@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 RAW_EXCERPT_MAX = 4096
+UNKNOWN_BRAND = "unknown"
 
 Adapter = Literal["cdsco_portal", "cdsco_pdf"]
 ItemKind = Literal["medicine", "vehicle", "appliance", "other"]
@@ -65,6 +66,9 @@ class Notice(_Strict):
     mfg_date: str | None = None
     exp_date: str | None = None
     lab: str | None = None
+    # bookkeeping set by common.notices.upsert_notice (UTC ISO seconds, "Z")
+    first_seen_at: str | None = None
+    updated_at: str | None = None
 
     @staticmethod
     def make_pk(source: str, notice_id: str) -> str:
@@ -85,7 +89,11 @@ class Notice(_Strict):
 
     @model_validator(mode="after")
     def _derive_brand_lc(self) -> Notice:
-        if not self.brand_lc:
+        # brand_lc is the GSI key; DynamoDB rejects an empty string for a key attribute, so a
+        # blank brand (a portal row with no manufacturer, a whitespace Make) becomes "unknown".
+        if not self.brand.strip():
+            self.brand = UNKNOWN_BRAND
+        if not self.brand_lc.strip():
             self.brand_lc = self.brand.lower().strip()
         return self
 
