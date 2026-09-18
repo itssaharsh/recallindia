@@ -1,0 +1,3 @@
+# Installed into the CommonLayer by backend/Makefile (build-CommonLayer).
+# boto3/botocore are provided by the Lambda python3.12 runtime; do not pin them here.
+pydantic>=2,<3

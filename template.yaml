@@ -1,0 +1,738 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  RecallIndia - India's recalls and CDSCO quality-test failures as a live feed,
+  public API, per-item matching, claim letters and KMS-signed evidence.
+  Region ap-south-1. Deploy with `sam deploy --profile firstcommit`.
+
+# ---------------------------------------------------------------------------
+# Parameters
+# ---------------------------------------------------------------------------
+Parameters:
+  EnableSchedules:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+    Description: Enable the EventBridge Scheduler polls (cpsc/nhtsa/openfda 15 min, cdsco daily).
+  DemoMode:
+    Type: String
+    Default: "0"
+    Description: >-
+      Set to 1 so every external call reads fixtures (identical response shapes). The layer
+      ships fixtures/ at /opt/fixtures and the demo store lives in /tmp, so a DemoMode=1 stack
+      works end to end without upstream access.
+  NotifyEmail:
+    Type: String
+    Default: noreply@example.com
+    Description: SES sandbox-verified recipient for alert emails.
+  BedrockRegion:
+    Type: String
+    Default: ap-south-1
+  BedrockFallbackRegion:
+    Type: String
+    Default: us-east-1
+  ModelVerify:
+    Type: String
+    Default: global.anthropic.claude-haiku-4-5-20251001-v1:0
+    Description: Claude Haiku 4.5 - verify (does the notice cover the item?) and claim letter.
+  ModelNormalise:
+    Type: String
+    Default: apac.amazon.nova-lite-v1:0
+    Description: Nova Lite - CDSCO rows to Notice schema.
+
+Conditions:
+  SchedulesEnabled: !Equals [!Ref EnableSchedules, "true"]
+
+# ---------------------------------------------------------------------------
+# Globals (every Lambda)
+# ---------------------------------------------------------------------------
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 60
+    MemorySize: 512
+    Architectures: [x86_64]
+    Layers:
+      - !Ref CommonLayer
+    Environment:
+      Variables:
+        DEMO_MODE: !Ref DemoMode
+        FIXTURES_DIR: /opt/fixtures # CommonLayer copies fixtures/ next to python/ (backend/Makefile)
+        DEMO_STORE_DIR: /tmp/demo_store # only writable path in Lambda; used when DEMO_MODE=1
+        NOTICES_TABLE: !Ref NoticesTable
+        ITEMS_TABLE: !Ref ItemsTable
+        CASES_TABLE: !Ref CasesTable
+        RAW_BUCKET: !Ref RawBucket
+        EVIDENCE_BUCKET: !Ref EvidenceBucket
+        CLAIMS_BUCKET: !Ref ClaimsBucket
+        KMS_KEY_ID: !Ref SigningKey
+        BEDROCK_REGION: !Ref BedrockRegion
+        BEDROCK_FALLBACK_REGION: !Ref BedrockFallbackRegion
+        MODEL_VERIFY: !Ref ModelVerify
+        MODEL_NORMALISE: !Ref ModelNormalise
+        NOTIFY_EMAIL: !Ref NotifyEmail
+        # MATCH_STATE_MACHINE_ARN / INGEST_STATE_MACHINE_ARN would be circular here
+        # (the state machines reference the functions); they are set on ApiFunction only.
+
+Resources:
+  # -------------------------------------------------------------------------
+  # Shared code layer: backend/common -> /opt/python/common
+  # -------------------------------------------------------------------------
+  CommonLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: recallindia-common
+      Description: backend/common (schemas, demo_mode, bedrock, dynamo, s3) + pydantic
+      ContentUri: backend/
+      CompatibleRuntimes:
+        - python3.12
+      CompatibleArchitectures:
+        - x86_64
+      RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: makefile
+
+  # -------------------------------------------------------------------------
+  # DynamoDB (on-demand)
+  # -------------------------------------------------------------------------
+  NoticesTable:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub recallindia-notices-${AWS::AccountId}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: brand_lc
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: brand_lc-index
+          KeySchema:
+            - AttributeName: brand_lc
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  ItemsTable:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub recallindia-items-${AWS::AccountId}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+
+  CasesTable:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub recallindia-cases-${AWS::AccountId}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+
+  # -------------------------------------------------------------------------
+  # S3
+  # -------------------------------------------------------------------------
+  RawBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      BucketName: !Sub recallindia-raw-${AWS::AccountId}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  # Object Lock (GOVERNANCE, 30 days). Retain on delete: CloudFormation cannot
+  # empty an Object Lock bucket, so a Delete policy would only fail the stack delete.
+  # No fixed BucketName: a retained bucket would otherwise block every redeploy with
+  # "already exists" (code reads the name from the EVIDENCE_BUCKET env var / stack output).
+  EvidenceBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      ObjectLockEnabled: true
+      VersioningConfiguration:
+        Status: Enabled
+      ObjectLockConfiguration:
+        ObjectLockEnabled: Enabled
+        Rule:
+          DefaultRetention:
+            Mode: GOVERNANCE
+            Days: 30
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  ClaimsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      BucketName: !Sub recallindia-claims-${AWS::AccountId}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  # -------------------------------------------------------------------------
+  # KMS asymmetric signing key (evidence SHA-256 -> RSASSA_PKCS1_V1_5_SHA_256).
+  # Hackathon stack: explicit Delete (KMS schedules key deletion, min 7 days).
+  # -------------------------------------------------------------------------
+  SigningKey:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::KMS::Key
+    Properties:
+      Description: RecallIndia evidence signing key (RSA_2048, SIGN_VERIFY)
+      KeySpec: RSA_2048
+      KeyUsage: SIGN_VERIFY
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AccountRootFullAccess
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action: kms:*
+            Resource: "*"
+
+  SigningKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/recallindia-signing
+      TargetKeyId: !Ref SigningKey
+
+  # -------------------------------------------------------------------------
+  # HTTP API + single API Lambda (routes per SPEC section App)
+  # -------------------------------------------------------------------------
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins: ["*"]
+        AllowMethods: [GET, POST, OPTIONS]
+        AllowHeaders: [content-type]
+
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub recallindia-api-${AWS::AccountId}
+      CodeUri: backend/api/
+      Handler: app.handler
+      Environment:
+        Variables:
+          MATCH_STATE_MACHINE_ARN: !Ref MatchStateMachine
+          INGEST_STATE_MACHINE_ARN: !Ref IngestStateMachine
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref NoticesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ItemsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CasesTable
+        - S3CrudPolicy:
+            BucketName: !Ref RawBucket
+        - S3CrudPolicy:
+            BucketName: !Ref EvidenceBucket
+        - S3CrudPolicy:
+            BucketName: !Ref ClaimsBucket
+        - Statement:
+            - Sid: StartStateMachines
+              Effect: Allow
+              Action:
+                - states:StartExecution
+              Resource:
+                - !Ref MatchStateMachine
+                - !Ref IngestStateMachine
+            - Sid: TaskTokenAndStatus
+              Effect: Allow
+              Action:
+                - states:SendTaskSuccess
+                - states:SendTaskFailure
+                - states:DescribeExecution
+              Resource: "*"
+            - Sid: VerifyEvidenceSignature
+              Effect: Allow
+              Action:
+                - kms:Verify
+                - kms:GetPublicKey
+              Resource: !GetAtt SigningKey.Arn
+            - Sid: PhotoOcr
+              Effect: Allow
+              Action:
+                - textract:DetectDocumentText
+                - textract:AnalyzeDocument
+              Resource: "*"
+      Events:
+        Health:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: "/health"
+        ListNotices:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: "/v1/notices"
+        GetNotice:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: "/v1/notices/{id}"
+        Diff:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: "/v1/diff"
+        CreateItem:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: POST
+            Path: "/items"
+        ListItems:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: "/items"
+        CheckItem:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: POST
+            Path: "/items/{id}/check"
+        GetCase:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: "/cases/{id}"
+        ApproveCase:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: POST
+            Path: "/cases/{id}/approve"
+        RejectCase:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: POST
+            Path: "/cases/{id}/reject"
+        VerifyEvidence:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: "/cases/{id}/verify-evidence"
+        IngestRun:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: POST
+            Path: "/ingest/run"
+        IngestStatus:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: "/ingest/status/{arn}"
+
+  # -------------------------------------------------------------------------
+  # Pollers (cpsc / nhtsa / openfda) - EventBridge Scheduler targets
+  # -------------------------------------------------------------------------
+  CpscPollerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub recallindia-poller-cpsc-${AWS::AccountId}
+      CodeUri: backend/pollers/
+      Handler: cpsc.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref NoticesTable
+
+  NhtsaPollerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub recallindia-poller-nhtsa-${AWS::AccountId}
+      CodeUri: backend/pollers/
+      Handler: nhtsa.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref NoticesTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref ItemsTable
+
+  OpenfdaPollerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub recallindia-poller-openfda-${AWS::AccountId}
+      CodeUri: backend/pollers/
+      Handler: openfda.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref NoticesTable
+
+  # -------------------------------------------------------------------------
+  # CDSCO ingest (two adapters: cdsco_portal live JSON, cdsco_pdf archive/hero)
+  # -------------------------------------------------------------------------
+  CdscoFetchFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub recallindia-cdsco-fetch-${AWS::AccountId}
+      CodeUri: backend/ingest/
+      Handler: cdsco_fetch.handler
+      Timeout: 300
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref NoticesTable
+        - S3CrudPolicy:
+            BucketName: !Ref RawBucket
+
+  CdscoExtractFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub recallindia-cdsco-extract-${AWS::AccountId}
+      CodeUri: backend/ingest/
+      Handler: cdsco_extract.handler
+      Timeout: 300
+      MemorySize: 1024
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref RawBucket
+        - Statement:
+            - Sid: TextractTables
+              Effect: Allow
+              Action:
+                - textract:StartDocumentAnalysis
+                - textract:GetDocumentAnalysis
+                - textract:AnalyzeDocument
+              Resource: "*"
+
+  CdscoNormaliseFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub recallindia-cdsco-normalise-${AWS::AccountId}
+      CodeUri: backend/ingest/
+      Handler: cdsco_normalise.handler
+      Timeout: 300
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref NoticesTable
+        - S3CrudPolicy:
+            BucketName: !Ref RawBucket
+        - Statement:
+            - Sid: BedrockNormalise
+              Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource: "*"
+
+  # -------------------------------------------------------------------------
+  # Matcher (Step Functions tasks)
+  # -------------------------------------------------------------------------
+  CandidatesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub recallindia-candidates-${AWS::AccountId}
+      CodeUri: backend/matcher/
+      Handler: candidates.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref NoticesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ItemsTable
+
+  VerifyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub recallindia-verify-${AWS::AccountId}
+      CodeUri: backend/matcher/
+      Handler: verify.handler
+      Timeout: 120
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref NoticesTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref ItemsTable
+        - Statement:
+            - Sid: BedrockVerify
+              Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource: "*"
+
+  RangeCheckFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub recallindia-range-check-${AWS::AccountId}
+      CodeUri: backend/matcher/
+      Handler: range_check.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref NoticesTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref ItemsTable
+
+  NotifyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub recallindia-notify-${AWS::AccountId}
+      CodeUri: backend/matcher/
+      Handler: notify.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref NoticesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ItemsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CasesTable
+        - Statement:
+            - Sid: SesSend
+              Effect: Allow
+              Action:
+                - ses:SendEmail
+                - ses:SendRawEmail
+              Resource: "*"
+
+  ClaimFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub recallindia-claim-${AWS::AccountId}
+      CodeUri: backend/matcher/
+      Handler: claim.handler
+      Timeout: 120
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref NoticesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ItemsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CasesTable
+        - S3CrudPolicy:
+            BucketName: !Ref ClaimsBucket
+        - Statement:
+            - Sid: BedrockClaimLetter
+              Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource: "*"
+
+  EvidenceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub recallindia-evidence-${AWS::AccountId}
+      CodeUri: backend/matcher/
+      Handler: evidence.handler
+      Timeout: 120
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref NoticesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CasesTable
+        - S3CrudPolicy:
+            BucketName: !Ref RawBucket
+        - S3CrudPolicy:
+            BucketName: !Ref EvidenceBucket
+        - Statement:
+            - Sid: KmsSignEvidence
+              Effect: Allow
+              Action:
+                - kms:Sign
+                - kms:Verify
+                - kms:GetPublicKey
+              Resource: !GetAtt SigningKey.Arn
+
+  # -------------------------------------------------------------------------
+  # Step Functions
+  # -------------------------------------------------------------------------
+  MatchStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: !Sub recallindia-match-${AWS::AccountId}
+      Type: STANDARD
+      DefinitionUri: backend/statemachine/match.asl.json
+      DefinitionSubstitutions:
+        CandidatesFunctionArn: !GetAtt CandidatesFunction.Arn
+        VerifyFunctionArn: !GetAtt VerifyFunction.Arn
+        RangeCheckFunctionArn: !GetAtt RangeCheckFunction.Arn
+        NotifyFunctionArn: !GetAtt NotifyFunction.Arn
+        ClaimFunctionArn: !GetAtt ClaimFunction.Arn
+        EvidenceFunctionArn: !GetAtt EvidenceFunction.Arn
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref CandidatesFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref VerifyFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref RangeCheckFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref NotifyFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ClaimFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref EvidenceFunction
+
+  IngestStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: !Sub recallindia-ingest-${AWS::AccountId}
+      Type: STANDARD
+      DefinitionUri: backend/statemachine/ingest.asl.json
+      DefinitionSubstitutions:
+        CdscoFetchFunctionArn: !GetAtt CdscoFetchFunction.Arn
+        CdscoExtractFunctionArn: !GetAtt CdscoExtractFunction.Arn
+        CdscoNormaliseFunctionArn: !GetAtt CdscoNormaliseFunction.Arn
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref CdscoFetchFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref CdscoExtractFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref CdscoNormaliseFunction
+
+  # -------------------------------------------------------------------------
+  # EventBridge Scheduler (DISABLED unless EnableSchedules=true)
+  # -------------------------------------------------------------------------
+  SchedulerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: InvokePollers
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource:
+                  - !GetAtt CpscPollerFunction.Arn
+                  - !GetAtt NhtsaPollerFunction.Arn
+                  - !GetAtt OpenfdaPollerFunction.Arn
+                  - !GetAtt CdscoFetchFunction.Arn
+
+  CpscSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Description: CPSC SaferProducts poll
+      ScheduleExpression: rate(15 minutes)
+      State: !If [SchedulesEnabled, ENABLED, DISABLED]
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn: !GetAtt CpscPollerFunction.Arn
+        RoleArn: !GetAtt SchedulerRole.Arn
+
+  NhtsaSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Description: NHTSA recalls poll (watchlist)
+      ScheduleExpression: rate(15 minutes)
+      State: !If [SchedulesEnabled, ENABLED, DISABLED]
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn: !GetAtt NhtsaPollerFunction.Arn
+        RoleArn: !GetAtt SchedulerRole.Arn
+
+  OpenfdaSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Description: openFDA enforcement poll
+      ScheduleExpression: rate(15 minutes)
+      State: !If [SchedulesEnabled, ENABLED, DISABLED]
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn: !GetAtt OpenfdaPollerFunction.Arn
+        RoleArn: !GetAtt SchedulerRole.Arn
+
+  CdscoSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Description: CDSCO NSQ daily fetch (portal JSON newest month; archive PDFs on demand)
+      ScheduleExpression: rate(1 day)
+      State: !If [SchedulesEnabled, ENABLED, DISABLED]
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn: !GetAtt CdscoFetchFunction.Arn
+        RoleArn: !GetAtt SchedulerRole.Arn
+
+# ---------------------------------------------------------------------------
+# Outputs
+# ---------------------------------------------------------------------------
+Outputs:
+  ApiUrl:
+    Description: HTTP API base URL
+    Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com
+  NoticesTableName:
+    Value: !Ref NoticesTable
+  ItemsTableName:
+    Value: !Ref ItemsTable
+  CasesTableName:
+    Value: !Ref CasesTable
+  RawBucketName:
+    Value: !Ref RawBucket
+  EvidenceBucketName:
+    Value: !Ref EvidenceBucket
+  ClaimsBucketName:
+    Value: !Ref ClaimsBucket
+  SigningKeyId:
+    Value: !Ref SigningKey
+  MatchStateMachineArn:
+    Value: !Ref MatchStateMachine
+  IngestStateMachineArn:
+    Value: !Ref IngestStateMachine

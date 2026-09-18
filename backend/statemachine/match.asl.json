@@ -1,0 +1,221 @@
+{
+  "Comment": "RecallIndia MatchStateMachine (SPEC section Match pipeline). P04 builds Candidates->Verify->RangeCheck->Decide->Notify; WaitForApproval (P08, waitForTaskToken) and Claim/Evidence (P09) are Pass placeholders. Rules decide, the model explains.",
+  "StartAt": "Candidates",
+  "States": {
+    "Candidates": {
+      "Type": "Task",
+      "Resource": "${CandidatesFunctionArn}",
+      "Comment": "Query notices by brand_lc + fuzzy product/model. Output <=5 candidates.",
+      "ResultPath": "$.candidates",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "Hold"
+        }
+      ],
+      "Next": "Verify"
+    },
+    "Verify": {
+      "Type": "Task",
+      "Resource": "${VerifyFunctionArn}",
+      "Comment": "Bedrock (Claude Haiku 4.5, temperature 0): {covers_item, quoted_sentence, confidence, reasoning}. Bedrock error -> covers_item null.",
+      "ResultPath": "$.verify",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "Hold"
+        }
+      ],
+      "Next": "RangeCheck"
+    },
+    "RangeCheck": {
+      "Type": "Task",
+      "Resource": "${RangeCheckFunctionArn}",
+      "Comment": "Deterministic batch/serial/vehicle-year check: {inside: bool|null, listed, yours}. Sets $.decision and $.reason.",
+      "ResultPath": "$.range_check",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "Hold"
+        }
+      ],
+      "Next": "Decide"
+    },
+    "Decide": {
+      "Type": "Choice",
+      "Comment": "alert if covers_item && inside; hold if covers_item && inside==null or covers_item==null; dismiss otherwise.",
+      "Choices": [
+        {
+          "And": [
+            {"Variable": "$.range_check.decision", "IsPresent": true},
+            {"Variable": "$.range_check.decision", "StringEquals": "alert"}
+          ],
+          "Next": "MarkAlert"
+        },
+        {
+          "And": [
+            {"Variable": "$.range_check.decision", "IsPresent": true},
+            {"Variable": "$.range_check.decision", "StringEquals": "hold"}
+          ],
+          "Next": "MarkHold"
+        },
+        {
+          "And": [
+            {"Variable": "$.range_check.decision", "IsPresent": true},
+            {"Variable": "$.range_check.decision", "StringEquals": "dismiss"}
+          ],
+          "Next": "MarkDismiss"
+        },
+        {
+          "And": [
+            {"Variable": "$.verify.covers_item", "IsPresent": true},
+            {"Variable": "$.verify.covers_item", "BooleanEquals": true},
+            {"Variable": "$.range_check.inside", "IsPresent": true},
+            {"Variable": "$.range_check.inside", "BooleanEquals": true}
+          ],
+          "Next": "MarkAlert"
+        },
+        {
+          "And": [
+            {"Variable": "$.verify.covers_item", "IsPresent": true},
+            {"Variable": "$.verify.covers_item", "BooleanEquals": true},
+            {"Variable": "$.range_check.inside", "IsPresent": true},
+            {"Variable": "$.range_check.inside", "IsNull": true}
+          ],
+          "Next": "MarkHold"
+        },
+        {
+          "And": [
+            {"Variable": "$.verify.covers_item", "IsPresent": true},
+            {"Variable": "$.verify.covers_item", "IsNull": true}
+          ],
+          "Next": "MarkHold"
+        },
+        {
+          "And": [
+            {"Variable": "$.verify.covers_item", "IsPresent": true},
+            {"Variable": "$.verify.covers_item", "BooleanEquals": false}
+          ],
+          "Next": "MarkDismiss"
+        }
+      ],
+      "Default": "MarkHold"
+    },
+    "MarkAlert": {
+      "Type": "Pass",
+      "Result": "alert",
+      "ResultPath": "$.decision",
+      "Next": "Notify"
+    },
+    "MarkHold": {
+      "Type": "Pass",
+      "Result": "hold",
+      "ResultPath": "$.decision",
+      "Next": "Notify"
+    },
+    "MarkDismiss": {
+      "Type": "Pass",
+      "Result": "dismiss",
+      "ResultPath": "$.decision",
+      "Next": "Notify"
+    },
+    "Hold": {
+      "Type": "Pass",
+      "Comment": "Catch target: a task failed after retries. Decision hold, reason 'verification unavailable'.",
+      "Result": {"decision": "hold", "reason": "verification unavailable"},
+      "ResultPath": "$.fallback",
+      "Next": "MarkHoldAfterError"
+    },
+    "MarkHoldAfterError": {
+      "Type": "Pass",
+      "Result": "hold",
+      "ResultPath": "$.decision",
+      "Next": "Notify"
+    },
+    "Notify": {
+      "Type": "Task",
+      "Resource": "${NotifyFunctionArn}",
+      "Comment": "Write case, set item.status, append audit, SES email for alert only, in-app event.",
+      "ResultPath": "$.notify",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "Failed"
+        }
+      ],
+      "Next": "IsAlert"
+    },
+    "IsAlert": {
+      "Type": "Choice",
+      "Choices": [
+        {"Variable": "$.decision", "StringEquals": "alert", "Next": "WaitForApproval"}
+      ],
+      "Default": "Done"
+    },
+    "WaitForApproval": {
+      "Type": "Pass",
+      "Comment": "P08: Task with arn:aws:states:::lambda:invoke.waitForTaskToken; token stored on the case; UI Approve/Reject calls SendTaskSuccess/SendTaskFailure.",
+      "ResultPath": "$.approval",
+      "Result": {"placeholder": "P08"},
+      "Next": "Claim"
+    },
+    "Claim": {
+      "Type": "Pass",
+      "Comment": "P09: Task ${ClaimFunctionArn} - Bedrock (Claude Haiku 4.5) drafts the claim letter, PDF to claims bucket.",
+      "ResultPath": "$.claim",
+      "Result": {"placeholder": "P09"},
+      "Next": "Evidence"
+    },
+    "Evidence": {
+      "Type": "Pass",
+      "Comment": "P09: Task ${EvidenceFunctionArn} - snapshot notice to Object Lock bucket, SHA-256, KMS Sign.",
+      "ResultPath": "$.evidence",
+      "Result": {"placeholder": "P09"},
+      "Next": "Done"
+    },
+    "Done": {
+      "Type": "Succeed"
+    },
+    "Failed": {
+      "Type": "Fail",
+      "Error": "MatchPipelineFailed",
+      "Cause": "Notify failed after retries; see $.error"
+    }
+  }
+}

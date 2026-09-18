@@ -1,0 +1,110 @@
+{
+  "Comment": "RecallIndia IngestStateMachine (SPEC section Ingest pipeline). Fetch -> Extract -> Normalise -> Diff -> Publish. Two CDSCO adapters, one Notice shape: cdsco_portal (live JSON, skips Extract) and cdsco_pdf (archive PDF: Textract TABLES primary, pdfplumber fallback). Diff/Publish are P03 placeholders.",
+  "StartAt": "Fetch",
+  "States": {
+    "Fetch": {
+      "Type": "Task",
+      "Resource": "${CdscoFetchFunctionArn}",
+      "Comment": "cdsco_portal: publicReportingMonths -> newest month -> filteredNsqDrugTable rows; output {adapter, month, rows_in}. cdsco_pdf: download the archive PDF to the raw bucket; output {adapter, pdf_url, pdf_s3_key}. Later tasks read these from $.fetch (handlers merge $.fetch/$.extract under top-level keys).",
+      "ResultPath": "$.fetch",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "Failed"
+        }
+      ],
+      "Next": "NeedsExtract"
+    },
+    "NeedsExtract": {
+      "Type": "Choice",
+      "Comment": "Portal rows are already tabular; only the PDF adapter goes through Extract.",
+      "Choices": [
+        {
+          "And": [
+            {"Variable": "$.fetch.adapter", "IsPresent": true},
+            {"Variable": "$.fetch.adapter", "StringEquals": "cdsco_portal"}
+          ],
+          "Next": "Normalise"
+        }
+      ],
+      "Default": "Extract"
+    },
+    "Extract": {
+      "Type": "Task",
+      "Resource": "${CdscoExtractFunctionArn}",
+      "Comment": "Reads pdf_s3_key from $.fetch. Textract StartDocumentAnalysis TABLES (poll GetDocumentAnalysis) in try/except; on any error or <5 rows, pdfplumber extract_tables fallback. Output {rows, row_pages, rows_s3_key, engine, fallback_used}; rows are inlined under 200 KB and always mirrored to rows_s3_key.",
+      "ResultPath": "$.extract",
+      "TimeoutSeconds": 300,
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "Failed"
+        }
+      ],
+      "Next": "Normalise"
+    },
+    "Normalise": {
+      "Type": "Task",
+      "Resource": "${CdscoNormaliseFunctionArn}",
+      "Comment": "Reads adapter/month/pdf_s3_key/pdf_url from $.fetch and rows/row_pages/rows_s3_key from $.extract (portal: fetches rows itself). Bedrock (Nova Lite, temperature 0, strict JSON, batches of 25 rows) maps rows to Notice; header-keyword fallback. Upsert notices with source cdsco_nsq, adapter, row_ref ({page,row} PDF / {month,row} portal), pdf_s3_key. Output {adapter, month, pdf_s3_key, rows_in, notices_out, fallback_used}.",
+      "ResultPath": "$.normalise",
+      "TimeoutSeconds": 300,
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "Failed"
+        }
+      ],
+      "Next": "Diff"
+    },
+    "Diff": {
+      "Type": "Pass",
+      "Comment": "P03: count new vs existing notices for this run.",
+      "ResultPath": "$.diff",
+      "Result": {"placeholder": "P03", "new": 0, "existing": 0},
+      "Next": "Publish"
+    },
+    "Publish": {
+      "Type": "Pass",
+      "Comment": "P03: write meta#cdsco.last_run + counts so the /ingest UI checklist and feed can read them.",
+      "ResultPath": "$.publish",
+      "Result": {"placeholder": "P03"},
+      "Next": "Done"
+    },
+    "Done": {
+      "Type": "Succeed"
+    },
+    "Failed": {
+      "Type": "Fail",
+      "Error": "IngestPipelineFailed",
+      "Cause": "A task failed after retries; see $.error"
+    }
+  }
+}
