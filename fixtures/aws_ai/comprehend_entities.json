@@ -1,0 +1,47 @@
+{
+  "input": "Paracetamol Tablets IP 650mg, batch FT5427, Forgo Pharmaceuticals, failed CDSCO quality test, July 2026 alert",
+  "Entities": [
+    {
+      "Score": 0.3456272482872009,
+      "Type": "OTHER",
+      "Text": "IP",
+      "BeginOffset": 20,
+      "EndOffset": 22
+    },
+    {
+      "Score": 0.6253858804702759,
+      "Type": "QUANTITY",
+      "Text": "650mg",
+      "BeginOffset": 23,
+      "EndOffset": 28
+    },
+    {
+      "Score": 0.502440869808197,
+      "Type": "COMMERCIAL_ITEM",
+      "Text": "FT5427",
+      "BeginOffset": 36,
+      "EndOffset": 42
+    },
+    {
+      "Score": 0.9592873454093933,
+      "Type": "ORGANIZATION",
+      "Text": "Forgo Pharmaceuticals",
+      "BeginOffset": 44,
+      "EndOffset": 65
+    },
+    {
+      "Score": 0.4064784646034241,
+      "Type": "OTHER",
+      "Text": "CDSCO",
+      "BeginOffset": 74,
+      "EndOffset": 79
+    },
+    {
+      "Score": 0.9993923306465149,
+      "Type": "DATE",
+      "Text": "July 2026",
+      "BeginOffset": 94,
+      "EndOffset": 103
+    }
+  ]
+}
