@@ -443,3 +443,182 @@ def test_live_rows_falls_back_to_extract_output(monkeypatch, tmp_path):
     # ... and a bare run id with no record -> 404
     status, body = _call("GET", "/ingest/rows", {"arn": "nope"})
     assert status == 404
+
+
+# --- GET /ingest/runs, GET /ingest/runs/{id} --------------------------------------------------
+
+
+def test_demo_runs_list_newest_first(demo_store):
+    status, body = _call("GET", "/ingest/runs")
+    assert status == 200, body
+    assert body["count"] == len(body["runs"]) >= 1
+    run = body["runs"][0]
+    assert run["run_id"] == demo_store["run_id"] and run["status"] == "SUCCEEDED"
+    assert run["method"] == "pdfplumber" and run["month"] == "JUN-2025"
+    assert run["rows_in"] == DATA_ROWS and run["notices_out"] >= 55 and run["pages"] == 6
+    assert run["pdf_s3_key"] == "cdsco/CDSCO_NSQ_june25.pdf"
+    assert run["duration_ms"] is not None and run["duration_ms"] >= 0
+
+
+def test_demo_run_view_maps_every_row_to_its_notice(demo_store):
+    status, body = _call("GET", f"/ingest/runs/{demo_store['run_id']}")
+    assert status == 200, body
+    assert body["run_id"] == demo_store["run_id"] and body["status"] == "SUCCEEDED"
+    assert [s["name"] for s in body["steps"]] == ingest_api.STEP_NAMES
+    for step in body["steps"]:
+        assert step["state"] == "done"
+        assert 0 <= step["start_ms"] <= step["end_ms"]
+    assert body["textract"] is None  # demo extracts with pdfplumber
+    assert body["rows_ready"] is True and body["rows_source"] == "run"
+    rows = body["rows"]
+    assert len(rows) == DATA_ROWS == body["rows_in"]
+    assert [(r["page"], r["row"]) for r in rows] == sorted((r["page"], r["row"]) for r in rows)
+    made = [r for r in rows if r["notice"]]
+    # the counter on /ingest ends at notices_out: one landed row per published notice
+    assert len(made) == body["notices_out"] == body["mapped_notices"]
+    for r in made:
+        n = r["notice"]
+        assert n["product"] and n["batch"] and n["pk"].startswith("cdsco_nsq#")
+        assert r["merged_into"] is None and set(r["bbox"]) == {"left", "top", "width", "height"}
+    merged = [r for r in rows if not r["notice"]]
+    assert len(merged) == DATA_ROWS - len(made) == 2  # the two wrapped manufacturer lines
+    for r in merged:
+        above = [m["row"] for m in made if m["row"] < r["row"]]
+        assert r["merged_into"] == max(above)
+
+
+def test_run_view_unknown_run_is_404(demo_store):
+    status, body = _call("GET", "/ingest/runs/ingest-19990101000000-0000")
+    assert status == 404 and body["run_id"] == "ingest-19990101000000-0000"
+
+
+def test_backoff_constants_match_the_extractor():
+    from ingest import cdsco_extract
+
+    assert ingest_api.TEXTRACT_POLL_SECONDS == cdsco_extract.TEXTRACT_POLL_SECONDS
+    assert ingest_api.TEXTRACT_POLL_BACKOFF == cdsco_extract.TEXTRACT_POLL_BACKOFF
+    assert ingest_api.TEXTRACT_POLL_CAP_SECONDS == cdsco_extract.TEXTRACT_POLL_CAP_SECONDS
+
+
+class _FakeSfnRuns(_FakeSfn):
+    def __init__(self, **kw):
+        super().__init__(status="SUCCEEDED", **kw)
+        self.start = dt.datetime(2026, 9, 19, 8, 49, 45, 424000, tzinfo=dt.UTC)
+
+    def describe_execution(self, *, executionArn):
+        out = super().describe_execution(executionArn=executionArn)
+        out["stopDate"] = self.start + dt.timedelta(milliseconds=38460)
+        return out
+
+    def list_executions(self, **kw):
+        assert kw == {"stateMachineArn": MACHINE_ARN, "maxResults": ingest_api.RUNS_LIMIT}
+        return {
+            "executions": [
+                {
+                    "name": EXEC_ARN.rsplit(":", 1)[-1],
+                    "executionArn": EXEC_ARN,
+                    "status": "SUCCEEDED",
+                    "startDate": self.start,
+                    "stopDate": self.start + dt.timedelta(milliseconds=38460),
+                }
+            ]
+        }
+
+
+def _june_history(start: dt.datetime) -> list[dict]:
+    at = lambda ms: start + dt.timedelta(milliseconds=ms)  # noqa: E731
+    marks = [("Fetch", 19, 3224), ("Extract", 3224, 30615), ("Normalise", 30615, 34235)]
+    marks += [("Diff", 34235, 36344), ("Publish", 36344, 38442)]
+    events = []
+    for name, entered, exited in marks:
+        result = {"published": True} if name == "Publish" else {"method": "textract"}
+        events += [_entered(name, at(entered)), _exited(name, at(exited), {name.lower(): result})]
+    return events
+
+
+def _live_record(**extra) -> dict:
+    return {
+        "run_id": EXEC_ARN.rsplit(":", 1)[-1],
+        "execution_arn": EXEC_ARN,
+        "month": "JUN-2025",
+        "method": "textract",
+        "pages": 6,
+        "rows_in": DATA_ROWS,
+        "notices_out": 55,
+        "diff": {"new": 0, "existing": 55},
+        "pdf_s3_key": "cdsco/CDSCO_NSQ_june25.pdf",
+        "rows_s3_key": "cdsco/CDSCO_NSQ_june25.pdf.rows.json",
+        "textract": {"polls": "5", "elapsed_s": "24.8", "pages": "6", "status": "SUCCEEDED"},
+        **extra,
+    }
+
+
+def _live(monkeypatch, record: dict) -> _FakeSfnRuns:
+    from ingest import cdsco_extract
+
+    # the fixture PDF's rows, read while DEMO_MODE is still on (no network in tests)
+    pdf = cdsco_extract.fetch_bytes(cdsco_extract.JUNE_2025_PDF_URL)
+    extracted = cdsco_extract.extract_rows(pdf, s3_key=None)
+    payload = json.dumps({**extracted, "method": "textract"}).encode()
+    monkeypatch.setenv("DEMO_MODE", "0")
+    monkeypatch.setenv("INGEST_STATE_MACHINE_ARN", MACHINE_ARN)
+    fake = _FakeSfnRuns()
+    fake.events = _june_history(fake.start)
+    monkeypatch.setattr(ingest_api, "_sfn_client", lambda: fake)
+    monkeypatch.setattr(ingest_runs, "read_run", lambda run_id: record)
+    monkeypatch.setattr(ingest_api.s3, "get_bytes", lambda kind, key: payload)
+    return fake
+
+
+def test_live_runs_list_reads_list_executions(monkeypatch):
+    _live(monkeypatch, _live_record())
+    status, body = _call("GET", "/ingest/runs")
+    assert status == 200, body
+    (run,) = body["runs"]
+    assert run["run_id"] == "ingest-20260918120000-ab12" and run["status"] == "SUCCEEDED"
+    assert run["duration_ms"] == 38460 and run["new"] == 0 and run["notices_out"] == 55
+    assert run["started_at"] == "2026-09-19T08:49:45.424Z"
+
+
+def test_live_run_view_has_ms_step_timings_and_estimated_polls(monkeypatch):
+    _live(monkeypatch, _live_record())
+    status, body = _call("GET", "/ingest/runs/ingest-20260918120000-ab12")
+    assert status == 200, body
+    timing = {s["name"]: (s["start_ms"], s["end_ms"]) for s in body["steps"]}
+    assert timing == {
+        "Fetch": (19, 3224),
+        "Extract": (3224, 30615),
+        "Normalise": (30615, 34235),
+        "Diff": (34235, 36344),
+        "Publish": (36344, 38442),
+    }
+    tx = body["textract"]
+    assert tx["estimated"] is True and tx["polls_count"] == 5 and tx["pages"] == 6
+    at = [p["at_ms"] for p in tx["polls"]]
+    assert at == sorted(at) and 3224 <= tx["started_ms"] <= at[0] and at[-1] < 30615
+    assert abs((at[-1] - tx["started_ms"]) - 24800) <= 1
+    assert [p["status"] for p in tx["polls"]] == ["IN_PROGRESS"] * 4 + ["SUCCEEDED"]
+    assert body["rows_ready"] is True and body["rows_source"] == "pdf"
+    assert len(body["rows"]) == DATA_ROWS and body["mapped_notices"] == 55
+
+
+def test_live_run_view_uses_the_recorded_poll_history(monkeypatch):
+    history = [
+        {"poll": 1, "at": "2026-09-19T08:49:50.000Z", "elapsed_s": 0.2, "status": "IN_PROGRESS"},
+        {"poll": 2, "at": "2026-09-19T08:49:53.500Z", "elapsed_s": 3.7, "status": "SUCCEEDED"},
+    ]
+    textract = {
+        "polls": 2,
+        "elapsed_s": 3.7,
+        "pages": 6,
+        "status": "SUCCEEDED",
+        "started_at": "2026-09-19T08:49:49.800Z",
+        "history": history,
+    }
+    _live(monkeypatch, _live_record(textract=textract, run_rows_s3_key="cdsco/runs/x.rows.json"))
+    status, body = _call("GET", "/ingest/runs/ingest-20260918120000-ab12")
+    assert status == 200, body
+    tx = body["textract"]
+    assert tx["estimated"] is False and tx["started_ms"] == 4376
+    assert [p["at_ms"] for p in tx["polls"]] == [4576, 8076]
+    assert body["rows_source"] == "run"

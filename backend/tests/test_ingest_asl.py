@@ -289,6 +289,8 @@ def test_api_function_routes_and_step_functions_permissions(template) -> None:
         ("POST", "/items/ocr"),
         ("POST", "/items/normalise"),
         ("GET", "/items/{id}/check-status"),
+        ("GET", "/ingest/runs"),
+        ("GET", "/ingest/runs/{id}"),
     ):
         assert route in routes, route
     cors = template["Resources"]["HttpApi"]["Properties"]["CorsConfiguration"]

@@ -17,16 +17,20 @@ shape::
 footnote tables dropped) so ``cdsco_normalise`` can write ``row_ref = {page, row}`` and the
 ``/ingest`` overlay (P07) can draw each row over the PDF page. The result is always mirrored
 to the raw bucket as ``<pdf_s3_key>.rows.json`` and inlined in the task result only under
-``MAX_INLINE_ROWS_BYTES`` (Step Functions caps state at 256 KB).
+``MAX_INLINE_ROWS_BYTES`` (Step Functions caps state at 256 KB). A run's own copy also goes to
+``cdsco/runs/<run_id>.rows.json`` (``run_rows_s3_key``): the per-PDF file is overwritten by the
+next run of the same PDF, and a ``/ingest`` replay must show the rows *that* run read.
 
 State-machine contract: the IngestStateMachine stores the Fetch result under ``$.fetch`` and
 this function's result under ``$.extract``; ``handler`` reads its inputs from the top level
 first and then from ``$.fetch`` (``pipeline_event``). Progress goes to the ``ingest#<run_id>``
-record (``common.ingest_runs``) on every Textract poll so ``GET /ingest/status`` can show it.
+record (``common.ingest_runs``) on every Textract poll so ``GET /ingest/status`` can show it;
+``textract.history`` keeps every poll with its UTC time so a replay shows the real cadence.
 """
 
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
 import inspect
 import io
@@ -61,6 +65,11 @@ ProgressFn = Callable[[dict], None]
 
 # monkeypatchable in tests so the polling loop never actually waits
 _sleep = time.sleep
+
+
+def _utc_ms() -> str:
+    """Now as ``2026-09-19T08:49:48.123Z`` (a replay needs sub-second poll times)."""
+    return dt.datetime.now(dt.UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def pipeline_event(event: dict | None, *nested: str) -> dict:
@@ -142,12 +151,14 @@ def _textract_rows(s3_key: str, on_progress: ProgressFn | None = None) -> dict:
         FeatureTypes=["TABLES"],
     )
     job_id = job["JobId"]
-    progress = {
+    progress: dict[str, Any] = {
         "job_id": job_id,
         "status": "IN_PROGRESS",
         "polls": 0,
         "elapsed_s": 0,
         "pages": None,
+        "started_at": _utc_ms(),
+        "history": [],
     }
 
     blocks: list[dict] = []
@@ -162,6 +173,16 @@ def _textract_rows(s3_key: str, on_progress: ProgressFn | None = None) -> dict:
             elapsed_s=round(time.monotonic() - t0, 1),
             pages=(page.get("DocumentMetadata") or {}).get("Pages"),
         )
+        # a new list each poll: a copy handed to on_progress earlier must not change under it
+        progress["history"] = [
+            *progress["history"],
+            {
+                "poll": progress["polls"],
+                "at": _utc_ms(),
+                "elapsed_s": progress["elapsed_s"],
+                "status": status,
+            },
+        ]
         if on_progress:
             on_progress(dict(progress))
         if status == "SUCCEEDED":
@@ -428,6 +449,31 @@ def _store_rows(s3_key: str | None, pdf_bytes: bytes, result: dict) -> str | Non
         return None
 
 
+def run_rows_s3_key_for(run_id: str) -> str:
+    """``cdsco/runs/<run_id>.rows.json``: the rows exactly as this run read them."""
+    return f"cdsco/runs/{run_id}.rows.json"
+
+
+def _store_run_rows(run_id: str, s3_key: str | None, result: dict) -> str | None:
+    """The run's own copy of its rows (a replay reads it); None when the put fails."""
+    key = run_rows_s3_key_for(run_id)
+    payload = {
+        "run_id": run_id,
+        "method": result["method"],
+        "header": result["header"],
+        "rows": result["rows"],
+        "pages": result["pages"],
+        "pdf_s3_key": s3_key,
+    }
+    try:
+        return s3.put_bytes(
+            "raw", key, json.dumps(payload, ensure_ascii=False).encode(), "application/json"
+        )
+    except Exception as exc:  # the per-PDF copy still exists; only replay fidelity is lost
+        log.warning("could not store the run's rows at %s: %s", key, exc)
+        return None
+
+
 def _record_run(run_id: str, **fields: Any) -> None:
     try:
         write_run(run_id, **fields)
@@ -505,6 +551,7 @@ def handler(event: dict | None, context: object) -> dict:
         "textract": result["textract"],
         "rows_in": len(rows),
         "rows_s3_key": rows_s3_key,
+        "run_rows_s3_key": _store_run_rows(run_id, s3_key, result),
     }
     _record_run(run_id, step="extract", status="done", **summary)
     out = {

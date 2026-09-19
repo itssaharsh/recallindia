@@ -262,6 +262,14 @@ def test_textract_polls_with_backoff_and_reports_progress(monkeypatch):
     assert sleeps == [3.0, 4.5, 6.75]
     assert [p["status"] for p in progress] == ["IN_PROGRESS"] * 3 + ["SUCCEEDED"]
     assert progress[-1]["polls"] == 4 and progress[-1]["pages"] == 2
+    # every poll is kept with its UTC time (a /ingest replay shows the real cadence), and a copy
+    # handed to on_progress earlier is not changed by later polls
+    history = progress[-1]["history"]
+    assert [h["poll"] for h in history] == [1, 2, 3, 4]
+    assert [h["status"] for h in history] == ["IN_PROGRESS"] * 3 + ["SUCCEEDED"]
+    assert all(h["at"].endswith("Z") and "." in h["at"] for h in history)
+    assert len(progress[0]["history"]) == 1 and progress[-1]["started_at"] <= history[0]["at"]
+    assert out["textract"]["history"] == history
     assert out["textract"]["job_id"] == "job-1" and len(out["rows"]) == 6
     assert out["header"] == ["S.No", "Product", "Batch No."]
 
@@ -299,7 +307,13 @@ def test_handler_demo_persists_rows_json_and_run_record():
     assert stored["rows"] == out["rows"] and stored["header"] == out["header"]
     assert stored["method"] == "pdfplumber" and stored["pages"] == 6
 
+    # the run's own copy: the per-PDF file is overwritten by the next run of the same PDF
+    assert out["run_rows_s3_key"] == "cdsco/runs/run-1.rows.json"
+    own = json.loads(s3.get_bytes("raw", out["run_rows_s3_key"]))
+    assert own["run_id"] == "run-1" and own["rows"] == out["rows"]
+
     run = read_run("run-1")
+    assert run["run_rows_s3_key"] == out["run_rows_s3_key"]
     assert run["pk"] == "ingest#run-1" and run["execution_arn"] == arn
     assert run["step"] == "extract" and run["status"] == "done"
     assert run["rows_in"] == DATA_ROWS and run["rows_s3_key"] == out["rows_s3_key"]

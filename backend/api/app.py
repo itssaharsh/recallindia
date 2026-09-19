@@ -5,7 +5,8 @@ Parses an API Gateway HTTP API v2 payload (``requestContext.http.method`` +
 Implemented: ``GET /health``; the public API ``GET /v1/notices`` (source-index query,
 newest-first, opaque cursor -- ``notices_query``), ``GET /v1/notices/{id}``,
 ``GET /v1/diff``; the ingest API ``POST /ingest/run``, ``GET /ingest/status/{arn}``,
-``GET /ingest/rows``, ``GET /ingest/pdf`` (``ingest_api``); the item wall ``POST /items``,
+``GET /ingest/rows``, ``GET /ingest/pdf``, ``GET /ingest/runs``, ``GET /ingest/runs/{id}``
+(``ingest_api``); the item wall ``POST /items``,
 ``GET /items``, ``GET /items/{id}``, ``POST /items/{id}/check``, ``GET /cases/{id}``,
 ``GET /events`` (``match_api``). Everything else answers 501 with the prompt that completes
 it (P08/P09). Always JSON, always CORS; gzipped when the client accepts it (HTTP APIs do not
@@ -241,6 +242,8 @@ ROUTES: list[tuple[str, re.Pattern[str], Route]] = [
     ("GET", re.compile(r"^/ingest/rows/?$"), _wrap(ingest_api.ingest_rows)),
     ("GET", re.compile(r"^/ingest/pdf/?$"), _wrap(ingest_api.ingest_pdf)),
     ("GET", re.compile(r"^/ingest/status/(?P<arn>.+)$"), _wrap(ingest_api.ingest_status)),
+    ("GET", re.compile(r"^/ingest/runs/?$"), _wrap(ingest_api.list_runs)),
+    ("GET", re.compile(r"^/ingest/runs/(?P<id>[^/]+)/?$"), _wrap(ingest_api.run_view)),
 ]
 
 

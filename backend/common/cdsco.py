@@ -267,6 +267,48 @@ def _records(
     return records
 
 
+def _clean_cell(value: Any) -> str:
+    return " ".join(str(value).split()) if value is not None else ""
+
+
+def rows_pages_ids(
+    extract: dict,
+) -> tuple[list[list[str]], list[int | None], list[int | None]]:
+    """An extract (``{header, rows: [{page, row, cells, bbox}]}``) -> ``(rows, pages, ids)``.
+
+    The input :func:`rows_to_notices` takes for a PDF: the header first (page and id None),
+    then one cleaned cell list per extracted row with its page and the extractor's ``row``
+    index. Plain list rows (with an optional parallel ``row_pages``) are accepted, and a header
+    repeated as the first row is not duplicated. Normalise and the ``/ingest`` run view both
+    call this, so the view's row -> notice mapping is the one the run published.
+    """
+    rows: list[list[str]] = []
+    pages: list[int | None] = []
+    ids: list[int | None] = []
+    header = extract.get("header")
+    if isinstance(header, list) and header:
+        rows.append([_clean_cell(c) for c in header])
+        pages.append(None)
+        ids.append(None)
+    raw_rows = extract.get("rows") or []
+    raw_pages = extract.get("row_pages") or []
+    for index, raw in enumerate(raw_rows):
+        row_id: Any = None
+        if isinstance(raw, dict):
+            cells = [_clean_cell(c) for c in raw.get("cells") or []]
+            page = raw.get("page")
+            row_id = raw.get("row")
+        else:
+            cells = [_clean_cell(c) for c in raw]
+            page = raw_pages[index] if index < len(raw_pages) else None
+        if rows and pages[0] is None and index == 0 and cells == rows[0]:
+            continue  # header given twice (``header`` + first row)
+        rows.append(cells)
+        pages.append(int(page) if isinstance(page, int | float) else None)
+        ids.append(int(row_id) if isinstance(row_id, int | float) else None)
+    return rows, pages, ids
+
+
 def rows_to_notices(
     rows: list[list[str]] | list[dict],
     *,

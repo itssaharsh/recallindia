@@ -498,6 +498,18 @@ Resources:
             ApiId: !Ref HttpApi
             Method: GET
             Path: "/ingest/pdf"
+        IngestRuns:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: "/ingest/runs"
+        IngestRunView:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: "/ingest/runs/{id}"
 
   # -------------------------------------------------------------------------
   # Pollers (cpsc / nhtsa / openfda / cdsco_portal) - EventBridge Scheduler targets

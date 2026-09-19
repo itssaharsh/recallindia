@@ -1,4 +1,5 @@
-"""``/ingest`` endpoints: start a run, per-step status, extracted rows, presigned PDF.
+"""``/ingest`` endpoints: start a run, per-step status, extracted rows, presigned PDF, and the
+run list + run view the ``/ingest`` page replays.
 
 Live, ``POST /ingest/run`` starts the IngestStateMachine and ``GET /ingest/status/{arn}``
 maps its execution history (TaskStateEntered / TaskStateExited / TaskFailed / Execution*)
@@ -6,6 +7,13 @@ onto the five checklist steps, merged with the ``ingest#<run_id>`` record the ta
 (``common.ingest_runs``: Textract polling progress, rows_in, method). In DEMO_MODE the run
 executes the same handlers synchronously in-process (Fetch -> [Extract] -> Normalise -> Diff
 -> Publish, exactly as the ASL wires them) and status comes from the run record alone.
+
+``GET /ingest/runs`` lists the last runs from Step Functions ``ListExecutions`` (no table
+scan) and ``GET /ingest/runs/{id}`` returns one run with millisecond step timings from the
+execution history, the Textract poll cadence, and every extracted row with the notice it
+became: the same deterministic ``common.cdsco`` mapping Normalise used, re-run on the run's
+own rows file. A continuation row that Normalise merged into the row above carries
+``merged_into``.
 
 Every function here returns ``(status_code, body)``; ``api.app`` wraps it in the JSON/CORS
 response so this module never imports the router.
@@ -22,7 +30,7 @@ import secrets
 from typing import Any
 from urllib.parse import unquote
 
-from common import ingest_runs, s3
+from common import cdsco, dynamo, ingest_runs, s3
 from common.cdsco import canonical_month
 from common.demo_mode import is_demo
 
@@ -699,3 +707,416 @@ def ingest_pdf(_params: dict, event: dict) -> Result:
     except Exception as exc:
         return 502, {"error": f"presign failed: {type(exc).__name__}: {exc}"}
     return 200, {"key": key, "url": url, "expires_in": PRESIGN_SECONDS}
+
+
+# --- GET /ingest/runs, GET /ingest/runs/{id} ------------------------------------------
+
+RUNS_LIMIT = 10
+# How cdsco_extract polls Textract: first poll at once, then waits of 3 s x1.5, capped at 15 s.
+# A run recorded before the poll history existed kept only its last poll; its earlier polls are
+# placed on this schedule, scaled to the real elapsed time, and flagged ``estimated``.
+TEXTRACT_POLL_SECONDS = 3.0
+TEXTRACT_POLL_BACKOFF = 1.5
+TEXTRACT_POLL_CAP_SECONDS = 15.0
+# share of Extract's non-Textract time spent before the job starts (Lambda start, S3 get,
+# StartDocumentAnalysis); the rest is reading result pages and writing rows.json
+_EXTRACT_LEAD = 0.6
+
+
+def _to_dt(value: Any) -> dt.datetime | None:
+    if isinstance(value, dt.datetime):
+        return value if value.tzinfo else value.replace(tzinfo=dt.UTC)
+    if not value:
+        return None
+    try:
+        parsed = dt.datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=dt.UTC)
+
+
+def _iso_ms(value: Any) -> str | None:
+    moment = _to_dt(value)
+    if moment is None:
+        return None
+    return moment.astimezone(dt.UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _offset_ms(value: Any, origin: dt.datetime | None) -> int | None:
+    moment = _to_dt(value)
+    if moment is None or origin is None:
+        return None
+    return int(round((moment - origin).total_seconds() * 1000))
+
+
+def _num(value: Any) -> int | None:
+    """DynamoDB Decimal / JSON number / numeric string -> int (None when absent)."""
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        try:
+            return int(float(value))
+        except (TypeError, ValueError):
+            return None
+
+
+def _float(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _run_summary(
+    run_id: str,
+    record: dict | None,
+    *,
+    execution_arn: Any = None,
+    status: Any = None,
+    started: Any = None,
+    stopped: Any = None,
+) -> dict:
+    """One row of the runs list; execution fields win over the record's own copies."""
+    record = record or {}
+    started_at = _iso_ms(started) or _iso_ms(record.get("started_at") or record.get("created_at"))
+    stopped_at = _iso_ms(stopped) or _iso_ms(record.get("stopped_at") or record.get("finished_at"))
+    begin, end = _to_dt(started_at), _to_dt(stopped_at)
+    diff = record.get("diff") if isinstance(record.get("diff"), dict) else {}
+    return {
+        "run_id": run_id,
+        "execution_arn": execution_arn or record.get("execution_arn"),
+        "status": str(status or record.get("execution_status") or "UNKNOWN").upper(),
+        "adapter": record.get("adapter"),
+        "month": record.get("month"),
+        "title": record.get("title"),
+        "method": record.get("method"),
+        "pages": _num(record.get("pages")),
+        "rows_in": _num(record.get("rows_in")),
+        "notices_out": _num(record.get("notices_out")),
+        "new": _num(diff.get("new")),
+        "pdf_s3_key": record.get("pdf_s3_key"),
+        "started_at": started_at,
+        "stopped_at": stopped_at,
+        "duration_ms": int((end - begin).total_seconds() * 1000) if begin and end else None,
+    }
+
+
+def list_runs(_params: dict, _event: dict) -> Result:
+    """``GET /ingest/runs``: the last ``RUNS_LIMIT`` runs, newest first."""
+    if is_demo():
+        records = [
+            r
+            for r in dynamo.scan_all("notices", limit=1_000_000)
+            if str(r.get("pk", "")).startswith(ingest_runs.RUN_PREFIX)
+        ]
+        records.sort(key=lambda r: str(r.get("started_at") or r.get("created_at") or ""))
+        runs = [_run_summary(str(r.get("run_id")), r) for r in reversed(records[-RUNS_LIMIT:])]
+        return 200, {"runs": runs, "count": len(runs)}
+    machine = os.environ.get("INGEST_STATE_MACHINE_ARN")
+    if not machine:
+        return 500, {"error": "INGEST_STATE_MACHINE_ARN is not set on the API function"}
+    try:
+        page = _sfn_client().list_executions(stateMachineArn=machine, maxResults=RUNS_LIMIT)
+    except Exception as exc:
+        return 502, {"error": f"list_executions failed: {type(exc).__name__}: {exc}"}
+    runs = []
+    for ex in page.get("executions") or []:
+        name = str(ex.get("name") or ingest_runs.run_id_from_arn(ex.get("executionArn")))
+        runs.append(
+            _run_summary(
+                name,
+                _safe_read_run(name),
+                execution_arn=ex.get("executionArn"),
+                status=ex.get("status"),
+                started=ex.get("startDate"),
+                stopped=ex.get("stopDate"),
+            )
+        )
+    return 200, {"runs": runs, "count": len(runs)}
+
+
+def _step_marks(events: list[dict], origin: dt.datetime | None) -> dict[str, dict]:
+    """``{step: {start_ms, end_ms}}`` from the history, milliseconds after the execution start."""
+    marks: dict[str, dict] = {}
+    current: str | None = None
+    for ev in events or []:
+        kind = str(ev.get("type") or "")
+        if kind in ("TaskStateEntered", "TaskStateExited"):
+            details = ev.get("stateEnteredEventDetails") or ev.get("stateExitedEventDetails") or {}
+            name = str(details.get("name") or "")
+            if name not in STEP_KEYS:
+                continue
+            step = "Publish" if name == "RecordFailure" else name
+            at = _offset_ms(ev.get("timestamp"), origin)
+            if kind == "TaskStateEntered":
+                marks[step] = {"start_ms": at, "end_ms": None}
+                current = step
+            else:
+                marks.setdefault(step, {"start_ms": None})["end_ms"] = at
+                current = None
+        elif (kind in _TASK_FAILED_EVENTS or kind in _EXECUTION_FAILED_EVENTS) and current:
+            marks[current]["end_ms"] = _offset_ms(ev.get("timestamp"), origin)
+    return marks
+
+
+def _timed_steps(steps: dict[str, dict], marks: dict[str, dict]) -> list[dict]:
+    return [
+        {
+            "name": name,
+            "state": steps[name]["state"],
+            "start_ms": (marks.get(name) or {}).get("start_ms"),
+            "end_ms": (marks.get(name) or {}).get("end_ms"),
+            "summary": steps[name].get("summary") or {},
+        }
+        for name in STEP_NAMES
+    ]
+
+
+def _timeline_live(execution_arn: str) -> dict | None:
+    """Status + timed steps from Step Functions; None when the execution does not exist."""
+    client = _sfn_client()
+    try:
+        desc = client.describe_execution(executionArn=execution_arn)
+    except Exception as exc:
+        text = f"{type(exc).__name__}: {exc}"
+        if "ExecutionDoesNotExist" in text or "InvalidArn" in text:
+            return None
+        raise
+    status = str(desc.get("status") or "RUNNING").upper()
+    origin = _to_dt(desc.get("startDate"))
+    try:
+        events = list(
+            client.get_execution_history(
+                executionArn=execution_arn,
+                maxResults=_MAX_HISTORY_EVENTS,
+                includeExecutionData=True,
+            ).get("events")
+            or []
+        )
+    except Exception:
+        events = []
+    steps, error = steps_from_history(events, terminal=status in _TERMINAL)
+    return {
+        "execution_arn": str(desc.get("executionArn") or execution_arn),
+        "status": status,
+        "started": desc.get("startDate"),
+        "stopped": desc.get("stopDate"),
+        "steps": _timed_steps(steps, _step_marks(events, origin)),
+        "error": _error_text(error),
+    }
+
+
+def _timeline_from_record(record: dict) -> dict:
+    """DEMO_MODE (or a live run whose history is gone): the record's own step times."""
+    steps = _steps_from_record(record)
+    origin = _to_dt(record.get("started_at") or record.get("created_at"))
+    marks = {
+        name: {
+            "start_ms": _offset_ms(steps[name].get("started_at"), origin),
+            "end_ms": _offset_ms(steps[name].get("ended_at"), origin),
+        }
+        for name in STEP_NAMES
+    }
+    status = _execution_status_from_record(record, steps)
+    return {
+        "execution_arn": record.get("execution_arn"),
+        "status": status,
+        "started": record.get("started_at") or record.get("created_at"),
+        "stopped": record.get("stopped_at") if status in _TERMINAL else None,
+        "steps": _timed_steps(steps, marks),
+        "error": record.get("error"),
+    }
+
+
+def _estimated_polls(
+    count: int, elapsed_s: float, start_ms: int | None, end_ms: int | None, final: str
+) -> tuple[list[dict], int | None]:
+    if count <= 0 or start_ms is None or end_ms is None:
+        return [], None
+    offsets, at, wait = [], 0.0, TEXTRACT_POLL_SECONDS
+    for _ in range(count):
+        offsets.append(at)
+        at += wait
+        wait = min(wait * TEXTRACT_POLL_BACKOFF, TEXTRACT_POLL_CAP_SECONDS)
+    scale = elapsed_s / offsets[-1] if offsets[-1] > 0 else 1.0
+    slack = max(0, (end_ms - start_ms) - int(elapsed_s * 1000))
+    job_ms = start_ms + int(slack * _EXTRACT_LEAD)
+    polls = [
+        {
+            "poll": i + 1,
+            "at_ms": job_ms + int(off * scale * 1000),
+            "elapsed_s": round(off * scale, 1),
+            "status": final if i == count - 1 else "IN_PROGRESS",
+        }
+        for i, off in enumerate(offsets)
+    ]
+    return polls, job_ms
+
+
+def _textract_timeline(record: dict, timeline: dict) -> dict | None:
+    """The Textract job as polled: exact ``history`` when recorded, else the backoff estimate."""
+    tx = record.get("textract")
+    if not isinstance(tx, dict):
+        return None
+    origin = _to_dt(timeline.get("started"))
+    extract = next((s for s in timeline["steps"] if s["name"] == "Extract"), {})
+    count = _num(tx.get("polls")) or 0
+    elapsed = _float(tx.get("elapsed_s")) or 0.0
+    history = [h for h in tx.get("history") or [] if isinstance(h, dict)]
+    if history and origin is not None:
+        polls = [
+            {
+                "poll": _num(h.get("poll")),
+                "at_ms": _offset_ms(h.get("at"), origin),
+                "elapsed_s": _float(h.get("elapsed_s")),
+                "status": h.get("status"),
+            }
+            for h in history
+        ]
+        started_ms, estimated = _offset_ms(tx.get("started_at"), origin), False
+    else:
+        polls, started_ms = _estimated_polls(
+            count,
+            elapsed,
+            extract.get("start_ms"),
+            extract.get("end_ms"),
+            str(tx.get("status") or "SUCCEEDED"),
+        )
+        estimated = True
+    return {
+        "job_id": tx.get("job_id"),
+        "pages": _num(tx.get("pages")),
+        "status": tx.get("status"),
+        "polls_count": count,
+        "elapsed_s": elapsed,
+        "started_ms": started_ms,
+        "polls": polls,
+        "estimated": estimated,
+    }
+
+
+def _load_rows_file(key: Any) -> dict | None:
+    if not key:
+        return None
+    try:
+        data = json.loads(s3.get_bytes("raw", str(key)).decode("utf-8"))
+    except Exception:
+        return None
+    return data if isinstance(data, dict) and isinstance(data.get("rows"), list) else None
+
+
+def _view_rows(record: dict) -> dict:
+    """Every extracted row with its bbox and the notice it became (or the row it merged into)."""
+    data = source = None
+    for key, label in ((record.get("run_rows_s3_key"), "run"), (record.get("rows_s3_key"), "pdf")):
+        data = _load_rows_file(key)
+        if data is not None:
+            source = label
+            break
+    if data is None:
+        return {"rows_ready": False, "rows_source": None, "header": [], "rows": []}
+    rows = [r for r in data["rows"] if isinstance(r, dict)]
+    by_row: dict[int, dict] = {}
+    month = str(record.get("month") or "").strip()
+    if month:
+        cells, pages, ids = cdsco.rows_pages_ids({"header": data.get("header"), "rows": rows})
+        try:
+            notices = cdsco.rows_to_notices(
+                cells,
+                adapter="pdf",
+                month=month,
+                pdf_s3_key=record.get("pdf_s3_key"),
+                url=str(record.get("pdf_url") or ""),
+                row_pages=pages,
+                row_ids=ids,
+            )
+        except Exception:  # a view must not 500 because an old rows file no longer maps
+            notices = []
+        for notice in notices:
+            row = _num((notice.get("row_ref") or {}).get("row"))
+            if row is not None:
+                by_row[row] = notice
+    out: list[dict] = []
+    last: int | None = None
+    for r in sorted(rows, key=lambda r: (_num(r.get("page")) or 0, _num(r.get("row")) or 0)):
+        row_id = _num(r.get("row"))
+        notice = by_row.get(row_id) if row_id is not None else None
+        entry: dict[str, Any] = {"page": _num(r.get("page")), "row": row_id, "bbox": r.get("bbox")}
+        if notice is not None:
+            batches = notice.get("batches") or []
+            entry["notice"] = {
+                "pk": notice.get("pk"),
+                "notice_id": notice.get("notice_id"),
+                "product": notice.get("product"),
+                "batch": batches[0] if batches else None,
+                "batches": len(batches),
+                "maker": notice.get("brand"),
+                "test": notice.get("hazard_or_failed_test"),
+                "lab": notice.get("lab"),
+            }
+            entry["merged_into"] = None
+            last = row_id
+        else:
+            entry["notice"] = None
+            entry["merged_into"] = last
+        out.append(entry)
+    return {
+        "rows_ready": True,
+        "rows_source": source,
+        "rows_method": data.get("method"),
+        "header": data.get("header") or [],
+        "rows": out,
+        "mapped_notices": len(by_row),
+    }
+
+
+def run_view(params: dict, _event: dict) -> Result:
+    """``GET /ingest/runs/{id}``: one run as the ``/ingest`` page replays it.
+
+    Steps carry ``start_ms`` / ``end_ms`` after the execution start (live: the execution
+    history; demo: the run record), ``textract.polls`` the poll cadence, and ``rows`` every
+    extracted row with its notice. ``rows_ready`` is false until Extract has written its rows.
+    """
+    raw = unquote(str(params.get("id") or "")).strip()
+    if not raw:
+        return 400, {"error": "missing run id"}
+    run_id = ingest_runs.run_id_from_arn(raw)
+    record = _safe_read_run(run_id)
+    timeline = None
+    if not is_demo():
+        arn = raw if raw.startswith("arn:") else None
+        arn = arn or (record or {}).get("execution_arn") or _execution_arn_for(run_id)
+        try:
+            timeline = _timeline_live(str(arn))
+        except Exception as exc:
+            return 502, {"error": f"describe_execution failed: {type(exc).__name__}: {exc}"}
+    if timeline is None:
+        if record is None:
+            return 404, {"error": "unknown run", "run_id": run_id}
+        timeline = _timeline_from_record(record)
+    record = record or {}
+    summary = _run_summary(
+        run_id,
+        record,
+        execution_arn=timeline["execution_arn"],
+        status=timeline["status"],
+        started=timeline["started"],
+        stopped=timeline["stopped"],
+    )
+    counts = record.get("counts")
+    diff = record.get("diff")
+    return 200, {
+        **summary,
+        "pdf_url": record.get("pdf_url"),
+        "counts": counts if isinstance(counts, dict) else None,
+        "diff": diff if isinstance(diff, dict) else None,
+        "fallback_used": record.get("fallback_used"),
+        "error": record.get("error") or timeline.get("error"),
+        "steps": timeline["steps"],
+        "textract": _textract_timeline(record, timeline),
+        **_view_rows(record),
+    }

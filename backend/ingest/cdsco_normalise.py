@@ -115,31 +115,8 @@ def _clean(value: Any) -> str:
 def _rows_pages_ids(
     extract: dict,
 ) -> tuple[list[list[str]], list[int | None], list[int | None]]:
-    rows: list[list[str]] = []
-    pages: list[int | None] = []
-    ids: list[int | None] = []
-    header = extract.get("header")
-    if isinstance(header, list) and header:
-        rows.append([_clean(c) for c in header])
-        pages.append(None)
-        ids.append(None)
-    raw_rows = extract.get("rows") or []
-    raw_pages = extract.get("row_pages") or []
-    for index, raw in enumerate(raw_rows):
-        row_id: Any = None
-        if isinstance(raw, dict):
-            cells = [_clean(c) for c in raw.get("cells") or []]
-            page = raw.get("page")
-            row_id = raw.get("row")
-        else:
-            cells = [_clean(c) for c in raw]
-            page = raw_pages[index] if index < len(raw_pages) else None
-        if rows and pages[0] is None and index == 0 and cells == rows[0]:
-            continue  # header given twice (``header`` + first row)
-        rows.append(cells)
-        pages.append(int(page) if isinstance(page, int | float) else None)
-        ids.append(int(row_id) if isinstance(row_id, int | float) else None)
-    return rows, pages, ids
+    # one implementation for Normalise and the /ingest run view (common.cdsco)
+    return cdsco.rows_pages_ids(extract)
 
 
 def rows_from_extract(extract: dict) -> tuple[list[list[str]], list[int | None]]:
