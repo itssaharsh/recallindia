@@ -48,6 +48,8 @@ FIXTURE_ROUTES: list[tuple[str, str | list | dict]] = [
     (_NHTSA + r"\?(?=.*\bmake=kia\b)(?=.*\bmodel=seltos\b)", "nhtsa/kia_seltos_2023.json"),
     (_NHTSA + r"\?(?=.*\bmake=hyundai\b)(?=.*\bmodel=venue\b)", "nhtsa/hyundai_venue_2022.json"),
     (_NHTSA, NHTSA_EMPTY),
+    # NHTSA one campaign (the evidence snapshot of a vehicle notice): 24V436000 as served
+    (r"api\.nhtsa\.gov/recalls/campaignNumber", "nhtsa/campaign_24V436000.json"),
     # openFDA: the 30-day windowed poll gets the recent snapshot, anything else the P00 one
     (r"api\.fda\.gov/device/enforcement\.json", "openfda/device_enforcement.json"),
     (

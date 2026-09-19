@@ -474,6 +474,12 @@ Resources:
             ApiId: !Ref HttpApi
             Method: GET
             Path: "/cases/{id}/verify-evidence"
+        CaseClaim:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: "/cases/{id}/claim"
         IngestRun:
           Type: HttpApi
           Properties:
@@ -721,6 +727,19 @@ Resources:
                 - ses:SendRawEmail
               Resource: "*"
 
+  # WaitForApproval (lambda:invoke.waitForTaskToken) stores the task token on the case;
+  # ExpireApproval marks a case expired after the 24 h timeout (SPEC step 6).
+  ApprovalFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub recallindia-approval-${AWS::AccountId}
+      CodeUri: backend/matcher/
+      Handler: approval.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CasesTable
+
+  # The claim letter is a Jinja2 template rendered to PDF with reportlab: no model, no Bedrock.
   ClaimFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -729,21 +748,14 @@ Resources:
       Handler: claim.handler
       Timeout: 120
       Policies:
-        - DynamoDBCrudPolicy:
+        - DynamoDBReadPolicy:
             TableName: !Ref NoticesTable
-        - DynamoDBCrudPolicy:
+        - DynamoDBReadPolicy:
             TableName: !Ref ItemsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref CasesTable
         - S3CrudPolicy:
             BucketName: !Ref ClaimsBucket
-        - Statement:
-            - Sid: BedrockClaimLetter
-              Effect: Allow
-              Action:
-                - bedrock:InvokeModel
-                - bedrock:InvokeModelWithResponseStream
-              Resource: "*"
 
   EvidenceFunction:
     Type: AWS::Serverless::Function
@@ -769,6 +781,13 @@ Resources:
                 - kms:Verify
                 - kms:GetPublicKey
               Resource: !GetAtt SigningKey.Arn
+            # a PutObject that sets ObjectLockMode / RetainUntilDate also needs this
+            - Sid: EvidenceObjectLock
+              Effect: Allow
+              Action:
+                - s3:PutObjectRetention
+                - s3:GetObjectRetention
+              Resource: !Sub ${EvidenceBucket.Arn}/*
 
   # -------------------------------------------------------------------------
   # Step Functions
@@ -785,6 +804,7 @@ Resources:
         RangeCheckFunctionArn: !GetAtt RangeCheckFunction.Arn
         DecideFunctionArn: !GetAtt DecideFunction.Arn
         NotifyFunctionArn: !GetAtt NotifyFunction.Arn
+        ApprovalFunctionArn: !GetAtt ApprovalFunction.Arn
         ClaimFunctionArn: !GetAtt ClaimFunction.Arn
         EvidenceFunctionArn: !GetAtt EvidenceFunction.Arn
       Policies:
@@ -798,6 +818,8 @@ Resources:
             FunctionName: !Ref DecideFunction
         - LambdaInvokePolicy:
             FunctionName: !Ref NotifyFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ApprovalFunction
         - LambdaInvokePolicy:
             FunctionName: !Ref ClaimFunction
         - LambdaInvokePolicy:

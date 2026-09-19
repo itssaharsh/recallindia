@@ -1,19 +1,268 @@
-"""Match pipeline step ``claim`` (SPEC §Match pipeline; completed in P09).
+"""Match pipeline step 7: the claim letter (SPEC §Match pipeline). No model: Jinja2 + reportlab.
 
-P01 placeholder: echoes the event so the Step Functions definition can be
-wired and exercised end-to-end before the real logic lands.
-Will draft the seller/pharmacy/dealer letter with Claude Haiku 4.5 via
-``common.bedrock.converse("verify", ...)`` (MODEL_VERIFY) and render it to PDF
-(reportlab) in the claims bucket; adds the Consumer Protection Act paragraph
-when purchase_date > published_at.
+Runs after the case was approved (WaitForApproval). The letter goes to the seller the item's
+kind implies -- a pharmacy for a medicine, the dealer for a vehicle, the retailer otherwise --
+and cites the notice (source, id, URL), the product and its batch / serial / model year, the
+failed test or the hazard, and the remedy the notice sets out (else a refund or a
+replacement). When the item was sold after the notice was published it adds the purchase date
+against the notice date and a general reference to the Consumer Protection Act, 2019 (no
+section numbers). The template is ``templates/claim_letter.txt.j2``; the same text is rendered
+to an A4 PDF in the claims bucket (``<case_id>.pdf``) and kept on the case as ``claim_text``.
+
+Wording (CLAUDE.md): a CDSCO NSQ hit "failed a quality test" -- it is never called a recall.
+Never raises: a failure is ``degraded: true`` with ``error`` and an audit entry.
 """
 
 from __future__ import annotations
 
-STEP = "claim"
-PROMPT = "P09"
+import datetime as dt
+import io
+import logging
+from pathlib import Path
+from typing import Any
+from xml.sax.saxutils import escape
+
+from common import dynamo, s3
+from common.notices import now_iso
+from common.schemas import AuditEvent, Item
+
+log = logging.getLogger(__name__)
+
+TEMPLATE = Path(__file__).with_name("templates") / "claim_letter.txt.j2"
+DEFAULT_REMEDY = "a refund or a replacement"
+SOURCE_NAME = {
+    "cdsco_nsq": "Central Drugs Standard Control Organisation (CDSCO)",
+    "nhtsa": "US National Highway Traffic Safety Administration (NHTSA)",
+    "cpsc": "US Consumer Product Safety Commission (CPSC)",
+    "openfda": "US Food and Drug Administration (openFDA enforcement report)",
+}
+SHORT_SOURCE = {"cdsco_nsq": "CDSCO", "nhtsa": "NHTSA", "cpsc": "CPSC", "openfda": "FDA"}
+ADDRESSEE = {
+    "medicine": ("pharmacy", "The Pharmacist-in-charge", "The pharmacy that sold this medicine"),
+    "vehicle": ("dealer", "The Service Manager", "{make} authorised dealer"),
+    "appliance": ("retailer", "The Customer Care Manager", "The store that sold this product"),
+    "other": ("retailer", "The Customer Care Manager", "The store that sold this product"),
+}
+MONTHS = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+]  # fmt: skip
+
+
+def _date(value: Any) -> str | None:
+    """``2026-07-12`` / an ISO timestamp -> ``12 July 2026``."""
+    text = str(value or "").strip()[:10]
+    try:
+        day = dt.date.fromisoformat(text)
+    except ValueError:
+        return None
+    return f"{day.day} {MONTHS[day.month - 1]} {day.year}"
+
+
+def _days_between(earlier: Any, later: Any) -> int | None:
+    try:
+        a = dt.date.fromisoformat(str(earlier)[:10])
+        b = dt.date.fromisoformat(str(later)[:10])
+    except ValueError:
+        return None
+    return (b - a).days
+
+
+def _month_label(month: str | None) -> str:
+    """``JUL-2026`` -> ``July 2026``."""
+    text = str(month or "").strip().upper()
+    for name in MONTHS:
+        if text.startswith(name[:3].upper() + "-"):
+            return f"{name} {text.split('-', 1)[1]}"
+    return text
+
+
+def identifier(item: dict, notice: dict) -> str:
+    """What the letter names as the item's unit: batch, serial, model year, or model."""
+    if item.get("batch"):
+        return f"batch {item['batch']}"
+    if item.get("serial"):
+        return f"serial number {item['serial']}"
+    if item.get("year"):
+        make = " ".join(str(item.get(k) or "").strip() for k in ("make", "model")).strip()
+        return f"model year {item['year']}{f', {make.title()}' if make else ''}"
+    if item.get("model"):
+        return f"model {item['model']}"
+    return "the unit I own"
+
+
+def letter_context(case: dict, item: dict, notice: dict, today: str) -> dict:
+    """Everything the template needs, from the case, the item and the notice."""
+    source = str(notice.get("source") or "")
+    kind = str(item.get("kind") or "other")
+    who, role, place = ADDRESSEE.get(kind, ADDRESSEE["other"])
+    make = str(item.get("make") or item.get("brand") or "").strip().title() or "The"
+    is_nsq = source == "cdsco_nsq"
+    ref = notice.get("row_ref") or {}
+    product = str(item.get("name") or notice.get("product") or "the product").strip()
+    ident = identifier(item, notice)
+    if is_nsq:
+        # portal rows carry the month in row_ref; a PDF row's notice id starts with it
+        month = _month_label(
+            ref.get("month") or str(notice.get("notice_id", "")).split("-cdsco")[0]
+        )
+        row = f", row {ref['row']}" if ref.get("row") else ""
+        notice_ref = f"the CDSCO Not of Standard Quality alert for {month}{row}"
+        subject = (
+            f"Refund or replacement: {product}, {ident}, failed CDSCO quality test "
+            f"({month} alert{row})"
+        )
+    else:
+        notice_ref = f"{SHORT_SOURCE.get(source, source.upper())} recall {notice.get('notice_id')}"
+        subject = f"Refund, repair or replacement: {product} ({ident}) is covered by {notice_ref}"
+    remedy_text = str(notice.get("remedy") or "").strip()
+    remedy = (
+        f'the remedy the notice sets out ("{remedy_text.rstrip(".")}"), or {DEFAULT_REMEDY}'
+        if remedy_text
+        else DEFAULT_REMEDY
+    )
+    purchase = item.get("purchase_date")
+    published = notice.get("published_at")
+    return {
+        "today": today,
+        "case_id": case.get("case_id"),
+        "addressee": who,
+        "addressee_role": role,
+        "addressee_place": place.format(make=make),
+        "subject": subject,
+        "product": product,
+        "maker": str(item.get("brand") or notice.get("brand") or "").strip(),
+        "identifier": ident,
+        "purchase_date": _date(purchase),
+        "is_nsq": is_nsq,
+        "thing": {"vehicle": "vehicle", "medicine": "medicine"}.get(kind, "product"),
+        "source_name": SOURCE_NAME.get(source, source.upper()),
+        "notice_ref": notice_ref,
+        "published": _date(published) or str(published or "an earlier date"),
+        "finding": str(notice.get("hazard_or_failed_test") or "not stated").strip().rstrip("."),
+        "lab": str(notice.get("lab") or "").strip(),
+        "notice_url": str(notice.get("url") or "").strip(),
+        "remedy": remedy,
+        "sold_after_notice": bool(case.get("sold_after_notice")) and bool(purchase),
+        "days_after": _days_between(published, purchase),
+    }
+
+
+def render_text(context: dict) -> str:
+    from jinja2 import Environment, StrictUndefined  # lazy: only this Lambda needs it
+
+    env = Environment(undefined=StrictUndefined, autoescape=False, keep_trailing_newline=True)
+    text = env.from_string(TEMPLATE.read_text(encoding="utf-8")).render(**context)
+    # at most one blank line between paragraphs, however the template's blocks fall
+    lines, blank = [], False
+    for line in text.splitlines():
+        if line.strip():
+            lines.append(line.rstrip())
+            blank = False
+        elif not blank:
+            lines.append("")
+            blank = True
+    return "\n".join(lines).strip() + "\n"
+
+
+def _latin(text: str) -> str:
+    """reportlab's built-in fonts cover cp1252; anything else would print as a black box."""
+    return text.encode("cp1252", "replace").decode("cp1252")
+
+
+def render_pdf(text: str, *, case_id: str, title: str) -> bytes:
+    """The letter as an A4 PDF: a header line, then one paragraph per block of the text."""
+    from reportlab.lib.colors import HexColor
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+
+    body = ParagraphStyle("body", fontName="Helvetica", fontSize=10.5, leading=15)
+    bold = ParagraphStyle("subject", parent=body, fontName="Helvetica-Bold")
+    head = ParagraphStyle(
+        "head", parent=body, fontSize=8.5, leading=11, textColor=HexColor("#5b6470")
+    )
+    out = io.BytesIO()
+    doc = SimpleDocTemplate(
+        out,
+        pagesize=A4,
+        leftMargin=22 * mm,
+        rightMargin=22 * mm,
+        topMargin=20 * mm,
+        bottomMargin=20 * mm,
+        title=_latin(title),
+        author="RecallIndia",
+        subject=f"Claim letter, case {case_id}",
+    )
+    story: list[Any] = [Paragraph(escape(f"RecallIndia · claim letter · case {case_id}"), head)]
+    story.append(Spacer(1, 8 * mm))
+    for block in text.strip().split("\n\n"):
+        style = bold if block.startswith("Subject:") else body
+        html = "<br/>".join(escape(_latin(line)) for line in block.splitlines())
+        story += [Paragraph(html, style), Spacer(1, 4 * mm)]
+    doc.build(story)
+    return out.getvalue()
+
+
+def _append_audit(case: dict, event: str, detail: dict) -> None:
+    case.setdefault("audit", []).append(
+        AuditEvent(ts=now_iso(), event=event, detail=detail).model_dump()
+    )
+
+
+def draft(case_id: str) -> dict:
+    """Draft, render and store the letter for ``case_id``; returns the step result."""
+    case = dynamo.get("cases", case_id)
+    if case is None:
+        raise LookupError(f"case {case_id!r} not found")
+    item = dynamo.get("items", Item.make_pk(str(case.get("item_id")))) or {}
+    notice = dynamo.get("notices", str(case.get("notice_id"))) or {}
+    if not notice:
+        raise LookupError(f"notice {case.get('notice_id')!r} not found")
+    now = now_iso()
+    context = letter_context(case, item, notice, _date(now) or now[:10])
+    text = render_text(context)
+    pdf = render_pdf(text, case_id=case_id, title=context["subject"])
+    key = s3.put_bytes("claims", f"{case_id}.pdf", pdf, "application/pdf")
+    case.update(
+        claim_pdf_s3_key=key,
+        claim_text=text,
+        claim_addressee=context["addressee"],
+        claim_created_at=now,
+    )
+    _append_audit(
+        case,
+        "claim.drafted",
+        {"pdf_s3_key": key, "bytes": len(pdf), "addressee": context["addressee"],
+         "template": TEMPLATE.name, "sold_after_notice": context["sold_after_notice"]},
+    )  # fmt: skip
+    dynamo.put("cases", case)
+    return {
+        "case_id": case_id,
+        "claim_pdf_s3_key": key,
+        "bytes": len(pdf),
+        "addressee": context["addressee"],
+        "sold_after_notice": context["sold_after_notice"],
+        "degraded": False,
+    }
 
 
 def handler(event: dict | None, context: object) -> dict:
     event = event if isinstance(event, dict) else {}
-    return {"step": STEP, "status": "placeholder", "prompt": PROMPT, **event}
+    case_id = str(event.get("case_id") or "").strip()
+    try:
+        if not case_id:
+            raise ValueError("case_id is required")
+        return draft(case_id)
+    except Exception as exc:  # never raise: the case records what went wrong
+        error = f"{type(exc).__name__}: {exc}"
+        log.warning("claim for %s failed: %s", case_id, error)
+        try:
+            case = dynamo.get("cases", case_id) if case_id else None
+            if case is not None:
+                _append_audit(case, "claim.failed", {"error": error})
+                dynamo.put("cases", case)
+        except Exception:
+            pass
+        return {"case_id": case_id or None, "degraded": True, "error": error}

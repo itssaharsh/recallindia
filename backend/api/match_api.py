@@ -31,6 +31,7 @@ from urllib.parse import unquote
 
 from pydantic import ValidationError
 
+from common import approval as approval_gate
 from common import dynamo
 from common.demo_mode import is_demo
 from common.schemas import Case, Item, ItemKind
@@ -280,6 +281,8 @@ def get_item(params: dict, _event: dict) -> Result:
     case = None
     if item.get("case_id"):
         case = dynamo.get("cases", Case.make_pk(str(item["case_id"])))
+    if case is not None:  # the task token never leaves the table
+        case = {**case, "approval": approval_gate.public(case.get("approval"))}
     return 200, {**item, "case": case}
 
 
@@ -430,6 +433,19 @@ def run_demo_check(item: dict) -> Result:
     else:
         status = "SUCCEEDED"
     state["notify"] = notify
+    # IsAlert -> WaitForApproval: an alert pauses for the human, as the state machine does; a
+    # local token stands in for the Step Functions one (POST /cases/{id}/approve runs the rest)
+    if status == "SUCCEEDED" and notify.get("decision") == "alert" and notify.get("case_id"):
+        try:
+            approval_gate.request(
+                str(notify["case_id"]),
+                task_token=f"demo-token-{secrets.token_hex(8)}",
+                at=_now(),
+                execution_arn=execution_arn,
+            )
+            status = "WAITING_FOR_APPROVAL"
+        except Exception as exc:  # the demo runner must not raise either
+            errors["WaitForApproval"] = f"{type(exc).__name__}: {exc}"
 
     decide = state["decide"]
     considered = decide.get("candidates_considered")
@@ -460,7 +476,7 @@ def get_case(params: dict, _event: dict) -> Result:
     case = dynamo.get("cases", Case.make_pk(case_id)) if case_id else None
     if case is None or case.get("rk") != "case":  # an events# row is not a case
         return 404, {"error": "not found", "case_id": case_id}
-    return 200, case
+    return 200, {**case, "approval": approval_gate.public(case.get("approval"))}
 
 
 # --- GET /events ----------------------------------------------------------------------

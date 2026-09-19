@@ -6,6 +6,8 @@ Demo mode stores objects as files under ``DEMO_STORE_DIR/s3/<bucket>/<key>`` and
 
 from __future__ import annotations
 
+import datetime as dt
+import json
 import os
 from pathlib import Path
 from typing import Any, Literal
@@ -44,11 +46,48 @@ def put_bytes(
     return key
 
 
-def get_bytes(kind: BucketKind, key: str) -> bytes:
-    """Read the object at ``key``."""
+def get_bytes(kind: BucketKind, key: str, version_id: str | None = None) -> bytes:
+    """Read the object at ``key`` (a specific ``version_id`` in a versioned bucket)."""
     if is_demo():
         return _local_path(kind, key).read_bytes()
-    return _client().get_object(Bucket=bucket_name(kind), Key=key)["Body"].read()
+    extra = {"VersionId": version_id} if version_id else {}
+    return _client().get_object(Bucket=bucket_name(kind), Key=key, **extra)["Body"].read()
+
+
+def put_locked(
+    kind: BucketKind,
+    key: str,
+    data: bytes,
+    content_type: str,
+    retain_until: dt.datetime,
+    mode: str = "GOVERNANCE",
+) -> str | None:
+    """Write ``data`` under S3 Object Lock (``mode`` until ``retain_until``); returns the version.
+
+    Object Lock PUTs need a content checksum: SHA256 is sent explicitly, whatever the botocore
+    default. Demo mode writes the file plus a ``.retention.json`` sidecar with the same fields
+    ``get-object-retention`` would report (the local store cannot enforce it).
+    """
+    until = retain_until.astimezone(dt.UTC)
+    if is_demo():
+        path = _local_path(kind, key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+        sidecar = path.with_name(path.name + ".retention.json")
+        sidecar.write_text(
+            json.dumps({"Mode": mode, "RetainUntilDate": until.isoformat()}), encoding="utf-8"
+        )
+        return None
+    resp = _client().put_object(
+        Bucket=bucket_name(kind),
+        Key=key,
+        Body=data,
+        ContentType=content_type,
+        ObjectLockMode=mode,
+        ObjectLockRetainUntilDate=until,
+        ChecksumAlgorithm="SHA256",
+    )
+    return resp.get("VersionId")
 
 
 def presigned_url(kind: BucketKind, key: str, expires: int = 900) -> str:

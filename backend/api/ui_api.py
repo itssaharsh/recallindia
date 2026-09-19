@@ -26,6 +26,7 @@ import time
 import uuid
 from typing import Any
 
+from common import approval as approval_gate
 from common import aws_ai, dynamo, s3
 from common.demo_mode import is_demo
 from common.notices import read_meta
@@ -210,12 +211,18 @@ def items_normalise(_params: dict, event: dict) -> Result:
 # --- GET /items/{id}/check-status ------------------------------------------------------------
 
 STEPS = ("Candidates", "Verify", "RangeCheck", "Decide", "Notify")
+# after Notify, an alert waits for the human, then drafts the claim and seals the evidence
+APPROVAL_STEPS = ("WaitForApproval", "Claim", "Evidence")
+WAITING = "WAITING_FOR_APPROVAL"
 _RESULT_KEY = {
     "Candidates": "candidates",
     "Verify": "verify",
     "RangeCheck": "range_check",
     "Decide": "decide",
     "Notify": "notify",
+    "WaitForApproval": "approval",
+    "Claim": "claim",
+    "Evidence": "evidence",
 }
 _FAILED_EVENTS = {"TaskFailed", "TaskTimedOut", "LambdaFunctionFailed", "LambdaFunctionTimedOut"}
 _HISTORY_PAGES = 3
@@ -231,6 +238,12 @@ def _summary(step: str, result: dict) -> dict:
         return {k: result.get(k) for k in ("kind", "inside", "listed", "yours")}
     if step == "Decide":
         return {k: result.get(k) for k in ("decision", "reason", "candidates_considered")}
+    if step == "WaitForApproval":
+        return {"approved": result.get("approved"), "approver": result.get("approver")}
+    if step == "Claim":
+        return {k: result.get(k) for k in ("claim_pdf_s3_key", "addressee", "bytes", "error")}
+    if step == "Evidence":
+        return {k: result.get(k) for k in ("sha256", "kind", "retain_until", "error")}
     email = result.get("email") if isinstance(result.get("email"), dict) else {}
     return {"case_id": result.get("case_id"), "email_sent": email.get("sent")}
 
@@ -243,8 +256,8 @@ def steps_from_history(events: list[dict], *, terminal: bool) -> dict[str, dict]
     stand-in (VerifyUnavailable, HoldUnavailable) is ``failed``; a step never entered is
     ``pending`` while the execution runs and ``skipped`` after (no candidates -> no Verify).
     """
-    steps: dict[str, dict] = {name: {"state": "pending"} for name in STEPS}
-    open_count = dict.fromkeys(STEPS, 0)
+    steps: dict[str, dict] = {name: {"state": "pending"} for name in STEPS + APPROVAL_STEPS}
+    open_count = dict.fromkeys(STEPS + APPROVAL_STEPS, 0)
     current: list[str] = []
     for ev in events or []:
         kind = str(ev.get("type") or "")
@@ -293,16 +306,71 @@ def steps_from_history(events: list[dict], *, terminal: bool) -> dict[str, dict]
     return steps
 
 
+def approval_steps_from_case(case: dict | None) -> dict[str, dict]:
+    """WaitForApproval / Claim / Evidence from the case alone (demo, or no history left)."""
+    steps: dict[str, dict] = {n: {"state": "skipped"} for n in APPROVAL_STEPS}
+    if not case or case.get("decision") != "alert":
+        return steps
+    approval = case.get("approval") or {}
+    status = approval.get("status")
+    if status in (None, "waiting"):
+        steps["WaitForApproval"] = {
+            "state": "running" if status else "pending",
+            "started_at": approval.get("token_issued_at"),
+        }
+        steps["Claim"] = {"state": "pending"}
+        steps["Evidence"] = {"state": "pending"}
+        return steps
+    ended = approval.get(f"{status}_at")
+    if status != "approved":
+        steps["WaitForApproval"] = {
+            "state": "failed",
+            "ended_at": ended,
+            "summary": {"error": status},
+        }
+        return steps
+    steps["WaitForApproval"] = {
+        "state": "done",
+        "ended_at": ended,
+        "summary": {"approved": True, "approver": approval.get("approver")},
+    }
+    audit = {a.get("event"): a for a in case.get("audit") or [] if isinstance(a, dict)}
+    for name, done_key, failed_event in (
+        ("Claim", "claim_pdf_s3_key", "claim.failed"),
+        ("Evidence", "evidence", "evidence.failed"),
+    ):
+        if case.get(done_key):
+            steps[name] = {"state": "done"}
+        elif failed_event in audit:
+            error = (audit[failed_event].get("detail") or {}).get("error")
+            steps[name] = {"state": "failed", "summary": {"error": error}}
+        else:
+            steps[name] = {"state": "pending"}
+    if case.get("claim_pdf_s3_key"):
+        steps["Claim"]["summary"] = {
+            "claim_pdf_s3_key": case["claim_pdf_s3_key"],
+            "addressee": case.get("claim_addressee"),
+        }
+    evidence = case.get("evidence") or {}
+    if evidence:
+        steps["Evidence"]["summary"] = {
+            "sha256": evidence.get("sha256"),
+            "kind": evidence.get("snapshot_kind"),
+            "retain_until": evidence.get("object_lock_retain_until"),
+        }
+    return steps
+
+
 def _steps_from_item(item: dict, case: dict | None) -> tuple[str, dict[str, dict]]:
     """Demo (in-process, synchronous) or an execution Step Functions no longer has."""
     finished = bool(item.get("last_checked_at")) and str(item.get("last_checked_at")) >= str(
         item.get("last_check_at") or ""
     )
     if not finished:
-        return "RUNNING", {
-            n: {"state": "running" if n == "Candidates" else "pending"} for n in STEPS
-        }
+        running = {n: {"state": "running" if n == "Candidates" else "pending"} for n in STEPS}
+        return "RUNNING", running | {n: {"state": "pending"} for n in APPROVAL_STEPS}
     steps = {n: {"state": "done"} for n in STEPS}
+    steps.update(approval_steps_from_case(case))
     if case is None and item.get("status") == "clear":  # no candidates: straight to Decide
         steps["Verify"] = {"state": "skipped"}
         steps["RangeCheck"] = {"state": "skipped"}
@@ -315,7 +383,16 @@ def _steps_from_item(item: dict, case: dict | None) -> tuple[str, dict[str, dict
         rc = case.get("range_check") or {}
         steps["RangeCheck"]["summary"] = {k: rc.get(k) for k in ("inside", "listed", "yours")}
         steps["Notify"]["summary"] = {"case_id": case.get("case_id")}
-    return "SUCCEEDED", steps
+    waiting = (case or {}).get("decision") == "alert" and steps["WaitForApproval"]["state"] in (
+        "running",
+        "pending",
+    )
+    return (WAITING if waiting else "SUCCEEDED"), steps
+
+
+def approval_public(case: dict | None) -> dict | None:
+    """The case's approval without its task token."""
+    return approval_gate.public((case or {}).get("approval"))
 
 
 def check_status(params: dict, _event: dict) -> Result:
@@ -353,14 +430,23 @@ def check_status(params: dict, _event: dict) -> Result:
         except Exception as exc:
             if "ExecutionDoesNotExist" in str(exc):  # expired from history: fall back to the item
                 status, steps = _steps_from_item(item, case)
-                body.update(status=status, steps=[{"name": n, **steps[n]} for n in STEPS])
+                body.update(
+                    status=status,
+                    steps=[{"name": n, **steps[n]} for n in STEPS],
+                    approval_steps=[{"name": n, **steps[n]} for n in APPROVAL_STEPS],
+                    approval=approval_public(case),
+                )
                 return 200, body
             return 502, {"error": f"{type(exc).__name__}: {exc}", "item_id": item_id}
         status = str(described.get("status") or "RUNNING")
         steps = steps_from_history(events, terminal=status != "RUNNING")
+        if status == "RUNNING" and steps["WaitForApproval"]["state"] == "running":
+            status = WAITING  # paused for the human: the check itself is over
         body.update(status=status, started_at=match_api._iso(described.get("startDate")),
                     stopped_at=match_api._iso(described.get("stopDate")))  # fmt: skip
     body["steps"] = [{"name": n, **steps[n]} for n in STEPS]
+    body["approval_steps"] = [{"name": n, **steps[n]} for n in APPROVAL_STEPS]
+    body["approval"] = approval_public(case)
     decide = steps["Decide"].get("summary") or {}
     body["decision"] = decide.get("decision") or (case or {}).get("decision")
     return 200, body

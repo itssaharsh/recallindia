@@ -59,7 +59,15 @@ def _import_or_skip(module_name: str):
 
 # Handlers that cannot do anything useful without input. Keep this list minimal and explicit: a
 # poller or ingest step that degrades on an empty event is a real failure and must stay one.
-REQUIRES_INPUT = {"matcher.candidates", "matcher.decide", "matcher.notify"}
+REQUIRES_INPUT = {
+    "matcher.candidates",
+    "matcher.decide",
+    "matcher.notify",
+    "matcher.claim",  # P09: no case_id, no letter
+    "matcher.evidence",  # P09: no case_id, nothing to seal
+}
+# matcher.approval is not listed: it raises by design (a task token that was never stored would
+# leave the execution paused for 24 h, so WaitForApproval must fail instead) -- see its tests.
 
 
 @pytest.mark.parametrize("module_name", HANDLER_MODULES)
@@ -243,10 +251,10 @@ def test_api_health_and_notices():
     assert empty["statusCode"] == 400
     assert "error" in json.loads(empty["body"])
 
-    # routes that are still placeholders keep answering 501 with the prompt that completes them
-    later = app.handler(_api_event("POST", "/cases/case-x/approve"), None)
-    assert later["statusCode"] == 501
-    assert json.loads(later["body"])["prompt"] == "P08"
+    # the case actions are real since P08/P09: an unknown case is a 404, not "not implemented"
+    unknown = app.handler(_api_event("POST", "/cases/case-x/approve"), None)
+    assert unknown["statusCode"] == 404
+    assert json.loads(unknown["body"])["case_id"] == "case-x"
 
     assert app.handler(_api_event("GET", "/nope"), None)["statusCode"] == 404
     assert app.handler({}, None)["statusCode"] == 400
@@ -304,15 +312,6 @@ def test_verify_quote_guard():
     assert quote_is_verbatim("FT5427  |  Dissolution\ntest", excerpt)
     assert not quote_is_verbatim("FT5428", excerpt)
     assert not quote_is_verbatim("", excerpt)
-
-
-def test_remaining_matcher_placeholders_passthrough():
-    """candidates/notify became real in P04; claim and evidence stay placeholders until P09."""
-    from matcher import claim, evidence
-
-    for mod, prompt in ((claim, "P09"), (evidence, "P09")):
-        out = mod.handler({"item_id": "i1"}, None)
-        assert out["status"] == "placeholder" and out["prompt"] == prompt and out["item_id"] == "i1"
 
 
 def test_demo_mode_is_on():

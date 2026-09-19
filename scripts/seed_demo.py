@@ -54,6 +54,29 @@ def reset(dynamo) -> dict[str, int]:
     return deleted
 
 
+def stop_paused_checks(machine_arn: str) -> int:
+    """Live reset: stop match executions still running -- in practice paused at WaitForApproval.
+
+    Their cases are deleted with the rest of the demo world; left alone each would wait out the
+    24 h approval timeout for a case that no longer exists.
+    """
+    import boto3
+
+    sfn = boto3.client("stepfunctions")
+    stopped = 0
+    pages = sfn.get_paginator("list_executions").paginate(
+        stateMachineArn=machine_arn, statusFilter="RUNNING"
+    )
+    for page in pages:
+        for execution in page.get("executions", []):
+            sfn.stop_execution(
+                executionArn=execution["executionArn"],
+                cause="seed_demo --reset: the demo world was re-seeded",
+            )
+            stopped += 1
+    return stopped
+
+
 def find_alert_notice(dynamo) -> dict | None:
     for notice in dynamo.query_brand(demo_world.ALERT_BRAND_LC, limit=100):
         if demo_world.ALERT_BATCH in (notice.get("batches") or []):
@@ -119,6 +142,9 @@ def main(argv: list[str] | None = None) -> int:
     from common import dynamo
 
     if args.reset:
+        if not args.mock and outputs.get("MatchStateMachineArn"):
+            stopped = stop_paused_checks(outputs["MatchStateMachineArn"])
+            print(f"seed_demo: reset stopped {stopped} running match execution(s)")
         deleted = reset(dynamo)
         print(f"seed_demo: reset deleted items={deleted['items']} cases+events={deleted['cases']}")
 

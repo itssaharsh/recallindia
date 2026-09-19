@@ -8,9 +8,10 @@ newest-first, opaque cursor -- ``notices_query``), ``GET /v1/notices/{id}``,
 ``GET /ingest/rows``, ``GET /ingest/pdf``, ``GET /ingest/runs``, ``GET /ingest/runs/{id}``
 (``ingest_api``); the item wall ``POST /items``,
 ``GET /items``, ``GET /items/{id}``, ``POST /items/{id}/check``, ``GET /cases/{id}``,
-``GET /events`` (``match_api``). Everything else answers 501 with the prompt that completes
-it (P08/P09). Always JSON, always CORS; gzipped when the client accepts it (HTTP APIs do not
-compress Lambda responses, and a feed page is ~115 KB of JSON).
+``GET /events`` (``match_api``); the case actions ``POST /cases/{id}/approve|reject``,
+``GET /cases/{id}/claim``, ``GET /cases/{id}/verify-evidence`` (``case_api``). Always JSON, always
+CORS; gzipped when the client accepts it (HTTP APIs do not compress Lambda responses, and a
+feed page is ~115 KB of JSON).
 """
 
 from __future__ import annotations
@@ -29,8 +30,9 @@ from common.demo_mode import is_demo
 from common.notices import is_meta
 
 try:
-    from api import ingest_api, match_api, notices_query, ui_api
+    from api import case_api, ingest_api, match_api, notices_query, ui_api
 except ModuleNotFoundError:  # Lambda layout: CodeUri backend/api/ -> siblings at /var/task
+    import case_api  # type: ignore[no-redef]
     import ingest_api  # type: ignore[no-redef]
     import match_api  # type: ignore[no-redef]
     import notices_query  # type: ignore[no-redef]
@@ -79,13 +81,6 @@ def compress(response: dict, event: dict) -> dict:
     headers = {**response.get("headers", {}), "content-encoding": "gzip", "vary": "accept-encoding"}
     packed = base64.b64encode(gzip.compress(raw, compresslevel=6, mtime=0)).decode("ascii")
     return {**response, "headers": headers, "body": packed, "isBase64Encoded": True}
-
-
-def _not_implemented(prompt: str) -> Route:
-    def route(_params: dict, _event: dict) -> dict:
-        return respond(501, {"error": "not implemented", "prompt": prompt})
-
-    return route
 
 
 def _wrap(fn: Callable[[dict, dict], tuple[int, dict]]) -> Route:
@@ -235,9 +230,14 @@ ROUTES: list[tuple[str, re.Pattern[str], Route]] = [
     ("GET", re.compile(r"^/items/(?P<id>[^/]+)/?$"), _wrap(match_api.get_item)),
     ("GET", re.compile(r"^/cases/(?P<id>[^/]+)/?$"), _wrap(match_api.get_case)),
     ("GET", re.compile(r"^/events/?$"), _wrap(match_api.list_events)),
-    ("POST", re.compile(r"^/cases/(?P<id>[^/]+)/approve/?$"), _not_implemented("P08")),
-    ("POST", re.compile(r"^/cases/(?P<id>[^/]+)/reject/?$"), _not_implemented("P08")),
-    ("GET", re.compile(r"^/cases/(?P<id>[^/]+)/verify-evidence/?$"), _not_implemented("P09")),
+    ("POST", re.compile(r"^/cases/(?P<id>[^/]+)/approve/?$"), _wrap(case_api.approve_case)),
+    ("POST", re.compile(r"^/cases/(?P<id>[^/]+)/reject/?$"), _wrap(case_api.reject_case)),
+    ("GET", re.compile(r"^/cases/(?P<id>[^/]+)/claim/?$"), _wrap(case_api.claim_url)),
+    (
+        "GET",
+        re.compile(r"^/cases/(?P<id>[^/]+)/verify-evidence/?$"),
+        _wrap(case_api.verify_evidence),
+    ),
     ("POST", re.compile(r"^/ingest/run/?$"), _wrap(ingest_api.run_ingest)),
     ("GET", re.compile(r"^/ingest/rows/?$"), _wrap(ingest_api.ingest_rows)),
     ("GET", re.compile(r"^/ingest/pdf/?$"), _wrap(ingest_api.ingest_pdf)),

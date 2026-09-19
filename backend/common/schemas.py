@@ -164,21 +164,49 @@ class RangeCheck(_Strict):
 
 
 class Evidence(_Strict):
-    """Signed snapshot of the notice stored under S3 Object Lock."""
+    """Signed snapshot of the notice stored under S3 Object Lock (SPEC §Match pipeline step 8).
+
+    ``sha256`` is of the snapshot bytes exactly as stored; ``signature_b64`` is KMS ``Sign``
+    over that digest (``signing_algorithm``) with ``kms_key_id``. ``snapshot_kind``: ``pdf``
+    (the CDSCO alert PDF itself), ``portal_row`` (the CDSCO portal JSON row, re-fetched),
+    ``source_json`` (the NHTSA / CPSC / openFDA record as served) or ``stored_notice`` (the
+    notice as ingested, when the source could not be fetched).
+    """
 
     sha256: str
     kms_key_id: str
     signature_b64: str
+    signing_algorithm: str = "RSASSA_PKCS1_V1_5_SHA_256"
+    object_lock_mode: str = "GOVERNANCE"
     object_lock_retain_until: str
     snapshot_s3_key: str
+    snapshot_version_id: str | None = None
+    snapshot_bytes: int | None = None
+    content_type: str | None = None
+    snapshot_kind: str | None = None
+    source_url: str | None = None
+    signed_at: str | None = None
+
+
+ApprovalStatus = Literal["waiting", "approved", "rejected", "expired"]
 
 
 class Approval(_Strict):
-    """Human approval gate for the claim letter (Step Functions task token)."""
+    """Human approval gate for the claim letter (Step Functions task token, single use).
 
+    ``task_token`` is set while ``status`` is ``waiting`` and removed in the same conditional
+    write that ends the wait (approve / reject / expire), so a token can be spent once. The
+    API never returns it.
+    """
+
+    status: ApprovalStatus = "waiting"
+    task_token: str | None = None
     token_issued_at: str
     approved_at: str | None = None
+    rejected_at: str | None = None
+    expired_at: str | None = None
     approver: str = "demo-user"
+    reason: str | None = None
 
 
 class AuditEvent(_Strict):
@@ -208,6 +236,10 @@ class Case(_Strict):
     range_check: RangeCheck | None = None
     sold_after_notice: bool = False
     claim_pdf_s3_key: str | None = None
+    # the letter as plain text (what the PDF says), who it is addressed to, when it was drafted
+    claim_text: str | None = None
+    claim_addressee: str | None = None
+    claim_created_at: str | None = None
     evidence: Evidence | None = None
     approval: Approval | None = None
     audit: list[AuditEvent] = Field(default_factory=list)

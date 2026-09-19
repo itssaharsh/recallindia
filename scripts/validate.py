@@ -39,6 +39,8 @@ for extra in (REPO_ROOT / "backend", Path(__file__).resolve().parent):
 import demo_world  # noqa: E402  (after the sys.path setup above)
 
 TERMINAL = {"SUCCEEDED", "FAILED", "TIMED_OUT", "ABORTED"}
+# an alert pauses at WaitForApproval for the human: the check itself is over (SPEC step 6)
+WAITING = "WAITING_FOR_APPROVAL"
 DISMISS_PREFIX = f"batch {demo_world.NEAR_MISS_BATCH} not in listed batches"
 
 
@@ -94,12 +96,18 @@ class LiveApi:
         arn = started.get("execution_arn")
         if not arn:
             return "NO_EXECUTION"
+        item_id = started.get("item_id")
         deadline = time.monotonic() + timeout
         status = "RUNNING"
         while time.monotonic() < deadline:
             status = self._sfn.describe_execution(executionArn=arn)["status"]
             if status in TERMINAL:
                 return status
+            if item_id:  # paused for approval = done deciding (check-status reads the history)
+                quoted = urllib.parse.quote(str(item_id), safe="")
+                code, body = self.call("GET", f"/items/{quoted}/check-status")
+                if code == 200 and body.get("status") == WAITING:
+                    return WAITING
             time.sleep(2)
         return f"{status} (timed out after {timeout}s)"
 
@@ -140,7 +148,7 @@ def assess(rows: list[dict]) -> list[str]:
     for r in rows:
         if r.get("decision") in ("ERROR", "?"):
             problems.append(f"{r['item_id']}: {r.get('detail') or 'no decision recorded'}")
-        elif r.get("execution") not in (None, "SUCCEEDED"):
+        elif r.get("execution") not in (None, "SUCCEEDED", WAITING):
             problems.append(f"{r['item_id']}: execution {r['execution']}")
 
     vehicle = by_id[demo_world.VEHICLE["item_id"]]
@@ -152,6 +160,9 @@ def assess(rows: list[dict]) -> list[str]:
             f"expected exactly 1 alert (demo-alert), got {[r['item_id'] for r in alerts]}"
         )
     for r in alerts:
+        # an alert must stop at the human gate (WaitForApproval), never run on to a claim
+        if r.get("execution") not in (None, WAITING):
+            problems.append(f"{r['item_id']}: alert execution {r.get('execution')!r}, not waiting")
         if r.get("verifier") != "deterministic":
             problems.append(
                 f"{r['item_id']}: verifier is {r.get('verifier')!r}, not 'deterministic'"

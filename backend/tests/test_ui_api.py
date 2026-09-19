@@ -189,9 +189,12 @@ def test_check_status_demo_alert_and_clear(notices) -> None:
     assert _call("GET", f"/items/{alert}/check-status")[0] == 404  # never checked
     assert _call("POST", f"/items/{alert}/check")[0] == 200
     status, body = _call("GET", f"/items/{alert}/check-status")
-    assert status == 200 and body["status"] == "SUCCEEDED" and body["decision"] == "alert"
+    assert status == 200 and body["status"] == ui_api.WAITING and body["decision"] == "alert"
     assert [s["name"] for s in body["steps"]] == list(ui_api.STEPS)
     assert all(s["state"] == "done" for s in body["steps"])
+    after = {s["name"]: s["state"] for s in body["approval_steps"]}
+    assert after == {"WaitForApproval": "running", "Claim": "pending", "Evidence": "pending"}
+    assert body["approval"]["status"] == "waiting" and "task_token" not in body["approval"]
 
     clear = _add({"kind": "appliance", "name": "Prestige Deluxe Cooker", "brand": "Prestige"})
     _call("POST", f"/items/{clear}/check")
@@ -200,6 +203,9 @@ def test_check_status_demo_alert_and_clear(notices) -> None:
     }
     assert steps == {"Candidates": "done", "Verify": "skipped", "RangeCheck": "skipped",
                      "Decide": "done", "Notify": "done"}  # fmt: skip
+    body = _call("GET", f"/items/{clear}/check-status")[1]
+    assert body["status"] == "SUCCEEDED" and body["approval"] is None
+    assert {s["state"] for s in body["approval_steps"]} == {"skipped"}
 
 
 def _entered(name: str) -> dict:
@@ -268,6 +274,55 @@ def test_check_status_live_path_reads_the_execution_history(monkeypatch, notices
     assert status == 200 and body["status"] == "RUNNING"
     states = {s["name"]: s["state"] for s in body["steps"]}
     assert states["Candidates"] == "running" and states["Notify"] == "pending"
+
+
+def test_check_status_live_path_paused_at_the_approval_gate(monkeypatch, notices) -> None:
+    item_id = _add({"kind": "medicine", "name": "Paracetamol Tablets IP 650mg", "batch": "FT5427"})
+    item = dynamo.get("items", f"user#{item_id}")
+    item.update(last_check_arn="arn:aws:states:ap-south-1:1:execution:recallindia-match-1:c2",
+                last_check_at="2026-09-19T10:00:00Z")  # fmt: skip
+    dynamo.put("items", item)
+    match = [
+        _entered("Candidates"),
+        _exited("Candidates", "candidates", {"count": 1, "sources_searched": ["cdsco_nsq"]}),
+        _entered("Decide"),
+        _exited("Decide", "decide", {"decision": "alert", "reason": "listed"}),
+        _entered("Notify"),
+        _exited("Notify", "notify", {"case_id": "case-1", "email": {"sent": False}}),
+    ]
+    paused = _FakeSfn("RUNNING", [*match, _entered("WaitForApproval")])
+    monkeypatch.setattr(ui_api, "is_demo", lambda: False)
+    monkeypatch.setattr(match_api, "_sfn_client", lambda: paused)
+    status, body = _call("GET", f"/items/{item_id}/check-status")
+    # the check is over (the card stops flipping); the case waits for the human
+    assert status == 200 and body["status"] == ui_api.WAITING
+    after = {s["name"]: s["state"] for s in body["approval_steps"]}
+    assert after == {"WaitForApproval": "running", "Claim": "pending", "Evidence": "pending"}
+
+    approved = [
+        *match,
+        _entered("WaitForApproval"),
+        _exited("WaitForApproval", "approval", {"approved": True, "approver": "demo-user"}),
+        _entered("Claim"),
+        _exited("Claim", "claim", {"claim_pdf_s3_key": "case-1.pdf", "addressee": "pharmacy"}),
+        _entered("Evidence"),
+    ]
+    monkeypatch.setattr(match_api, "_sfn_client", lambda: _FakeSfn("RUNNING", approved))
+    status, body = _call("GET", f"/items/{item_id}/check-status")
+    assert body["status"] == "RUNNING"
+    after = {s["name"]: s for s in body["approval_steps"]}
+    assert after["WaitForApproval"]["state"] == "done"
+    assert after["WaitForApproval"]["summary"] == {"approved": True, "approver": "demo-user"}
+    assert (
+        after["Claim"]["state"] == "done" and after["Claim"]["summary"]["addressee"] == "pharmacy"
+    )
+    assert after["Evidence"]["state"] == "running"
+
+    rejected = [*match, _entered("WaitForApproval"), {"type": "TaskFailed"}]
+    monkeypatch.setattr(match_api, "_sfn_client", lambda: _FakeSfn("FAILED", rejected))
+    body = _call("GET", f"/items/{item_id}/check-status")[1]
+    after = {s["name"]: s["state"] for s in body["approval_steps"]}
+    assert after == {"WaitForApproval": "failed", "Claim": "skipped", "Evidence": "skipped"}
 
 
 # --- gzip on the way out -------------------------------------------------------------------------

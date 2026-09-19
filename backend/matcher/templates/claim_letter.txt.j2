@@ -1,0 +1,29 @@
+{{ today }}
+
+To: {{ addressee_role }}
+{{ addressee_place }}
+
+Subject: {{ subject }}
+
+Dear Sir or Madam,
+
+I bought {{ product }}{% if maker %}, made by {{ maker }}{% endif %} ({{ identifier }}){% if purchase_date %}, on {{ purchase_date }}{% endif %}.
+
+{% if is_nsq -%}
+This batch is listed in {{ notice_ref }}, published on {{ published }} by the {{ source_name }}: its list of drugs that failed a quality test. The listed result reads: "{{ finding }}"{% if lab %} (tested by {{ lab }}){% endif %}.
+{%- else -%}
+This {{ thing }} is covered by {{ notice_ref }}, published on {{ published }} by the {{ source_name }}. The hazard the notice states: "{{ finding }}."
+{%- endif %} The notice is published at {{ notice_url }}.
+{% if sold_after_notice %}
+
+I bought it on {{ purchase_date }}, {{ days_after }} day{{ "s" if days_after != 1 }} after the notice was published on {{ published }}. Selling goods after they have been publicly identified as {% if is_nsq %}not of standard quality{% else %}subject to a safety recall{% endif %} may amount to a deficiency in service or an unfair trade practice under the Consumer Protection Act, 2019.
+{%- endif %}
+
+I request {{ remedy }}. Please reply in writing within 15 days of receiving this letter.
+
+A copy of the notice as published is kept by RecallIndia under reference {{ case_id }}, in write-once storage and digitally signed, and can be produced on request.
+
+Yours faithfully,
+
+The purchaser
+Prepared with RecallIndia, reference {{ case_id }}

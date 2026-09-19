@@ -21,7 +21,9 @@
       "TimeoutSeconds": 90,
       "Retry": [
         {
-          "ErrorEquals": ["States.ALL"],
+          "ErrorEquals": [
+            "States.ALL"
+          ],
           "IntervalSeconds": 2,
           "MaxAttempts": 2,
           "BackoffRate": 2
@@ -29,7 +31,9 @@
       ],
       "Catch": [
         {
-          "ErrorEquals": ["States.ALL"],
+          "ErrorEquals": [
+            "States.ALL"
+          ],
           "ResultPath": "$.error",
           "Next": "HoldUnavailable"
         }
@@ -78,7 +82,9 @@
             "TimeoutSeconds": 120,
             "Retry": [
               {
-                "ErrorEquals": ["States.ALL"],
+                "ErrorEquals": [
+                  "States.ALL"
+                ],
                 "IntervalSeconds": 2,
                 "MaxAttempts": 1,
                 "BackoffRate": 2
@@ -86,7 +92,9 @@
             ],
             "Catch": [
               {
-                "ErrorEquals": ["States.ALL"],
+                "ErrorEquals": [
+                  "States.ALL"
+                ],
                 "ResultPath": "$.verify_error",
                 "Next": "VerifyUnavailable"
               }
@@ -115,7 +123,9 @@
             "TimeoutSeconds": 60,
             "Retry": [
               {
-                "ErrorEquals": ["States.ALL"],
+                "ErrorEquals": [
+                  "States.ALL"
+                ],
                 "IntervalSeconds": 2,
                 "MaxAttempts": 2,
                 "BackoffRate": 2
@@ -123,7 +133,9 @@
             ],
             "Catch": [
               {
-                "ErrorEquals": ["States.ALL"],
+                "ErrorEquals": [
+                  "States.ALL"
+                ],
                 "ResultPath": "$.range_error",
                 "Next": "RangeUnavailable"
               }
@@ -165,7 +177,9 @@
       "TimeoutSeconds": 60,
       "Retry": [
         {
-          "ErrorEquals": ["States.ALL"],
+          "ErrorEquals": [
+            "States.ALL"
+          ],
           "IntervalSeconds": 2,
           "MaxAttempts": 2,
           "BackoffRate": 2
@@ -173,7 +187,9 @@
       ],
       "Catch": [
         {
-          "ErrorEquals": ["States.ALL"],
+          "ErrorEquals": [
+            "States.ALL"
+          ],
           "ResultPath": "$.error",
           "Next": "HoldUnavailable"
         }
@@ -206,7 +222,9 @@
       "TimeoutSeconds": 60,
       "Retry": [
         {
-          "ErrorEquals": ["States.ALL"],
+          "ErrorEquals": [
+            "States.ALL"
+          ],
           "IntervalSeconds": 2,
           "MaxAttempts": 2,
           "BackoffRate": 2
@@ -214,7 +232,9 @@
       ],
       "Catch": [
         {
-          "ErrorEquals": ["States.ALL"],
+          "ErrorEquals": [
+            "States.ALL"
+          ],
           "ResultPath": "$.error",
           "Next": "Failed"
         }
@@ -242,31 +262,163 @@
       "Default": "Done"
     },
     "WaitForApproval": {
-      "Type": "Pass",
-      "Comment": "P08 placeholder. Becomes a Task with Resource arn:aws:states:::lambda:invoke.waitForTaskToken that stores $$.Task.Token on the case (Case.approval.token_issued_at); the UI's POST /cases/{id}/approve|reject calls SendTaskSuccess / SendTaskFailure. Until then a Pass so an alert execution runs through to Done.",
-      "Result": {
-        "placeholder": "P08"
+      "Type": "Task",
+      "Comment": "SPEC step 6 (alert only; IsAlert routes here). lambda:invoke.waitForTaskToken: the Approval Lambda stores $$.Task.Token on the case (approval.status = waiting, token_issued_at) and the execution pauses until the case page calls POST /cases/{id}/approve (SendTaskSuccess -> Claim) or /reject (SendTaskFailure 'Rejected' -> the Rejected Fail state). No heartbeat; after TimeoutSeconds (24 h) States.Timeout -> ExpireApproval marks the case expired. The SendTaskSuccess output {approved, approver, approved_at} lands in $.approval. Retry covers only Lambda service errors (never States.ALL: retrying a rejection or a timeout would issue a fresh token and reopen the wait); any other failure -> Failed.",
+      "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
+      "Parameters": {
+        "FunctionName": "${ApprovalFunctionArn}",
+        "Payload": {
+          "action": "request",
+          "task_token.$": "$$.Task.Token",
+          "case_id.$": "$.notify.case_id",
+          "item_id.$": "$.item_id",
+          "run.$": "$.run"
+        }
       },
+      "TimeoutSeconds": 86400,
       "ResultPath": "$.approval",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.Timeout"
+          ],
+          "ResultPath": "$.approval_error",
+          "Next": "ExpireApproval"
+        },
+        {
+          "ErrorEquals": [
+            "Rejected"
+          ],
+          "ResultPath": "$.approval_error",
+          "Next": "Rejected"
+        },
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Failed"
+        }
+      ],
       "Next": "Claim"
     },
+    "ExpireApproval": {
+      "Type": "Task",
+      "Comment": "24 h without an answer: the case moves waiting -> expired in the same conditional write that drops the dead token (a case answered meanwhile is left alone).",
+      "Resource": "${ApprovalFunctionArn}",
+      "Parameters": {
+        "action": "expire",
+        "case_id.$": "$.notify.case_id",
+        "run.$": "$.run"
+      },
+      "ResultPath": "$.expired",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Next": "Expired",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Failed"
+        }
+      ],
+      "TimeoutSeconds": 60
+    },
+    "Expired": {
+      "Type": "Succeed",
+      "Comment": "The match itself succeeded; nobody approved the claim within 24 h (case.approval.status = expired)."
+    },
+    "Rejected": {
+      "Type": "Fail",
+      "Comment": "The human said no: POST /cases/{id}/reject -> SendTaskFailure('Rejected'); the case is already approval.status = rejected. The execution fails on purpose -- no claim letter, no evidence.",
+      "Error": "Rejected",
+      "Cause": "The claim was rejected on the case page (POST /cases/{id}/reject -> SendTaskFailure); no letter, no evidence."
+    },
     "Claim": {
-      "Type": "Pass",
-      "Comment": "P09 placeholder. Becomes Task ${ClaimFunctionArn}: Bedrock (Claude Haiku 4.5 via MODEL_VERIFY) drafts the letter to the seller/pharmacy/dealer citing notice id, batch and remedy, adds the Consumer Protection Act paragraph when sold_after_notice, renders a PDF (reportlab) to the claims bucket and stores claim_pdf_s3_key on the case.",
-      "Result": {
-        "placeholder": "P09"
+      "Type": "Task",
+      "Comment": "SPEC step 7, after approval: Jinja2 template (no model) addressed by item.kind (pharmacy / dealer / retailer), rendered to PDF with reportlab -> claims bucket <case_id>.pdf; claim_pdf_s3_key + claim_text on the case. Never raises: a failure is {degraded, error} and the chain goes on to Evidence.",
+      "Resource": "${ClaimFunctionArn}",
+      "Parameters": {
+        "case_id.$": "$.notify.case_id",
+        "item_id.$": "$.item_id",
+        "run.$": "$.run"
       },
       "ResultPath": "$.claim",
-      "Next": "Evidence"
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Next": "Evidence",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Failed"
+        }
+      ],
+      "TimeoutSeconds": 150
     },
     "Evidence": {
-      "Type": "Pass",
-      "Comment": "P09 placeholder. Becomes Task ${EvidenceFunctionArn}: snapshot the notice URL/PDF into the Object Lock bucket (GOVERNANCE, 30 days), SHA-256, KMS Sign (RSA_2048, RSASSA_PKCS1_V1_5_SHA_256), store Case.evidence; GET /cases/{id}/verify-evidence re-hashes and calls KMS Verify.",
-      "Result": {
-        "placeholder": "P09"
+      "Type": "Task",
+      "Comment": "SPEC step 8: snapshot the notice's source (CDSCO PDF / portal row, US recall JSON) into the evidence bucket under S3 Object Lock (GOVERNANCE, 30 days), SHA-256, KMS Sign (RSASSA_PKCS1_V1_5_SHA_256) -> case.evidence. GET /cases/{id}/verify-evidence re-hashes and calls KMS Verify.",
+      "Resource": "${EvidenceFunctionArn}",
+      "Parameters": {
+        "case_id.$": "$.notify.case_id",
+        "run.$": "$.run"
       },
       "ResultPath": "$.evidence",
-      "Next": "Done"
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Next": "Done",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Failed"
+        }
+      ],
+      "TimeoutSeconds": 150
     },
     "Done": {
       "Type": "Succeed",

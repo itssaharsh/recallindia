@@ -19,10 +19,13 @@ TASK_SUBS = {
     "RangeCheckFunctionArn",
     "DecideFunctionArn",
     "NotifyFunctionArn",
+    "ApprovalFunctionArn",
+    "ClaimFunctionArn",
+    "EvidenceFunctionArn",
 }
-# Declared for the P09 Pass placeholders (their Comments name them); not yet a Task Resource.
-P09_SUBS = {"ClaimFunctionArn", "EvidenceFunctionArn"}
+WAIT_FOR_TOKEN = "arn:aws:states:::lambda:invoke.waitForTaskToken"
 HANDLERS = {
+    "ApprovalFunction": "approval.handler",
     "CandidatesFunction": "candidates.handler",
     "VerifyFunction": "verify.handler",
     "RangeCheckFunction": "range_check.handler",
@@ -154,10 +157,14 @@ def test_pipeline_order_and_result_paths(asl) -> None:
     assert s["Decide"]["Next"] == "Notify"
     assert s["Notify"]["Type"] == "Task" and s["Notify"]["ResultPath"] == "$.notify"
     assert s["Notify"]["Next"] == "IsAlert"
-    assert s["WaitForApproval"]["Type"] == "Pass" and s["WaitForApproval"]["Next"] == "Claim"
+    assert s["WaitForApproval"]["Type"] == "Task" and s["WaitForApproval"]["Next"] == "Claim"
     assert s["WaitForApproval"]["ResultPath"] == "$.approval"
-    assert s["Claim"]["Type"] == "Pass" and s["Claim"]["Next"] == "Evidence"
-    assert s["Evidence"]["Type"] == "Pass" and s["Evidence"]["Next"] == "Done"
+    assert s["Claim"]["Type"] == "Task" and s["Claim"]["Next"] == "Evidence"
+    assert s["Claim"]["ResultPath"] == "$.claim"
+    assert s["Evidence"]["Type"] == "Task" and s["Evidence"]["Next"] == "Done"
+    assert s["Evidence"]["ResultPath"] == "$.evidence"
+    for name in ("Claim", "Evidence"):
+        assert s[name]["Parameters"]["case_id.$"] == "$.notify.case_id", name
     assert s["Done"]["Type"] == "Succeed"
     assert s["Failed"]["Type"] == "Fail" and s["Failed"]["Error"] == "MatchPipelineFailed"
     for name in ("Candidates", "Decide", "Notify"):
@@ -293,12 +300,46 @@ def test_notify_catches_to_failed(asl) -> None:
     assert asl["States"]["Failed"]["Type"] == "Fail"
 
 
+def _function_sub(state: dict) -> str | None:
+    """The ``${XFunctionArn}`` a Task runs: its Resource, or a task-token FunctionName."""
+    ref = state["Resource"]
+    if ref == WAIT_FOR_TOKEN:
+        ref = state["Parameters"]["FunctionName"]
+    m = re.fullmatch(r"\$\{(\w+)\}", ref)
+    return m.group(1) if m else None
+
+
+def test_wait_for_approval_is_a_single_task_token_gate(asl) -> None:
+    s = asl["States"]
+    wait = s["WaitForApproval"]
+    assert wait["Resource"] == WAIT_FOR_TOKEN
+    assert wait["TimeoutSeconds"] == 86400 and "HeartbeatSeconds" not in wait
+    payload = wait["Parameters"]["Payload"]
+    assert payload["task_token.$"] == "$$.Task.Token" and payload["action"] == "request"
+    assert payload["case_id.$"] == "$.notify.case_id"
+    # never retried on States.ALL: a retried rejection / timeout would reopen the wait
+    for retry in wait["Retry"]:
+        assert "States.ALL" not in retry["ErrorEquals"]
+        assert all(e.startswith("Lambda.") for e in retry["ErrorEquals"])
+    routes = [(c["ErrorEquals"], c["Next"]) for c in wait["Catch"]]
+    assert routes == [
+        (["States.Timeout"], "ExpireApproval"),
+        (["Rejected"], "Rejected"),
+        (["States.ALL"], "Failed"),
+    ]
+    assert s["ExpireApproval"]["Parameters"]["action"] == "expire"
+    assert s["ExpireApproval"]["Next"] == "Expired" and s["Expired"]["Type"] == "Succeed"
+    assert s["Rejected"]["Type"] == "Fail" and s["Rejected"]["Error"] == "Rejected"
+
+
 def test_every_task_retries_with_backoff_and_every_state_has_a_comment(asl) -> None:
     for name, state in _all_states(asl).items():
         assert state.get("Comment"), f"{name} needs a Comment stating its contract"
         if state["Type"] != "Task":
             continue
-        assert re.fullmatch(r"\$\{\w+\}", state["Resource"]), name
+        assert _function_sub(state), name
+        if name == "WaitForApproval":  # its own rules: test_wait_for_approval_is_...
+            continue
         [retry] = state["Retry"]
         assert retry["ErrorEquals"] == ["States.ALL"]
         assert retry["IntervalSeconds"] == 2 and retry["BackoffRate"] == 2
@@ -345,12 +386,12 @@ def test_task_resources_match_template_substitutions(asl, template) -> None:
     for name, state in _all_states(asl).items():
         if state["Type"] != "Task":
             continue
-        m = re.fullmatch(r"\$\{(\w+)\}", state["Resource"])
-        assert m, f"{name}: Resource must be a ${{Substitution}}"
-        assert m.group(1) in subs, f"{name}: {m.group(1)} missing from DefinitionSubstitutions"
-        used.add(m.group(1))
+        key = _function_sub(state)
+        assert key, f"{name}: Resource must be a ${{Substitution}} (or a task-token FunctionName)"
+        assert key in subs, f"{name}: {key} missing from DefinitionSubstitutions"
+        used.add(key)
     assert used == TASK_SUBS
-    assert set(subs) - used == P09_SUBS
+    assert set(subs) == used
     invocable = {p["LambdaInvokePolicy"]["FunctionName"]["Ref"] for p in sm["Policies"]}
     for key, ref in subs.items():
         fn_name = (

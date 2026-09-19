@@ -135,7 +135,8 @@ def test_post_items_bulk_returns_201_with_four_items(store):
 
 def test_check_a_is_an_alert_with_a_verbatim_quote(store):
     body = store["checks"]["item-a"]
-    assert body["status"] == "SUCCEEDED" and body["decision"] == "alert", body
+    # an alert pauses for the human at WaitForApproval (P08): the check itself is done
+    assert body["status"] == "WAITING_FOR_APPROVAL" and body["decision"] == "alert", body
     assert body["execution_arn"].startswith(match_api.LOCAL_ARN_PREFIX)
     assert body["run_id"] == body["execution_arn"].rsplit(":", 1)[-1]
     assert body["run_id"].startswith("check-item-a-") and len(body["run_id"]) <= 80
@@ -182,7 +183,10 @@ def test_check_b_is_a_near_miss_dismiss(store):
 
 def test_check_v_matches_an_nhtsa_notice(store):
     body = store["checks"]["item-v"]
-    assert body["status"] == "SUCCEEDED" and body["decision"] in ("alert", "hold"), body
+    assert body["decision"] in ("alert", "hold"), body
+    assert body["status"] == (
+        "WAITING_FOR_APPROVAL" if body["decision"] == "alert" else "SUCCEEDED"
+    )
     case = _case_of(store, "item-v")
     assert case["decision"] == body["decision"]
     assert case["notice_id"].startswith("nhtsa#")
