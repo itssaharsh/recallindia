@@ -187,7 +187,8 @@ export function MineView() {
       )}
 
       {!error && shown.length > 0 && (
-        <ul className="mt-6 grid list-none gap-4 p-0 sm:grid-cols-2 xl:grid-cols-3">
+        // dense: a one-column card fills the gap beside each two-column alert / near-miss card
+        <ul className="mt-6 grid grid-flow-row-dense list-none items-start gap-4 p-0 sm:grid-cols-2 xl:grid-cols-3">
           {shown.map((item) => (
             <ItemCard key={item.item_id} item={item} checking={checking.has(item.item_id)} onCheck={check} onChecked={checked} />
           ))}

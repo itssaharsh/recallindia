@@ -11,7 +11,7 @@ import { StatusTag, type Tone } from "@/components/common/status-tag";
 import { useAppState } from "@/components/shell/app-state";
 import { Button } from "@/components/ui/button";
 import { apiGet } from "@/lib/api";
-import { fmtDay, fmtWhen, sourceLabel } from "@/lib/format";
+import { fmtDay, fmtWhen, noticeRef, riskSentence, sourceLabel } from "@/lib/format";
 import { CROSSFADE, FLIP } from "@/lib/motion";
 import type { CheckStatus, CheckStep, Item, Notice } from "@/lib/types";
 import { usePoll } from "@/lib/use-poll";
@@ -36,6 +36,16 @@ const TAG: Record<Face, { tone: Tone; label: string }> = {
 };
 
 const sentence = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+const unitWord = (item: Item) => (item.batch ? "batch" : item.serial ? "serial" : item.year ? "model year" : "unit");
+
+/** The alert headline. CDSCO: the decision's own first clause ("Failed CDSCO quality test,
+ *  JUL-2026 alert, row 12"). Recalls: which recall, read off the case's notice key
+ *  (``nhtsa#24V436000``), so it is right before the notice itself has loaded. */
+function alertHeadline(noticeKey: string, reasonHead: string): string {
+  const [source, id] = noticeKey.split("#", 2);
+  if (!id || source === "cdsco_nsq") return sentence(reasonHead);
+  return `On ${sourceLabel(source)} recall ${id}`;
+}
 const identifier = (item: Item) =>
   [item.batch && `batch ${item.batch}`, item.serial && `serial ${item.serial}`, item.model && item.kind !== "vehicle" && item.model, item.year && String(item.year)]
     .filter(Boolean)
@@ -103,7 +113,7 @@ export function ItemCard({
   );
 
   return (
-    <li className={`list-none ${wide ? "sm:col-span-2" : ""}`} style={{ perspective: 1200 }}>
+    <li className={`min-w-0 list-none ${wide ? "sm:col-span-2" : ""}`} style={{ perspective: 1200 }}>
       {reduce ? (
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
@@ -119,7 +129,7 @@ export function ItemCard({
         </AnimatePresence>
       ) : (
         <motion.div
-          className="relative grid min-h-44 [transform-style:preserve-3d]"
+          className="relative grid min-h-44 grid-cols-1 [transform-style:preserve-3d]"
           initial={false}
           animate={{ rotateY: checking ? 180 : 0 }}
           transition={FLIP}
@@ -185,15 +195,21 @@ function Front({
 
       {face === "alert" && c && (
         <>
-          <p className="m-0 font-display text-[17px] leading-snug font-semibold text-text">{sentence(headline)}</p>
+          <p className="m-0 font-display text-[17px] leading-snug font-semibold text-text">{alertHeadline(c.notice_id, headline)}</p>
           {c.range_check && <RangeBar check={c.range_check} />}
           {(notice?.raw_excerpt || c.quoted_sentence) && (
             <SourceExcerpt
               compact
               excerpt={notice?.raw_excerpt || c.quoted_sentence || ""}
               quote={c.quoted_sentence}
-              caption={notice ? `${sourceLabel(notice.source)} · ${notice.notice_id} · published ${fmtDay(notice.published_at)}` : undefined}
+              caption={notice ? `${noticeRef(notice)} · published ${fmtDay(notice.published_at)}` : undefined}
             />
+          )}
+          {notice && notice.source !== "cdsco_nsq" && riskSentence(notice) && (
+            <p className="m-0 text-[13px] leading-snug text-text">
+              <span className="text-muted">Risk: </span>
+              {riskSentence(notice)}
+            </p>
           )}
           {c.sold_after_notice && item.purchase_date && notice && (
             <p className="m-0 text-[13px] text-text">
@@ -209,7 +225,7 @@ function Front({
           {c.range_check && <RangeBar check={c.range_check} />}
           {notice && (
             <p className="m-0 text-xs text-muted">
-              Same product as {sourceLabel(notice.source)} {notice.notice_id}; your unit is not the listed one.
+              Same product as the {noticeRef(notice)}; your {unitWord(item)} is not the listed one.
             </p>
           )}
         </>
@@ -231,14 +247,14 @@ function Front({
       {face === "unchecked" && <p className="m-0 text-[13px] text-muted">Not checked against the notices yet.</p>}
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-1">
-        <span className="font-mono text-[11px] text-muted">
+        <span className="min-w-0 truncate font-mono text-[11px] text-muted">
           {c?.verifier ? `verifier ${c.verifier}${c.confidence ? ` · ${c.confidence}` : ""}` : ""}
         </span>
-        <div className="flex items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1.5">
           {face === "alert" && c && (
             <Link
               href={href(`/case/?id=${encodeURIComponent(c.case_id)}`)}
-              className="inline-flex h-7 items-center gap-1 rounded-sm px-2 text-[13px] text-primary-strong hover:bg-surface-3"
+              className="inline-flex h-7 items-center gap-1 rounded-sm px-2 text-[13px] whitespace-nowrap text-primary-strong hover:bg-surface-3"
             >
               Open case <ArrowUpRight aria-hidden className="size-3.5" />
             </Link>

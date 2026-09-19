@@ -56,6 +56,24 @@ export function rowRefLabel(n: Notice): string | null {
   return ref.row ? `row ${ref.row}` : null;
 }
 
+/** How a person would cite the notice: "CDSCO JUL-2026 alert, row 12" (never "recall": an NSQ
+ *  row is a failed quality test) or "NHTSA recall 24V436000". */
+export function noticeRef(n: Notice): string {
+  const ref = n.row_ref;
+  if (n.source === "cdsco_nsq") {
+    if (ref?.month) return `CDSCO ${ref.month} alert, row ${ref.row ?? "?"}`;
+    if (ref?.page) return `CDSCO alert PDF, page ${ref.page} row ${ref.row ?? "?"}`;
+    return `CDSCO alert ${n.notice_id}`;
+  }
+  return `${sourceLabel(n.source)} recall ${n.notice_id}`;
+}
+
+/** The hazard as a sentence: NHTSA prefixes its consequence with the component path in caps
+ *  ("BACK OVER PREVENTION: SENSING SYSTEM: CAMERA: A rearview camera ..."). */
+export function riskSentence(n: Notice): string {
+  return (n.hazard_or_failed_test ?? "").replace(/^(?:[A-Z0-9][A-Z0-9 ,/&()'.-]*:\s+)+(?=[A-Z])/, "").trim();
+}
+
 export function confidenceLabel(n: Notice): string {
   const adapter =
     n.adapter === "cdsco_portal" ? "CDSCO NSQ portal" : n.adapter === "cdsco_pdf" ? "CDSCO archive PDF" : sourceLabel(n.source);

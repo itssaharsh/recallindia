@@ -10,21 +10,26 @@ export function TopBar() {
 
   return (
     <header className="flex min-h-14 flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-line bg-surface-0 px-5 py-3">
-      <p className="flex items-baseline gap-2" aria-live="polite">
+      <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1" aria-live="polite">
         {stats ? (
           <>
-            <span className="font-display text-2xl leading-none font-semibold text-text">{fmtCount(stats.total)}</span>
-            <span className="text-sm text-muted">notices</span>
+            {/* each figure stays on one line with its label; the groups wrap on a phone */}
+            <span className="whitespace-nowrap">
+              <span className="font-display text-2xl leading-none font-semibold text-text">{fmtCount(stats.total)}</span>{" "}
+              <span className="text-sm text-muted">notices</span>
+            </span>
             <span aria-hidden className="text-muted">
               ·
             </span>
-            <span className="text-sm text-text">{stats.sources_count}</span>
-            <span className="text-sm text-muted">sources</span>
+            <span className="text-sm whitespace-nowrap">
+              <span className="text-text">{stats.sources_count}</span> <span className="text-muted">sources</span>
+            </span>
             <span aria-hidden className="text-muted">
               ·
             </span>
-            <span className="text-sm text-muted">last poll</span>
-            <span className="font-mono text-sm text-text">{fmtTime(stats.last_poll_at)}</span>
+            <span className="text-sm whitespace-nowrap">
+              <span className="text-muted">last poll</span> <span className="font-mono text-text">{fmtTime(stats.last_poll_at)}</span>
+            </span>
           </>
         ) : statsError ? (
           <span className="text-sm text-muted">Counts unavailable: {statsError}</span>

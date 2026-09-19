@@ -28,7 +28,8 @@ export function SourceExcerpt({
   excerpt: string;
   quote?: string | null;
   caption?: React.ReactNode;
-  /** a card shows only the matched paragraph with a little context; the sheet shows it all */
+  /** a card shows only the matched paragraph (in full: evidence is never clipped); the sheet
+   *  shows every paragraph */
   compact?: boolean;
 }) {
   let paragraphs = excerpt.split(/\n+/).filter((p) => p.trim());
@@ -38,9 +39,7 @@ export function SourceExcerpt({
   }
   return (
     <figure className="m-0">
-      <blockquote
-        className={`m-0 space-y-2 bg-paper px-3.5 py-3 text-[13px] leading-relaxed text-ink ${compact ? "max-h-40 overflow-y-auto" : ""}`}
-      >
+      <blockquote className="m-0 space-y-2 bg-paper px-3.5 py-3 text-[13px] leading-relaxed text-ink">
         {paragraphs.map((p, i) => (
           <p key={i} className="m-0">
             {quote ? highlight(p, quote) : squash(p)}

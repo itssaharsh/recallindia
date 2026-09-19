@@ -35,7 +35,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <AppStateProvider>
           <TooltipProvider delayDuration={200}>
             <div className="min-h-dvh md:grid md:grid-cols-[13rem_minmax(0,1fr)]">
-              <Rail />
+              {/* the column carries the rail's surface so it runs the page's full height */}
+              <div className="border-b border-line bg-surface-1 md:border-r md:border-b-0">
+                <Rail />
+              </div>
               <div className="flex min-w-0 flex-col">
                 <TopBar />
                 <main id="main" className="flex-1">

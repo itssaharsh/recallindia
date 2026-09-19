@@ -8,7 +8,7 @@ import { SourceChip } from "@/components/common/source-chip";
 import { SourceExcerpt } from "@/components/common/source-excerpt";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { apiGet } from "@/lib/api";
-import { confidenceLabel, fmtDay, rowRefLabel, sourceLabel } from "@/lib/format";
+import { confidenceLabel, fmtDay, noticeRef, rowRefLabel, sourceLabel } from "@/lib/format";
 import type { Notice } from "@/lib/types";
 
 function Field({ label, children, mono }: { label: string; children: React.ReactNode; mono?: boolean }) {
@@ -50,7 +50,7 @@ export function NoticeSheet({ notice, onClose }: { notice: Notice | null; onClos
             <SheetHeader className="gap-2 border-b border-line p-5 pr-12">
               <div className="flex flex-wrap items-center gap-2">
                 <SourceChip notice={notice} tooltip={false} />
-                <span className="font-mono text-xs text-muted">{notice.notice_id}</span>
+                <span className="text-xs text-muted">{noticeRef(notice).replace(/^\S+\s/, "")}</span>
                 <span className="text-xs text-muted">· {fmtDay(notice.published_at)}</span>
               </div>
               <SheetTitle className="font-display text-xl leading-snug font-semibold text-text">{notice.product || notice.title}</SheetTitle>
@@ -92,6 +92,9 @@ export function NoticeSheet({ notice, onClose }: { notice: Notice | null; onClos
                 )}
                 {notice.lab && <Field label="Tested by">{notice.lab}</Field>}
                 <Field label="Source">{confidenceLabel(notice)}</Field>
+                <Field label="Notice id" mono>
+                  {notice.notice_id}
+                </Field>
                 {rowRefLabel(notice) && (
                   <Field label="Row" mono>
                     {rowRefLabel(notice)}

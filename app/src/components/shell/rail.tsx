@@ -21,7 +21,7 @@ export function Rail() {
   return (
     <nav
       aria-label="Primary"
-      className="flex items-center gap-1 border-b border-line bg-surface-1 px-3 py-2 md:sticky md:top-0 md:h-dvh md:flex-col md:items-stretch md:gap-0.5 md:border-r md:border-b-0 md:px-3 md:py-4"
+      className="flex items-center gap-1 px-3 py-2 md:sticky md:top-0 md:h-dvh md:flex-col md:items-stretch md:gap-0.5 md:px-3 md:py-4"
     >
       <Link
         href={href("/")}
