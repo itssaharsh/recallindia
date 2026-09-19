@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" width="160" height="160" role="img"><title>Signature does not match</title>
+<style>.s{fill:none;stroke:currentColor}.t{fill:currentColor;font-family:var(--ff-display,'Schibsted Grotesk'),sans-serif;font-weight:800;letter-spacing:.1em;font-size:13.5px}.w{fill:currentColor;font-family:var(--ff-display,'Schibsted Grotesk'),sans-serif;font-weight:800;font-size:19px;letter-spacing:.02em}</style>
+<g transform="rotate(-4 80 80)" style="color:#B3121E">
+<circle class="s" cx="80" cy="80" r="74" stroke-width="3"/><circle class="s" cx="80" cy="80" r="56" stroke-width="1.5"/>
+<path id="ring-invalid" d="M80 80m-60 0a60 60 0 1 1 120 0a60 60 0 1 1-120 0" fill="none"/>
+<text class="t"><textPath href="#ring-invalid" startOffset="0" textLength="370" lengthAdjust="spacing">SIGNATURE DOES NOT MATCH ·</textPath></text>
+<text class="w" x="80" y="87" text-anchor="middle">INVALID</text></g></svg>

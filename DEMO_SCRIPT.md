@@ -1,16 +1,20 @@
 # DEMO_SCRIPT.md — the 3-minute video (build only what is here)
 
+Source of truth for scope. Shot list, lengths and narration are in `VIDEO.md`; screens and components in `UI-SPEC.md`.
+
 | t | Shot | Route | Must exist |
 |---|---|---|---|
-| 0:00 | Title card: "India publishes recalls as PDFs and web tables nobody reads. 239 medicines failed CDSCO quality tests in July 2026 — 20 of them Paracetamol." (figures from `fixtures/cdsco/nsq_jul2026_all.json`) | — | slide |
-| 0:12 | Real CDSCO PDF page (`fixtures/cdsco/nsq_latest.pdf`, June 2025 archive alert) on the left; Textract runs (pdfplumber fallback if Textract is unavailable); rows lift off and snap into the feed on the right; counter ticks to 59. On-screen caption: "archive PDF via Textract · current months via portal JSON". Dynamic checklist: Fetch PDF · Extract tables · Normalise · Diff · Publish. | `/ingest` | ingest pipeline (`cdsco_pdf` + `cdsco_portal` adapters), dissolve animation, checklist, caption |
-| 0:40 | Feed with source chips (CDSCO · SIAM · CPSC · NHTSA · openFDA); a live poll lands a new row at the top. Header counter with tabular numerals and "last poll hh:mm:ss". | `/` | pollers, feed row |
-| 0:55 | Scan a medicine strip → batch number read (Textract) → card appears → "Check" → Step Functions graph (console screen-record) → card flips red: quoted sentence highlighted in the source excerpt; range bar shows your batch inside listed batches. | `/mine` | scan, matcher, card flip, source excerpt, range bar |
-| 1:25 | Case: "Purchased 2026-05-02 · CDSCO alert 2026-04-21 → sold after notice." Claim letter drafts → Approve → PDF opens → evidence certificate stamps VERIFIED → click "Tamper test" → SIGNATURE INVALID in red. | `/case/[id]` | claim, task-token approval, Object Lock + KMS, verify endpoint |
-| 1:55 | Sibling strip, same drug, different batch → card goes amber → "Dismissed: batch DL-4472 not in listed batches [DL-4471, DL-4468]". | `/mine` | near-miss branch with reason |
-| 2:10 | Type a vehicle registration → SIAM/NHTSA hit → Hindi voice note plays (waveform). | `/mine` | stretch: SIAM poller, Polly |
-| 2:25 | Terminal: `curl https://<url>/v1/notices?source=cdsco_nsq&since=2026-07-01` → JSON (rows carry `adapter`). | `/api` | public API + docs page |
-| 2:40 | Architecture card: EventBridge · Lambda · Textract · Comprehend · Translate · Polly · Step Functions · DynamoDB · S3 Object Lock · KMS · SES · Amplify. Footnote: "No LLM in the decision path." Caption: "First time using Textract tables, Step Functions task tokens, Object Lock." | slide | — |
-| 2:55 | Live URL + repo. | — | — |
+| 0:00 | Title card with the CDSCO month count from `/v1/stats` | — | slide |
+| 0:10 | A recorded run (2×) of a real CDSCO PDF page left; Textract rows get a box drawn on, lift off and land in the notices pane; counter ticks; 5-step checklist ticks | `/ingest?replay=<run>&speed=2&autoplay=1` | pdf.js fix + poster fallback, dissolve, checklist |
+| 0:40 | Counter hero, source pills with health, new rows landing, one notice in the side sheet | `/` | pollers, `?replay=poll`, NoticeSheet |
+| 0:55 | Photo of a real strip → Textract words draw on → batch flies into the foil chip → check → clear | `/mine` (own household) | scan, FoilChip, checking face |
+| 1:10 | FT5427 card → check again → flips red; quote, foil chip, notice row | `/mine` | matcher, flip, alert face |
+| 1:25 | Step Functions execution paused at WaitForApproval | console | task token |
+| 1:30 | Outcome line → notice record → Approve claim letter → seal → letter → VERIFIED → tamper → INVALID (signature does not match) → verify again | `/case/?id=` | approval gate, Object Lock + KMS, verify endpoint, letter PDF |
+| 2:02 | Near-miss card: two foil chips, one character underlined, dismissed with the reason | `/mine` | near-miss branch |
+| 2:15 | Jeep Compass matching NHTSA 24V436000 by make, model and year; "confirm with your dealer using the VIN" | `/mine` | vehicle match, RangeBar |
+| 2:25 | Try-it console + the same curl in a terminal | `/api` | public API page |
+| 2:40 | Architecture card: EventBridge · Lambda · Step Functions · Textract · DynamoDB · S3 Object Lock · KMS · API Gateway · Amplify | slide | — |
+| 2:52 | Live URL + repo | slide | — |
 
-Rules: 80% product on screen, captions on, 1080p, no talking-head. Record each shot separately; the seed script resets state between takes. Every AWS service must be visible (console or UI), not just named.
+Rules: 80% product on screen, captions on, 1080p, no talking head. Record each shot separately in your own household copy. Every AWS service named in the narration is visible on screen (UI, console or the architecture card). Nothing on screen may be a placeholder. VIDEO.md owns the exact timings.

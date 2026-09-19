@@ -30,3 +30,7 @@ node_modules/
 .ruff_cache/
 
 # note: .secrets.baseline stays tracked (pre-commit detect-secrets reads it)
+
+# the prompt pack arrives as a zip; its contents are committed under recallindia-prompts/
+recallindia-promptss.zip
+*.Zone.Identifier

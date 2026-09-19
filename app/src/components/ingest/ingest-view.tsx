@@ -322,6 +322,7 @@ export function IngestView() {
           locked={phase === "running"}
           onReady={onReady}
           caption={CAPTION}
+          pages={play.pages}
         />
         <DissolveColumn
           ref={column}

@@ -6,10 +6,30 @@ import { Document, Page, pdfjs } from "react-pdf";
 
 import type { IngestRow } from "@/lib/ingest";
 
+import { PdfErrorBoundary, isBenignPdfError } from "./pdf-boundary";
+
 // Set in the module that renders <Document> (react-pdf's rule). The worker is copied from the
 // exact pdfjs-dist react-pdf resolves into public/ at build time (scripts/copy-pdf-worker.mjs):
 // served from this origin, never a CDN.
-pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.js";
+pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+
+/** `?pdf=poster` forces the fallback, so the QA gate can check the path a broken pdf.js takes. */
+function initialMode(): "pdf" | "poster" {
+  if (typeof window === "undefined") return "pdf";
+  return new URLSearchParams(window.location.search).get("pdf") === "poster" ? "poster" : "pdf";
+}
+
+/** The committed pre-render of the same page: /ingest/<pdf name>-p<n>.png. */
+function posterBaseOf(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    const name = new URL(url, "https://x.invalid").pathname.split("/").pop() ?? "";
+    const base = decodeURIComponent(name).replace(/\.pdf$/i, "");
+    return base ? `/ingest/${base}` : null;
+  } catch {
+    return null;
+  }
+}
 
 export interface StageHandle {
   /** the outline element of a row (for its on-screen rect and the lift animation) */
@@ -39,6 +59,7 @@ export function PdfStage({
   locked,
   onReady,
   caption,
+  pages: pagesHint,
 }: {
   handle: React.Ref<StageHandle>;
   url: string | null;
@@ -48,13 +69,17 @@ export function PdfStage({
   locked: boolean;
   onReady?: (pages: number) => void;
   caption?: React.ReactNode;
+  /** the run's page count, used when the poster stands in for pdf.js */
+  pages?: number | null;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const outlines = useRef(new Map<number, HTMLElement>());
   const pageBoxes = useRef(new Map<number, HTMLElement>());
   const [width, setWidth] = useState(0);
   const [numPages, setNumPages] = useState(0);
-  const [failed, setFailed] = useState<string | null>(null);
+  // "poster": pdf.js could not render here (an old Chrome, a worker that would not start, a throw
+  // caught by the boundary). The committed page images stand in and the dissolve runs over them.
+  const [mode, setMode] = useState<"pdf" | "poster">(initialMode);
   const rendered = useRef(new Set<number>());
   // Each rendered page, encoded once to an object URL and decoded ahead of time. A flight shows
   // its row as a background crop of this image: a per-flight <canvas> becomes a texture layer
@@ -79,14 +104,39 @@ export function PdfStage({
 
   useEffect(() => {
     rendered.current = new Set();
-    dropImages();
     setNumPages(0);
-    setFailed(null);
-  }, [url, dropImages]);
+    setMode(initialMode());
+  }, [url]);
 
   useEffect(() => {
-    if (numPages > 0 && imagesReady === numPages) onReady?.(numPages);
-  }, [imagesReady, numPages, onReady]);
+    dropImages(); // pdf pages and posters are different bitmaps: never mix them in one run
+  }, [url, mode, dropImages]);
+
+  // pdf.js rejects its loading task when a page turn or an unmount cancels it. Unhandled, that
+  // rejection reaches the window and Next renders its error page over a working route.
+  useEffect(() => {
+    const swallow = (event: PromiseRejectionEvent) => {
+      if (isBenignPdfError(event.reason)) event.preventDefault();
+    };
+    window.addEventListener("unhandledrejection", swallow);
+    return () => window.removeEventListener("unhandledrejection", swallow);
+  }, []);
+
+  const posterBase = useMemo(() => posterBaseOf(url), [url]);
+  const rowPages = useMemo(() => (rows ?? []).reduce((n, r) => Math.max(n, r.page), 0), [rows]);
+  const posterPages = Math.max(pagesHint ?? 0, rowPages, 1);
+  const shownPages = mode === "pdf" ? numPages : posterPages;
+
+  // a poster page is already an image: register it the way a rendered canvas registers itself
+  const posterDone = useCallback((n: number, img: HTMLImageElement) => {
+    if (images.current.has(n)) return;
+    images.current.set(n, { url: img.currentSrc || img.src, img });
+    setImagesReady(images.current.size);
+  }, []);
+
+  useEffect(() => {
+    if (shownPages > 0 && imagesReady === shownPages) onReady?.(shownPages);
+  }, [imagesReady, shownPages, onReady]);
 
   useImperativeHandle(
     handle,
@@ -95,9 +145,9 @@ export function PdfStage({
       outlines: () => [...outlines.current.values()],
       pageImage: (n) => images.current.get(n)?.url ?? null,
       pageRect: () => pageBoxes.current.get(1)?.getBoundingClientRect() ?? null,
-      pageCount: () => numPages,
+      pageCount: () => shownPages,
     }),
-    [numPages],
+    [shownPages],
   );
 
   const setPageBox = useCallback(
@@ -149,20 +199,21 @@ export function PdfStage({
   const pageNow = useRef(page);
   pageNow.current = page;
   const onLoad = useCallback((doc: { numPages: number }) => setNumPages(doc.numPages), []);
-  const onLoadError = useCallback((err: Error) => setFailed(err.message), []);
+  const fallBack = useCallback((err: unknown) => {
+    if (!isBenignPdfError(err)) setMode("poster");
+  }, []);
 
   const dpr = typeof window === "undefined" ? 1 : Math.min(2, window.devicePixelRatio || 1);
 
   const doc = useMemo(
     () =>
-      url && !failed && width > 0 ? (
+      url && mode === "pdf" && width > 0 ? (
         <Document
           file={url}
-          suspense={false}
           loading={<PagePlaceholder text="Opening the PDF" />}
-          error={<PagePlaceholder text="The PDF could not be opened" />}
+          error={<PagePlaceholder text="Opening the PDF" />}
           onLoadSuccess={onLoad}
-          onLoadError={onLoadError}
+          onLoadError={fallBack}
         >
           {Array.from({ length: numPages }, (_, i) => {
             const n = i + 1;
@@ -182,29 +233,15 @@ export function PdfStage({
                   renderAnnotationLayer={false}
                   loading={null}
                   onRenderSuccess={() => pageDone(n)}
+                  onRenderError={fallBack}
                 />
-                <div className="pointer-events-none absolute inset-0">
-                  {(byPage.get(n) ?? []).map((r) => (
-                    <div
-                      key={r.row}
-                      ref={setOutline(r.row)}
-                      data-row={r.row}
-                      className="ingest-outline absolute"
-                      style={{
-                        left: `${r.bbox!.left * 100}%`,
-                        top: `${r.bbox!.top * 100}%`,
-                        width: `${r.bbox!.width * 100}%`,
-                        height: `${r.bbox!.height * 100}%`,
-                      }}
-                    />
-                  ))}
-                </div>
+                <RowOutlines rows={byPage.get(n)} setOutline={setOutline} />
               </div>
             );
           })}
         </Document>
       ) : null,
-    [url, failed, width, numPages, byPage, dpr, onLoad, onLoadError, pageDone, setPageBox, setOutline],
+    [url, mode, width, numPages, byPage, dpr, onLoad, fallBack, pageDone, setPageBox, setOutline],
   );
 
   useLayoutEffect(() => {
@@ -219,14 +256,38 @@ export function PdfStage({
   return (
     <figure className="m-0 flex min-w-0 flex-col gap-2">
       <div ref={box} className="ingest-layer relative min-h-40 overflow-hidden bg-paper">
-        {!url && !failed && <PagePlaceholder text="The alert PDF appears here when a run fetches it" />}
-        {failed && <PagePlaceholder text={`The PDF could not be shown: ${failed}`} />}
-        {doc}
+        {!url && <PagePlaceholder text="The alert PDF appears here when a run fetches it" />}
+        {url && mode === "pdf" && <PdfErrorBoundary onError={fallBack}>{doc}</PdfErrorBoundary>}
+        {url && mode === "poster" && posterBase && (
+          <div className="relative">
+            {Array.from({ length: posterPages }, (_, i) => {
+              const n = i + 1;
+              return (
+                <div
+                  key={n}
+                  ref={setPageBox(n)}
+                  className={n === 1 ? "relative" : "absolute inset-0"}
+                  style={{ visibility: n === page ? "visible" : "hidden" }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element -- a committed page image, already sized; next/image adds nothing to a static export */}
+                  <img
+                    src={`${posterBase}-p${n}.png`}
+                    alt={`Page ${n} of the alert PDF`}
+                    className="block w-full"
+                    onLoad={(e) => posterDone(n, e.currentTarget)}
+                  />
+                  <RowOutlines rows={byPage.get(n)} setOutline={setOutline} />
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {url && mode === "poster" && !posterBase && <PagePlaceholder text="This page has no pre-rendered copy" />}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div role="group" aria-label="Page" className="flex items-center gap-1">
           <span className="mr-1 text-xs text-muted">Page</span>
-          {Array.from({ length: Math.max(numPages, 0) }, (_, i) => (
+          {Array.from({ length: Math.max(shownPages, 0) }, (_, i) => (
             <button
               key={i}
               type="button"
@@ -242,11 +303,35 @@ export function PdfStage({
               {i + 1}
             </button>
           ))}
-          {numPages > 0 && <span className="ml-1 font-mono text-xs text-muted">/ {numPages}</span>}
+          {shownPages > 0 && <span className="ml-1 font-mono text-xs text-muted">/ {shownPages}</span>}
         </div>
-        {caption && <figcaption className="text-xs text-muted">{caption}</figcaption>}
+        <figcaption className="text-xs text-muted">
+          {mode === "poster" ? `Showing a pre-rendered copy of page ${page}` : caption}
+        </figcaption>
       </div>
     </figure>
+  );
+}
+
+/** The faint box over each extracted row, at its Textract bbox (page fractions). */
+function RowOutlines({ rows, setOutline }: { rows: IngestRow[] | undefined; setOutline: (row: number) => (el: HTMLElement | null) => void }) {
+  return (
+    <div className="pointer-events-none absolute inset-0">
+      {(rows ?? []).map((r) => (
+        <div
+          key={r.row}
+          ref={setOutline(r.row)}
+          data-row={r.row}
+          className="ingest-outline absolute"
+          style={{
+            left: `${r.bbox!.left * 100}%`,
+            top: `${r.bbox!.top * 100}%`,
+            width: `${r.bbox!.width * 100}%`,
+            height: `${r.bbox!.height * 100}%`,
+          }}
+        />
+      ))}
+    </div>
   );
 }
 

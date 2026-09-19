@@ -1,6 +1,9 @@
-// Copy the pdf.js worker that react-pdf resolves into public/ so it is served from our own origin
-// (never a CDN) with a .js extension: a module worker needs a JavaScript MIME type, and not
-// every static host maps .mjs to one. The worker must be the exact pdfjs-dist react-pdf uses.
+// Copy the pdf.js worker that react-pdf resolves into public/, so it is served from our own
+// origin (never a CDN) and always matches the API version react-pdf ships.
+//
+// Two copies, same bytes: `.mjs` is the real extension, `.js` is the fallback for hosts that do
+// not map .mjs to a JavaScript MIME type (a module worker is refused with the wrong type).
+// pdf-stage.tsx loads the .mjs one; the check in qa/ingest-check.mjs asserts what is served.
 import { copyFileSync, mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -13,5 +16,5 @@ const { version } = require(pkg);
 const from = join(dirname(pkg), "build", "pdf.worker.min.mjs");
 const publicDir = join(dirname(fileURLToPath(import.meta.url)), "..", "public");
 mkdirSync(publicDir, { recursive: true });
-copyFileSync(from, join(publicDir, "pdf.worker.min.js"));
-console.log(`pdf.js worker ${version} -> public/pdf.worker.min.js`);
+for (const name of ["pdf.worker.min.mjs", "pdf.worker.min.js"]) copyFileSync(from, join(publicDir, name));
+console.log(`pdf.js worker ${version} -> public/pdf.worker.min.{mjs,js}`);
