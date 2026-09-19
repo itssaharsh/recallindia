@@ -118,21 +118,56 @@ def test_record_all_fetches_each_case_and_its_notice_once() -> None:
     original = fixtures.Recorder
     fixtures.Recorder = lambda _url: fixtures_recorder  # type: ignore[assignment]
     try:
-        rec = fixtures.record_all("https://api.example", 1)
+        rec = fixtures.record_all("https://api.example", 1, replay_runs=[])
     finally:
         fixtures.Recorder = original
     assert rec.asked.count("/v1/notices/cdsco_nsq%23JUL-2026-cdsco_portal-b75cfffe3713") == 1
     assert "/items/demo-clear-01" not in rec.asked  # no case: the wall never asks for it
 
 
+def test_ingest_replays_record_the_view_the_list_and_the_pdf_itself(monkeypatch) -> None:
+    run = "ingest-20260919084944-ab53"
+    view = {
+        **{k: None for k in fixtures.RUN_SUMMARY_KEYS},
+        "run_id": run,
+        "status": "SUCCEEDED",
+        "pdf_s3_key": "cdsco/CDSCO_NSQ_june25.pdf",
+        "rows": [{"page": 1, "row": 1}],
+    }
+    pdf = {
+        "key": "cdsco/CDSCO_NSQ_june25.pdf",
+        "url": "https://s3.example/x?sig=1",
+        "expires_in": 900,
+    }
+    rec = FakeRecorder(
+        {
+            f"/ingest/runs/{run}": view,
+            "/ingest/pdf?key=cdsco%2FCDSCO_NSQ_june25.pdf": pdf,
+        }
+    )
+    monkeypatch.setattr(fixtures, "download", lambda url: b"%PDF-1.4 bytes")
+    fixtures.record_ingest(rec, [run])
+    assert rec.blobs == {"CDSCO_NSQ_june25.pdf": b"%PDF-1.4 bytes"}
+    # the recorded answer points at the same-origin copy: a presigned URL would expire
+    answer = rec.bodies["GET /ingest/pdf?key=cdsco%2FCDSCO_NSQ_june25.pdf"]
+    assert answer["url"] == "/fixtures/CDSCO_NSQ_june25.pdf" and answer["expires_in"] == 900
+    listing = rec.bodies["GET /ingest/runs"]
+    assert listing["count"] == 1 and listing["runs"][0]["run_id"] == run
+    assert set(listing["runs"][0]) == set(fixtures.RUN_SUMMARY_KEYS)
+    assert rec.bodies[f"GET /ingest/runs/{run}"] is view
+
+
 def test_write_replaces_stale_files_and_indexes_every_response(tmp_path: Path) -> None:
     (tmp_path / "stale.json").write_text("{}")
+    (tmp_path / "old.pdf").write_bytes(b"%PDF")
     rec = fixtures.Recorder("https://api.example/")
+    rec.blobs["new.pdf"] = b"%PDF-new"
     rec.record("/v1/stats", {"total": 1})
     rec.record("/v1/notices?limit=50", {"notices": [], "next_cursor": None})
     fixtures.write(rec, tmp_path)
     manifest = json.loads((tmp_path / "manifest.json").read_text())
-    assert not (tmp_path / "stale.json").exists()
+    assert not (tmp_path / "stale.json").exists() and not (tmp_path / "old.pdf").exists()
+    assert (tmp_path / "new.pdf").read_bytes() == b"%PDF-new"
     assert manifest["_api"] == "https://api.example"
     for key in ("GET /v1/stats", "GET /v1/notices?limit=50"):
         assert json.loads((tmp_path / manifest[key]).read_text()) == rec.bodies[key]

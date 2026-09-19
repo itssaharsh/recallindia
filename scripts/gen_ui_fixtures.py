@@ -10,7 +10,11 @@ What is recorded:
 * ``/v1/stats``;
 * the feed: page 1 of every source and of all sources, plus ``--pages`` pages in all; the last
   recorded page's ``next_cursor`` is set to null so "Load more" ends where the recording ends;
-* the wall: ``/items``, ``/items/<id>`` for every item with a case, and each case's notice.
+* the wall: ``/items``, ``/items/<id>`` for every item with a case, and each case's notice;
+* ``/ingest``: each ``--replay-runs`` run view (``/ingest/runs/<id>``: real step timings, rows,
+  notices), a ``/ingest/runs`` list of exactly those runs (a demo can only replay what it has),
+  and each run's PDF itself, downloaded next to the JSON with its ``/ingest/pdf`` answer pointing
+  at that same-origin copy (a presigned S3 URL would expire).
 
     make app-fixtures                               # API URL from the stack outputs
     python scripts/gen_ui_fixtures.py --api-url https://<id>.execute-api.ap-south-1.amazonaws.com
@@ -32,6 +36,25 @@ from urllib.parse import quote
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "app" / "public" / "fixtures"
 PAGE = 50  # the feed's page size (feed-view.tsx PAGE)
+# the live Textract run of the June 2025 archive alert (docs/P00-REPORT.md, Update 2026-09-19)
+REPLAY_RUNS = ("ingest-20260919084944-ab53",)
+RUN_SUMMARY_KEYS = (
+    "run_id",
+    "execution_arn",
+    "status",
+    "adapter",
+    "month",
+    "title",
+    "method",
+    "pages",
+    "rows_in",
+    "notices_out",
+    "new",
+    "pdf_s3_key",
+    "started_at",
+    "stopped_at",
+    "duration_ms",
+)
 QUERY_ORDER = ("source", "since", "q", "limit", "cursor")
 TIMEOUT = 30
 
@@ -58,6 +81,7 @@ class Recorder:
         self.api_url = api_url.rstrip("/")
         self.files: dict[str, str] = {}
         self.bodies: dict[str, object] = {}
+        self.blobs: dict[str, bytes] = {}  # binary files served as-is (the replayed PDFs)
 
     def get(self, path: str) -> dict:
         request = urllib.request.Request(
@@ -90,7 +114,34 @@ class Recorder:
                 self.record(path, {**page, "next_cursor": None})
 
 
-def record_all(api_url: str, pages: int) -> Recorder:
+def download(url: str) -> bytes:
+    try:
+        with urllib.request.urlopen(url, timeout=TIMEOUT) as resp:
+            return resp.read()
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise SystemExit(f"download of {url[:80]} failed: {exc}") from None
+
+
+def record_ingest(rec: Recorder, run_ids: tuple[str, ...] | list[str]) -> None:
+    """Run views, a runs list of exactly those runs, and each run's PDF next to the JSON."""
+    summaries = []
+    for run_id in run_ids:
+        view = rec.get(f"/ingest/runs/{enc(run_id)}")
+        summaries.append({k: view.get(k) for k in RUN_SUMMARY_KEYS})
+        key = view.get("pdf_s3_key")
+        if not key:
+            continue
+        path = f"/ingest/pdf?key={enc(key)}"  # the client: `?key=${encodeURIComponent(key)}`
+        answer = rec.get(path)
+        name = str(key).rsplit("/", 1)[-1]
+        rec.blobs[name] = download(answer["url"])
+        rec.record(path, {**answer, "url": f"/fixtures/{name}"})
+    rec.record("/ingest/runs", {"runs": summaries, "count": len(summaries)})
+
+
+def record_all(
+    api_url: str, pages: int, replay_runs: tuple[str, ...] | list[str] = REPLAY_RUNS
+) -> Recorder:
     rec = Recorder(api_url)
     stats = rec.get("/v1/stats")
     rec.notices(None, pages)
@@ -106,14 +157,18 @@ def record_all(api_url: str, pages: int) -> Recorder:
         if notice_id and notice_id not in seen_notices:
             seen_notices.add(notice_id)
             rec.get(f"/v1/notices/{enc(notice_id)}")
+    record_ingest(rec, replay_runs)
     return rec
 
 
 def write(rec: Recorder, out: Path) -> int:
     out.mkdir(parents=True, exist_ok=True)
-    for stale in out.glob("*.json"):
+    for stale in [*out.glob("*.json"), *out.glob("*.pdf")]:
         stale.unlink()
     total = 0
+    for name, data in rec.blobs.items():
+        (out / name).write_bytes(data)
+        total += len(data)
     for key, name in rec.files.items():
         data = json.dumps(rec.bodies[key], ensure_ascii=False, separators=(",", ":"))
         (out / name).write_text(data + "\n", encoding="utf-8")
@@ -146,9 +201,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--region", default="ap-south-1")
     parser.add_argument("--pages", type=int, default=3, help="feed pages recorded for all sources")
     parser.add_argument("--out", type=Path, default=OUT)
+    parser.add_argument(
+        "--replay-runs",
+        nargs="*",
+        default=list(REPLAY_RUNS),
+        help="ingest runs demo mode can replay",
+    )
     args = parser.parse_args(argv)
     api_url = args.api_url or stack_api_url(args.stack, args.profile, args.region)
-    rec = record_all(api_url, max(1, args.pages))
+    rec = record_all(api_url, max(1, args.pages), args.replay_runs)
     size = write(rec, args.out)
     print(f"recorded {len(rec.files)} responses ({size / 1024:.0f} KiB) from {api_url}")
     print(f"into {args.out.relative_to(ROOT) if args.out.is_relative_to(ROOT) else args.out}")

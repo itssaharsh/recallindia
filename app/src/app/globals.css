@@ -154,6 +154,53 @@
   }
 }
 
+/* /ingest: an outline per extracted row over the PDF page; the dissolve engine sets its state:
+   shown (read) -> lifted (rising off the page) -> gone (an empty slot) -> done (page whole again). */
+.ingest-outline {
+  opacity: 0;
+  border: 1px solid color-mix(in oklch, var(--evidence) 65%, transparent);
+  transition:
+    opacity 180ms linear,
+    background-color 180ms linear;
+}
+.ingest-outline[data-state="shown"],
+.ingest-outline[data-state="lifted"],
+.ingest-outline[data-state="gone"],
+.ingest-outline[data-state="done"] {
+  opacity: 1;
+}
+.ingest-outline[data-state="lifted"] {
+  border-color: var(--evidence);
+  background-color: color-mix(in oklch, var(--evidence) 22%, transparent);
+}
+.ingest-outline[data-state="gone"] {
+  background-color: var(--paper);
+  border: 1px dashed color-mix(in oklch, var(--ink) 30%, transparent);
+}
+.ingest-outline[data-state="done"] {
+  border-color: color-mix(in oklch, var(--evidence) 40%, transparent);
+}
+.ingest-fade-in {
+  animation: ingest-fade 150ms linear both;
+}
+@keyframes ingest-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* reduced motion swaps the flight for a crossfade: keep that crossfade (it is the fallback) */
+@media (prefers-reduced-motion: reduce) {
+  .ingest-fade-in {
+    animation-duration: 150ms !important;
+  }
+  .ingest-outline {
+    transition-duration: 150ms !important;
+  }
+}
+
 /* Feed rows off-screen skip layout and paint (cheap virtualisation for "Load more" lists). */
 .feed-row {
   content-visibility: auto;
