@@ -249,11 +249,13 @@ def test_notices_table_has_exactly_one_new_source_gsi(template) -> None:
 
 def test_raw_bucket_allows_the_browser_to_load_presigned_pdfs(template) -> None:
     """GET /ingest/pdf hands the browser a presigned S3 URL; pdf.js fetches it cross-origin
-    with Range requests, which S3 only answers with CORS rules on the bucket."""
+    with Range requests, which S3 only answers with CORS rules on the bucket. P06 adds PUT: the
+    Scan strip tab uploads the photo straight to the bucket through a presigned PUT. Origins are
+    the app's (AppOrigins), not '*'."""
     props = template["Resources"]["RawBucket"]["Properties"]
     [rule] = props["CorsConfiguration"]["CorsRules"]
-    assert set(rule["AllowedMethods"]) == {"GET", "HEAD"}
-    assert rule["AllowedOrigins"] and rule["AllowedHeaders"] == ["*"]
+    assert set(rule["AllowedMethods"]) == {"GET", "HEAD", "PUT"}
+    assert rule["AllowedOrigins"] == {"Ref": "AppOrigins"} and rule["AllowedHeaders"] == ["*"]
     assert {"Content-Range", "Accept-Ranges", "Content-Length"} <= set(rule["ExposedHeaders"])
     assert rule["MaxAge"] > 0
     assert props["PublicAccessBlockConfiguration"]["BlockPublicPolicy"] is True  # still private
@@ -282,8 +284,15 @@ def test_api_function_routes_and_step_functions_permissions(template) -> None:
         ("GET", "/ingest/status/{arn}"),
         ("GET", "/ingest/rows"),
         ("GET", "/ingest/pdf"),
+        ("GET", "/v1/stats"),
+        ("POST", "/uploads"),
+        ("POST", "/items/ocr"),
+        ("POST", "/items/normalise"),
+        ("GET", "/items/{id}/check-status"),
     ):
         assert route in routes, route
+    cors = template["Resources"]["HttpApi"]["Properties"]["CorsConfiguration"]
+    assert cors["AllowOrigins"] == {"Ref": "AppOrigins"}  # the app + localhost, not '*'
     assert api["Events"]["IngestRows"]["Properties"]["Path"] == "/ingest/rows"
     assert api["Events"]["IngestPdf"]["Properties"]["Path"] == "/ingest/pdf"
     statements = [
@@ -298,6 +307,8 @@ def test_api_function_routes_and_step_functions_permissions(template) -> None:
         "states:DescribeExecution",
         "states:GetExecutionHistory",
         "states:ListExecutions",
+        "textract:DetectDocumentText",
+        "comprehend:BatchDetectEntities",
     } <= actions
     assert template["Outputs"]["IngestStateMachineArn"]["Value"] == {"Ref": "IngestStateMachine"}
     assert "ApiUrl" in template["Outputs"]
