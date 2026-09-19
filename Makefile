@@ -24,7 +24,7 @@ PY := $(VENV)/bin/python
 
 .DEFAULT_GOAL := help
 .PHONY: help install lint fmt test validate-template build deploy deploy-guided seed validate \
-	backfill backfill-mock poll-live clean
+	backfill backfill-mock poll-live api-url ingest-run ingest-status notices-page clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -87,6 +87,28 @@ poll-live: ## Invoke one deployed poller Lambda once: make poll-live SOURCE=cpsc
 	aws lambda invoke --profile $(AWS_PROFILE) --region $(AWS_REGION) \
 		--function-name recallindia-poller-$(SOURCE)-$(ACCOUNT_ID) \
 		--cli-binary-format raw-in-base64-out --payload '{}' /dev/stdout
+
+api-url: ## Print the deployed HTTP API base URL (ApiUrl stack output)
+	@aws cloudformation describe-stacks --stack-name $(STACK_NAME) --profile $(AWS_PROFILE) \
+		--region $(AWS_REGION) --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text
+
+ingest-run: ## POST /ingest/run on the deployed API (starts the IngestStateMachine, prints the arn)
+	curl -sS -X POST "$$(make -s api-url)/ingest/run" -H 'content-type: application/json' \
+		-d '{"force": true}'
+	@echo ""
+
+ARN ?=
+ingest-status: ## GET /ingest/status/{arn}: make ingest-status ARN=arn:aws:states:...:execution:...
+	@test -n "$(ARN)" || { echo "usage: make ingest-status ARN=<execution arn or run id>"; exit 2; }
+	curl -sS "$$(make -s api-url)/ingest/status/$$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' '$(ARN)')"
+	@echo ""
+
+SINCE ?= 2026-07-01
+LIMIT ?= 100
+CURSOR ?=
+notices-page: ## GET one page of /v1/notices: make notices-page SOURCE=cdsco_nsq SINCE=2026-07-01 [LIMIT=100 CURSOR=...]
+	curl -sS "$$(make -s api-url)/v1/notices?source=$(SOURCE)&since=$(SINCE)&limit=$(LIMIT)&cursor=$(CURSOR)"
+	@echo ""
 
 clean: ## Remove venv, SAM build output, caches and the local demo store
 	rm -rf $(VENV) .aws-sam .demo_store .pytest_cache .ruff_cache
