@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from common import cdsco, dynamo
+from common.brands import brand_key
 from common.demo_mode import UpstreamError
 from common.notices import is_meta, read_meta
 from pollers import cdsco_portal
@@ -43,7 +44,9 @@ def test_handler_default_polls_newest_month() -> None:
         assert "failed CDSCO quality test" in n["title"]
         assert ("recall" + "ed") not in n["title"].lower()
         assert n["published_at"] == "2026-07-01"
-        assert n["brand_lc"] == n["brand"].lower()
+        assert n["brand_lc"] == (
+            brand_key(n["brand"]) or "unknown"
+        )  # P05b: key, not raw lower-case
         assert n["row_ref"]["month"] == "JUL-2026"
         assert n["first_seen_at"] and n["updated_at"]
 

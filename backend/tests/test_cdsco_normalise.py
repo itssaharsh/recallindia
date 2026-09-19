@@ -202,7 +202,7 @@ def test_five_fixture_rows_become_five_notices():
     assert first["product"] == "Dextrose Injection I.P. 5%w/v (D5)"
     assert first["batches"] == ["1-3098"]
     assert first["brand"] == "Tam-Bran Pharmaceuticals Pvt. Ltd."
-    assert first["brand_lc"] == "tam-bran pharmaceuticals pvt. ltd."
+    assert first["brand_lc"] == "tam-bran pharmaceuticals"  # P05b: the key drops "Pvt. Ltd."
     assert first["hazard_or_failed_test"] == "Assay of Dextrose (Anhydrous)"
     assert first["lab"] == "CDL, Kolkata"
     assert first["mfg_date"] == "01/2025" and first["exp_date"] == "12/2027"

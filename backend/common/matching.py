@@ -17,24 +17,8 @@ from __future__ import annotations
 
 import unicodedata
 
-# Legal-form tokens only (compared after normalise_text, so "Pvt." is "pvt", "M/s." is "m/s").
-# Never trade names or sector words: "pharmaceuticals", "industries", "labs" distinguish brands.
-CORP_SUFFIXES: tuple[str, ...] = (
-    "m/s",
-    "ms",
-    "pvt",
-    "private",
-    "ltd",
-    "limited",
-    "llp",
-    "inc",
-    "co",
-    "corp",
-    "corporation",
-    "plc",
-    "gmbh",
-)
-_CORP_SET = frozenset(CORP_SUFFIXES)
+from common.brands import brand_key
+
 # Punctuation kept when it sits inside a token: "bio-sciences", "m/s", "i.p", "650mg."->"650mg".
 _KEEP_INNER = "-/."
 # Apostrophes are deleted rather than split on: "Reddy's" -> "reddys", not "reddy s".
@@ -61,35 +45,27 @@ def normalise_text(s: str | None) -> str:
     return " ".join(out)
 
 
-def _is_corp_token(tok: str) -> bool:
-    """``pvt`` / ``ltd`` / ``m/s`` ... and dotted compounds of them (``pvt.ltd`` -> pvt + ltd)."""
-    if tok in _CORP_SET:
-        return True
-    parts = [p for p in tok.split(".") if p]
-    return bool(parts) and all(p in _CORP_SET for p in parts)
-
-
 def normalise_brand(s: str | None) -> str:
-    """``normalise_text`` minus the legal-form tokens in ``CORP_SUFFIXES``.
+    """The brand lookup key. Delegates to ``common.brands.brand_key`` so that what is stored in
+    ``brand_lc``, what candidates query, and what the verifier compares are one definition.
 
     ``"M/s. Forgo Pharmaceuticals Pvt. Ltd."`` -> ``"forgo pharmaceuticals"``;
-    ``"Martin & Brown Bio-Sciences Pvt.Ltd."`` -> ``"martin brown bio-sciences"``.
-    A brand made only of legal-form tokens normalises to ``""`` (callers treat that as no brand).
+    ``"Martin & Brown Bio-Sciences Pvt.Ltd."`` -> ``"martin and brown bio-sciences"``.
     """
-    return " ".join(tok for tok in normalise_text(s).split() if not _is_corp_token(tok))
+    return brand_key(s)
 
 
 def brand_variants(brand: str | None) -> list[str]:
-    """Ordered, deduped lookup keys for a brand: as typed (lower), normalised, first token.
+    """Ordered, deduped ``brand_lc`` lookup keys: ``brand_key(brand)``, then its first token.
 
-    ``brand_variants("Forgo Pharmaceuticals Pvt. Ltd.")`` ->
-    ``["forgo pharmaceuticals pvt. ltd.", "forgo pharmaceuticals", "forgo"]``. Candidates tries
-    each against the ``brand_lc`` GSI in this order; empties are dropped.
+    ``brand_variants("Finecure Pharmaceuticals Ltd.")`` -> ``["finecure pharmaceuticals",
+    "finecure"]`` -- the same as for "Finecure Pharmaceuticals", which is the point. The
+    first-token query only ever hits notices whose whole key is that one word ("jeep").
     """
-    normalised = normalise_brand(brand)
-    first = normalised.split()[0] if normalised else ""
+    key = brand_key(brand)
+    first = key.split()[0] if key else ""
     out: list[str] = []
-    for variant in (str(brand or "").lower().strip(), normalised, first):
+    for variant in (key, first):
         if variant and variant not in out:
             out.append(variant)
     return out

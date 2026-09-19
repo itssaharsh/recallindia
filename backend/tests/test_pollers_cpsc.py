@@ -9,6 +9,7 @@ import re
 import pytest
 
 from common import notices
+from common.brands import brand_key
 from common.demo_mode import UpstreamError, fixture_path
 from common.schemas import Notice
 from pollers import cpsc
@@ -46,7 +47,7 @@ def test_every_fixture_record_maps_to_a_valid_notice(mapped: list[dict]) -> None
     for n in mapped:
         Notice.model_validate(n)  # extra="forbid": a stray key fails here
         assert n["source"] == "cpsc" and n["pk"] == f"cpsc#{n['notice_id']}"
-        assert n["brand"] and n["brand_lc"] == n["brand"].lower().strip()
+        assert n["brand"] and n["brand_lc"] == (brand_key(n["brand"]) or "unknown")
         assert n["product"] and n["title"] and n["url"].startswith("https://")
         assert ISO_DATE.match(n["published_at"])
         assert len(n["raw_excerpt"]) <= 4096 and n["title"] in n["raw_excerpt"]
@@ -68,7 +69,7 @@ def test_record_zero_maps_the_fixture_as_is(recalls: list[dict], mapped: list[di
     assert n["product"] == "LANCHEZ Pressure Washers"
     assert rec["Manufacturers"] == [] and rec["Importers"][0]["Name"].endswith(" of China")
     assert n["brand"] == "Ningbo Lanchez E-Commerce Co., Ltd."
-    assert n["brand_lc"] == "ningbo lanchez e-commerce co., ltd."
+    assert n["brand_lc"] == "ningbo lanchez e-commerce"  # display brand above is untouched
     assert n["published_at"] == "2026-09-17" and rec["RecallDate"].startswith("2026-09-17")
     assert n["batches"] == ["2510", "2511", "2512"]  # "date codes of 2510 (Oct-2025), ..."
     assert n["hazard_or_failed_test"].startswith("The grounding wire")

@@ -169,7 +169,7 @@ def test_cdsco_normalise_pdf_rows_header_mapping():
     assert n["adapter"] == "cdsco_pdf" and n["pdf_s3_key"] == "cdsco/nsq_latest.pdf"
     assert n["product"].startswith("Calcium Gluconate") and n["batches"] == ["MV24B36"]
     assert n["brand"] == "Martin & Brown Bio-Sciences Pvt.Ltd." and n["lab"] == "CDL, Kolkata"
-    assert n["brand_lc"] == "martin & brown bio-sciences pvt.ltd."
+    assert n["brand_lc"] == "martin and brown bio-sciences"  # P05b key; display brand intact
     assert "M/s. Martin & Brown Bio-Sciences Pvt.Ltd., Baddi, HP" in n["raw_excerpt"]
     assert n["row_ref"] == {"page": None, "row": 1, "month": None}
     assert n["mfg_date"] == "02/2024" and n["exp_date"] == "01/2026"

@@ -9,6 +9,7 @@ import re
 import pytest
 
 from common import notices
+from common.brands import brand_key
 from common.demo_mode import UpstreamError, fixture_path
 from common.schemas import Notice
 from pollers import openfda
@@ -114,7 +115,7 @@ def test_map_drug_records_from_fixture() -> None:
         assert n["title"].startswith("drug recall: ")
         assert n["product"] == " ".join(r["product_description"].split())[:300]
         assert n["product"] and len(n["product"]) <= 300
-        assert n["brand"] and n["brand_lc"] == n["brand"].lower().strip()
+        assert n["brand"] and n["brand_lc"] == (brand_key(n["brand"]) or "unknown")
         assert n["model"] is None and n["remedy"] is None
         assert n["hazard_or_failed_test"] == " ".join(r["reason_for_recall"].split())
         assert ISO_DATE.match(n["published_at"])

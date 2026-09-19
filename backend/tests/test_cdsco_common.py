@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from common import cdsco
+from common.brands import brand_key
 from ingest import cdsco_extract, cdsco_fetch, cdsco_normalise
 
 
@@ -59,7 +60,11 @@ def test_mar_2026_fixture_maps_to_190_notices() -> None:
     notices = cdsco.rows_to_notices(rows, adapter="portal", month="MAR-2026")
     assert len(notices) == 190
     assert all(n["batches"] and n["batches"][0] for n in notices)
-    assert all(n["brand_lc"] and n["brand_lc"] == n["brand"].lower() for n in notices)
+    assert all(
+        n["brand_lc"] and n["brand_lc"] == (brand_key(n["brand"]) or "unknown") for n in notices
+    )
+    legal = {"ltd", "limited", "pvt", "private", "llp"}
+    assert not any(legal & set(n["brand_lc"].split()) for n in notices)  # no suffix in any key
     assert all(n["published_at"] == "2026-03-01" for n in notices)
     assert all(n["adapter"] == "cdsco_portal" and n["source"] == "cdsco_nsq" for n in notices)
     assert [n["row_ref"] for n in notices[:2]] == [

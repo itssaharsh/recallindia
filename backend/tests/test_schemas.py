@@ -38,9 +38,17 @@ def test_notice_pk_helper() -> None:
     assert Item.make_pk("abc") == "user#abc"
 
 
-def test_brand_lc_is_derived_when_empty() -> None:
+def test_brand_lc_is_always_the_brand_key_of_the_display_brand() -> None:
+    """P05b: the GSI key is a pure function of ``brand``. A caller cannot store a key that the
+    candidates lookup (which calls the same brand_key) would fail to find."""
     assert _notice().brand_lc == "forgo pharmaceuticals"
-    assert _notice(brand_lc="custom").brand_lc == "custom"
+    assert _notice(brand_lc="custom").brand_lc == "forgo pharmaceuticals"  # supplied key ignored
+    suffixed = _notice(brand="Finecure Pharmaceuticals Ltd.")
+    assert suffixed.brand_lc == "finecure pharmaceuticals"
+    assert suffixed.brand == "Finecure Pharmaceuticals Ltd."  # the display brand is never altered
+    # a stored row carrying the OLD raw-lowercase key is re-keyed when it is validated again
+    stale = {**suffixed.model_dump(), "brand_lc": "finecure pharmaceuticals ltd."}
+    assert type(suffixed).model_validate(stale).brand_lc == "finecure pharmaceuticals"
 
 
 def test_blank_brand_becomes_unknown_so_the_gsi_key_is_never_empty() -> None:
@@ -48,6 +56,9 @@ def test_blank_brand_becomes_unknown_so_the_gsi_key_is_never_empty() -> None:
         n = _notice(brand=blank)
         assert n.brand == "unknown" and n.brand_lc == "unknown"
     assert _notice(brand="Acme", brand_lc="  ").brand_lc == "acme"
+    # a brand made only of legal words has no identity: stored as "unknown", never as ""
+    assert _notice(brand="Pvt. Ltd.").brand_lc == "unknown"
+    assert _notice(brand="Pvt. Ltd.").brand == "Pvt. Ltd."
 
 
 def test_raw_excerpt_truncated_to_4096() -> None:

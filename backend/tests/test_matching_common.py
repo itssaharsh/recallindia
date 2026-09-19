@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from common.matching import (
-    CORP_SUFFIXES,
     brand_variants,
     brands_match,
     identifier_tokens,
@@ -60,33 +59,56 @@ def test_normalise_text_lowercases_collapses_and_keeps_inner_punctuation() -> No
 # --- brands -------------------------------------------------------------------------
 
 
-def test_normalise_brand_drops_legal_forms_but_keeps_sector_words() -> None:
+def test_normalise_brand_is_the_brand_key() -> None:
+    """P05b: one definition. normalise_brand delegates to common.brands.brand_key, so the stored
+    ``brand_lc``, the candidates query and the verifier's comparison cannot drift apart."""
+    from common.brands import NOISE_TOKENS, brand_key
+
+    for raw in ("M/s. Forgo Pharmaceuticals Pvt. Ltd.", "Zenith Drugs Ltd.", "Acme Corp", None):
+        assert normalise_brand(raw) == brand_key(raw)
     assert normalise_brand("M/s. Forgo Pharmaceuticals Pvt. Ltd.") == "forgo pharmaceuticals"
     assert normalise_brand("Forgo Pharmaceuticals") == "forgo pharmaceuticals"
-    assert normalise_brand("Martin & Brown Bio-Sciences Pvt.Ltd.") == "martin brown bio-sciences"
     assert normalise_brand("Zenith Drugs Ltd.") == "zenith drugs"
-    assert normalise_brand("Sun Pharmaceutical Industries Limited") == (
-        "sun pharmaceutical industries"
-    )
     assert normalise_brand("Havells India Private Limited") == "havells india"
     assert normalise_brand("Acme Corp") == "acme"
+    # changed by the P05b brief: "&" -> "and", and "industries" is now a noise token
+    assert (
+        normalise_brand("Martin & Brown Bio-Sciences Pvt.Ltd.") == "martin and brown bio-sciences"
+    )
+    assert normalise_brand("Sun Pharmaceutical Industries Limited") == "sun pharmaceutical"
+    # unchanged on purpose: all-legal-words is "no brand", so the verifier never matches on it
     assert normalise_brand("Pvt. Ltd.") == "" and normalise_brand(None) == ""
-    for word in ("pharmaceuticals", "industries", "labs", "laboratories", "india"):
-        assert word not in CORP_SUFFIXES
-    for word in ("m/s", "ms", "pvt", "private", "ltd", "limited", "llp", "inc", "co", "corp"):
-        assert word in CORP_SUFFIXES
+    for word in ("pharmaceuticals", "labs", "laboratories", "india"):
+        assert word not in NOISE_TOKENS  # identity words
+    for word in (
+        "m/s",
+        "ms",
+        "pvt",
+        "private",
+        "ltd",
+        "limited",
+        "llp",
+        "inc",
+        "co",
+        "corp",
+        "company",
+        "corporation",
+        "industries",
+    ):
+        assert word in NOISE_TOKENS
 
 
-def test_brand_variants_ordering_and_dedupe() -> None:
-    assert brand_variants("Forgo Pharmaceuticals Pvt. Ltd.") == [
-        "forgo pharmaceuticals pvt. ltd.",
-        "forgo pharmaceuticals",
-        "forgo",
-    ]
+def test_brand_variants_are_the_key_then_its_first_token() -> None:
+    """P05b: candidates query brand_key(brand), then the first token -- nothing else."""
+    assert brand_variants("Forgo Pharmaceuticals Pvt. Ltd.") == ["forgo pharmaceuticals", "forgo"]
     assert brand_variants("  Forgo Pharmaceuticals ") == ["forgo pharmaceuticals", "forgo"]
+    # the P05 false negative: with or without the suffix, the lookup keys are identical
+    assert brand_variants("Finecure Pharmaceuticals") == brand_variants(
+        "Finecure Pharmaceuticals Ltd."
+    )
     assert brand_variants("Honda") == ["honda"]
     assert brand_variants("") == [] and brand_variants(None) == []
-    assert brand_variants("Pvt Ltd") == ["pvt ltd"]  # as typed survives even when normalised is ""
+    assert brand_variants("Pvt Ltd") == []  # no brand identity -> nothing to look up
 
 
 @pytest.mark.parametrize(

@@ -12,6 +12,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from common.brands import brand_key
+
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 RAW_EXCERPT_MAX = 4096
 UNKNOWN_BRAND = "unknown"
@@ -111,8 +113,11 @@ class Notice(_Strict):
         # blank brand (a portal row with no manufacturer, a whitespace Make) becomes "unknown".
         if not self.brand.strip():
             self.brand = UNKNOWN_BRAND
-        if not self.brand_lc.strip():
-            self.brand_lc = self.brand.lower().strip()
+        # Unconditional on purpose: the key is a pure function of the display brand, so a stored
+        # row re-validated by upsert_notice, a poller and the cdsco mapping all agree, and the
+        # candidates lookup (which calls the same brand_key) can never drift from what is stored.
+        # The display ``brand`` is never altered.
+        self.brand_lc = brand_key(self.brand) or UNKNOWN_BRAND
         return self
 
 
