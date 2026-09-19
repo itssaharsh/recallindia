@@ -34,10 +34,11 @@ Parameters:
   BedrockEnabled:
     Type: String
     AllowedValues: ["true", "false"]
-    Default: "true"
+    Default: "false"
     Description: >-
-      false short-circuits every Bedrock call (BedrockUnavailable) so verify/normalise/claim
-      use their deterministic or template fallbacks; use while model access is pending.
+      No LLM in the decision path: Bedrock quotas are held at 0 on this account for the
+      hackathon (increase denied), so the deterministic verifier/normaliser is the primary
+      path and the model path is implemented behind this flag. true attempts Bedrock.
   ModelVerify:
     Type: String
     Default: global.anthropic.claude-haiku-4-5-20251001-v1:0
@@ -164,9 +165,25 @@ Resources:
       AttributeDefinitions:
         - AttributeName: pk
           AttributeType: S
+        - AttributeName: rk
+          AttributeType: S
+        - AttributeName: ts
+          AttributeType: S
       KeySchema:
         - AttributeName: pk
           KeyType: HASH
+      GlobalSecondaryIndexes:
+        # Case rows (rk=case, pk=case_id) and in-app Event rows (rk=event, pk=events#<id>)
+        # share this table; GET /events and the /mine timeline list each kind newest-first
+        # by ts through common.dynamo.query_rk.
+        - IndexName: rk-ts-index
+          KeySchema:
+            - AttributeName: rk
+              KeyType: HASH
+            - AttributeName: ts
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
 
   # -------------------------------------------------------------------------
   # S3
@@ -371,6 +388,18 @@ Resources:
             ApiId: !Ref HttpApi
             Method: GET
             Path: "/items"
+        ItemGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: "/items/{id}"
+        EventsList:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: "/events"
         CheckItem:
           Type: HttpApi
           Properties:
@@ -600,6 +629,21 @@ Resources:
         - DynamoDBReadPolicy:
             TableName: !Ref ItemsTable
 
+  # Step 4 (SPEC): the deterministic decision over every verified candidate. Rules decide,
+  # the model explains: alert = covers_item && inside; hold = covers_item && inside null, or
+  # covers_item null; dismiss otherwise; clear when there was no candidate at all.
+  DecideFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub recallindia-decide-${AWS::AccountId}
+      CodeUri: backend/matcher/
+      Handler: decide.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref NoticesTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref ItemsTable
+
   NotifyFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -683,6 +727,7 @@ Resources:
         CandidatesFunctionArn: !GetAtt CandidatesFunction.Arn
         VerifyFunctionArn: !GetAtt VerifyFunction.Arn
         RangeCheckFunctionArn: !GetAtt RangeCheckFunction.Arn
+        DecideFunctionArn: !GetAtt DecideFunction.Arn
         NotifyFunctionArn: !GetAtt NotifyFunction.Arn
         ClaimFunctionArn: !GetAtt ClaimFunction.Arn
         EvidenceFunctionArn: !GetAtt EvidenceFunction.Arn
@@ -693,6 +738,8 @@ Resources:
             FunctionName: !Ref VerifyFunction
         - LambdaInvokePolicy:
             FunctionName: !Ref RangeCheckFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref DecideFunction
         - LambdaInvokePolicy:
             FunctionName: !Ref NotifyFunction
         - LambdaInvokePolicy:

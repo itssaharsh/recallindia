@@ -5,7 +5,8 @@ and fall back once to ``BEDROCK_FALLBACK_REGION``, swapping the inference-profil
 (``apac.`` <-> ``us.``; ``global.`` untouched). In demo mode the reply is read from
 ``fixtures/bedrock/<kind>/<key>.json``.
 
-``BEDROCK_ENABLED`` (default true; ``0``/``false``/``no``/``off`` disable) short-circuits
+``BEDROCK_ENABLED`` (default false: Bedrock quotas are held at 0 on this account for the
+hackathon, so the model path is opt-in via ``true``/``1``/``yes``/``on``) short-circuits
 every call -- demo or live -- with ``BedrockUnavailable`` so callers take their deterministic
 / template fallback; one warning is logged per Lambda invocation, not per call.
 """
@@ -42,7 +43,7 @@ _FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
 
 log = logging.getLogger("common.bedrock")
 
-_DISABLED_VALUES = frozenset({"0", "false", "no", "off"})
+_ENABLED_VALUES = frozenset({"1", "true", "yes", "on"})  # explicit opt-in; anything else = off
 DISABLED_WARNING = "Bedrock disabled (BEDROCK_ENABLED=false): using deterministic fallback"
 # One warning per Lambda invocation: keyed on the X-Ray trace id Lambda sets per invocation
 # (``_X_AMZN_TRACE_ID``); without one (local runs, tests) once per process until reset.
@@ -59,8 +60,8 @@ class BedrockUnavailable(BedrockError):
 
 
 def is_enabled() -> bool:
-    """``BEDROCK_ENABLED`` env, default true; ``0``/``false``/``no``/``off`` disable."""
-    return os.environ.get("BEDROCK_ENABLED", "true").strip().lower() not in _DISABLED_VALUES
+    """``BEDROCK_ENABLED`` env, default false; only ``1``/``true``/``yes``/``on`` enable."""
+    return os.environ.get("BEDROCK_ENABLED", "false").strip().lower() in _ENABLED_VALUES
 
 
 def reset_invocation_warning() -> None:

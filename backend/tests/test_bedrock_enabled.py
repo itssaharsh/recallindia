@@ -35,12 +35,22 @@ def test_disabled_values(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
     assert is_enabled() is False
 
 
-@pytest.mark.parametrize("value", [None, "true", "1", "yes", "anything-else"])
-def test_enabled_by_default(monkeypatch: pytest.MonkeyPatch, value: str | None) -> None:
+@pytest.mark.parametrize("value", [None, "false", "0", "no", "off", "anything-else", ""])
+def test_disabled_by_default(monkeypatch: pytest.MonkeyPatch, value: str | None) -> None:
+    """No LLM in the decision path unless explicitly opted in (quotas held at 0 on this account)."""
+    bedrock.reset_invocation_warning()
     if value is None:
         monkeypatch.delenv("BEDROCK_ENABLED", raising=False)
     else:
         monkeypatch.setenv("BEDROCK_ENABLED", value)
+    assert is_enabled() is False
+    with pytest.raises(BedrockUnavailable):
+        converse("verify", "never attempted")
+
+
+@pytest.mark.parametrize("value", ["true", "1", "yes", "on", "TRUE"])
+def test_enabled_only_by_explicit_opt_in(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    monkeypatch.setenv("BEDROCK_ENABLED", value)
     assert is_enabled() is True
     assert converse("verify", "still works in demo mode")["demo"] is True
 
