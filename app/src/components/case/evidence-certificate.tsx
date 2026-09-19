@@ -16,7 +16,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   return (
     <>
       <dt className="text-muted">{label}</dt>
-      <dd className="m-0 min-w-0 break-all text-text">{children}</dd>
+      <dd className="min-w-0 break-all text-text">{children}</dd>
     </>
   );
 }
@@ -81,16 +81,16 @@ export function EvidenceCertificate({ caseId, evidence, demo }: { caseId: string
 
   const tampered = result?.tampered === true;
   return (
-    <figure className="m-0">
+    <figure>
       <section aria-labelledby="certificate-title" className="border border-line bg-surface-1 font-mono">
         <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-line px-4 py-2.5">
-          <h2 id="certificate-title" className="m-0 text-[11px] font-medium tracking-[0.14em] text-evidence uppercase">
+          <h2 id="certificate-title" className="text-[11px] font-medium tracking-[0.14em] text-evidence uppercase">
             Evidence certificate
           </h2>
           <span className="text-[11px] text-muted">{caseId}</span>
         </header>
         <div className="grid gap-5 p-4 md:grid-cols-[minmax(0,1fr)_15rem]">
-          <dl className="m-0 grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-[12px] leading-snug sm:grid-cols-[8rem_minmax(0,1fr)]">
+          <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-[12px] leading-snug sm:grid-cols-[8rem_minmax(0,1fr)]">
             <Row label="SHA-256">{evidence.sha256}</Row>
             <Row label="KMS key">{evidence.kms_key_id}</Row>
             <Row label="Algorithm">{evidence.signing_algorithm ?? "RSASSA_PKCS1_V1_5_SHA_256"}</Row>
@@ -109,7 +109,7 @@ export function EvidenceCertificate({ caseId, evidence, demo }: { caseId: string
           </dl>
           <div className="flex flex-col items-stretch gap-3 border-t border-line pt-4 md:border-t-0 md:border-l md:pt-0 md:pl-5">
             <Stamp result={error ? null : result} busy={busy} />
-            <p className="m-0 min-h-10 text-center text-[11px] leading-snug text-muted">
+            <p className="min-h-10 text-center text-[11px] leading-snug text-muted">
               {error
                 ? `Could not verify: ${error}`
                 : !result
@@ -131,7 +131,7 @@ export function EvidenceCertificate({ caseId, evidence, demo }: { caseId: string
           </div>
         </div>
         {tampered && result?.demo_control && (
-          <p className="m-0 border-t border-line px-4 py-2 font-sans text-xs text-muted">
+          <p className="border-t border-line px-4 py-2 font-sans text-xs text-muted">
             <span className="text-hold">Demo control</span>: {result.demo_control.replace(/^demo control:\s*/i, "")}.
           </p>
         )}
@@ -144,10 +144,10 @@ export function EvidenceCertificate({ caseId, evidence, demo }: { caseId: string
 /** Before the evidence exists: what will be here, and what makes it. */
 export function CertificatePlaceholder({ why }: { why: string }) {
   return (
-    <figure className="m-0">
+    <figure>
       <section aria-label="Evidence certificate" className="border border-dashed border-line px-4 py-3.5 font-mono">
-        <p className="m-0 text-[11px] font-medium tracking-[0.14em] text-muted uppercase">Evidence certificate</p>
-        <p className="m-0 mt-1.5 font-sans text-[13px] text-muted">{why}</p>
+        <p className="text-[11px] font-medium tracking-[0.14em] text-muted uppercase">Evidence certificate</p>
+        <p className="mt-1.5 font-sans text-[13px] text-muted">{why}</p>
       </section>
       <figcaption className="mt-2 text-xs text-muted">{CAPTION}</figcaption>
     </figure>

@@ -63,7 +63,7 @@ function Field({ label, children, mono }: { label: string; children: React.React
   return (
     <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-3 border-b border-line py-2 text-[13px]">
       <dt className="text-muted">{label}</dt>
-      <dd className={`m-0 min-w-0 text-text ${mono ? "font-mono text-[12.5px]" : ""}`}>{children}</dd>
+      <dd className={`min-w-0 text-text ${mono ? "font-mono text-[12.5px]" : ""}`}>{children}</dd>
     </div>
   );
 }
@@ -323,11 +323,11 @@ export function CaseView() {
           {notice && <SourceChip notice={notice} />}
           {c.created_at && <span className="text-xs text-muted">case opened {fmtDay(c.created_at)}</span>}
         </div>
-        <h1 id="case-title" className="m-0 max-w-4xl font-display text-[32px] leading-[1.06] font-semibold text-balance text-text md:text-5xl">
+        <h1 id="case-title" className="max-w-4xl font-display text-[32px] leading-[1.06] font-semibold text-balance text-text md:text-5xl">
           {outcomeLine(c, item, notice)}
         </h1>
         {dates && (
-          <p className="m-0 font-mono text-[13px] text-text">
+          <p className="font-mono text-[13px] text-text">
             {dates}
             {c.sold_after_notice && (
               <>
@@ -337,16 +337,16 @@ export function CaseView() {
             )}
           </p>
         )}
-        {itemLine && <p className="m-0 text-sm text-muted">{itemLine}</p>}
+        {itemLine && <p className="text-sm text-muted">{itemLine}</p>}
       </header>
 
       <div className="grid gap-8 py-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:gap-10">
         <section aria-labelledby="notice-heading" className="min-w-0 space-y-4">
           <div className="space-y-1">
-            <h2 id="notice-heading" className="m-0 font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">
+            <h2 id="notice-heading" className="font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">
               The notice
             </h2>
-            {notice && <p className="m-0 font-display text-lg leading-snug font-semibold text-text">{sentence(citation(notice))}</p>}
+            {notice && <p className="font-display text-lg leading-snug font-semibold text-text">{sentence(citation(notice))}</p>}
           </div>
           {excerpt && (
             <SourceExcerpt
@@ -377,7 +377,7 @@ export function CaseView() {
             />
           )}
           {notice && (
-            <dl className="m-0">
+            <dl>
               {notice.source === "cdsco_nsq"
                 ? notice.hazard_or_failed_test && <Field label="Failed test">{notice.hazard_or_failed_test}</Field>
                 : riskSentence(notice) && <Field label="Risk">{riskSentence(notice)}</Field>}
@@ -394,7 +394,7 @@ export function CaseView() {
           )}
           {c.range_check && (
             <div className="space-y-2">
-              <h3 className="m-0 font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">
+              <h3 className="font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">
                 Your {unit} against the list
               </h3>
               <RangeBar check={c.range_check} />
@@ -403,7 +403,7 @@ export function CaseView() {
         </section>
 
         <section aria-labelledby="answer-heading" className="min-w-0 space-y-2">
-          <h2 id="answer-heading" className="m-0 font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">
+          <h2 id="answer-heading" className="font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">
             {c.decision === "alert" ? "Your answer" : "Decision"}
           </h2>
           {c.decision === "alert" ? (
@@ -424,10 +424,10 @@ export function CaseView() {
             />
           ) : (
             <div className="space-y-2 rounded-md border border-line border-l-4 border-l-hold bg-surface-2 p-4 md:p-5">
-              <p className="m-0 text-[14px] leading-relaxed text-text">
+              <p className="text-[14px] leading-relaxed text-text">
                 {c.decision === "dismiss" ? "Dismissed" : "On hold"}: {c.reason}.
               </p>
-              <p className="m-0 text-[13px] leading-relaxed text-muted">
+              <p className="text-[13px] leading-relaxed text-muted">
                 {c.decision === "dismiss"
                   ? `The notice is about the same product, but it does not list your ${unit}. There is nothing to approve.`
                   : "A rule needs one more detail before it can decide. Add it on My things and check the item again."}

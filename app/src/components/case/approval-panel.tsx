@@ -44,7 +44,7 @@ function stepCopy(step: ApprovalStep, c: Case, item: Item | null, notice: Notice
 
 function Steps({ steps, c, item, notice }: { steps: ApprovalStep[]; c: Case; item: Item | null; notice: Notice | null }) {
   return (
-    <ol className="m-0 list-none space-y-1.5 p-0" aria-label="After your answer">
+    <ol className="list-none space-y-1.5 p-0" aria-label="After your answer">
       {steps.map((step) => (
         <li key={step.name} className="flex items-start gap-2.5 text-[13px] leading-snug">
           <span aria-hidden className={`w-3 shrink-0 font-mono ${TONE[step.state]}`}>
@@ -113,19 +113,19 @@ export function ApprovalPanel({
       {status === "waiting" && (
         <>
           <div className="space-y-1">
-            <p className="m-0 font-mono text-[12px] font-medium tracking-[0.1em] text-hold uppercase" role="status">
+            <p className="font-mono text-[12px] font-medium tracking-[0.1em] text-hold uppercase" role="status">
               Waiting for you
             </p>
-            <p className="m-0 text-xs text-muted">
+            <p className="text-xs text-muted">
               Since {fmtWhen(opened)}
               {closes ? ` · closes ${fmtWhen(closes)} (24 h)` : ""}
             </p>
           </div>
-          <p className="m-0 text-[14px] leading-relaxed text-text">
+          <p className="text-[14px] leading-relaxed text-text">
             Approve to draft a claim letter to {addressee(c, item)} and seal a signed copy of {snapshotNoun(notice)} as
             evidence. Nothing is sent anywhere: the letter is yours to hand over.
           </p>
-          <p className="m-0 text-[13px] leading-relaxed text-muted">
+          <p className="text-[13px] leading-relaxed text-muted">
             Step Functions has paused this check at WaitForApproval. It cannot draft or seal anything until you answer.
           </p>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1">
@@ -167,7 +167,7 @@ export function ApprovalPanel({
             )}
           </div>
           {replay && (
-            <p className="m-0 text-xs text-muted">
+            <p className="text-xs text-muted">
               Demo data: Approve replays case {c.case_id} as it ran on the live API (Claim, then Evidence, with the
               recorded timings).
             </p>
@@ -178,14 +178,14 @@ export function ApprovalPanel({
       {status === "approved" && (
         <>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <p className="m-0 font-mono text-[12px] font-medium tracking-[0.1em] text-text uppercase">Approved</p>
-            <p className="m-0 font-mono text-[11px] text-muted">{fmtWhen(c.approval?.approved_at)}</p>
+            <p className="font-mono text-[12px] font-medium tracking-[0.1em] text-text uppercase">Approved</p>
+            <p className="font-mono text-[11px] text-muted">{fmtWhen(c.approval?.approved_at)}</p>
           </div>
           <Steps steps={steps} c={c} item={item} notice={notice} />
           {c.claim_pdf_s3_key && (
             <div className="space-y-2.5 border-t border-line pt-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="m-0 text-[13px] text-muted">
+                <p className="text-[13px] text-muted">
                   Claim letter to <span className="text-text">{addressee(c, item)}</span>
                 </p>
                 <Button variant="outline" size="sm" onClick={onOpenClaim} disabled={busy === "claim"}>
@@ -193,12 +193,12 @@ export function ApprovalPanel({
                   {busy === "claim" ? "Opening…" : "Open claim letter"}
                 </Button>
               </div>
-              {claimError && <p className="m-0 text-xs text-alert">Could not open the letter: {claimError}</p>}
+              {claimError && <p className="text-xs text-alert">Could not open the letter: {claimError}</p>}
               {c.claim_text && (
                 <pre
                   tabIndex={0}
                   aria-label="Claim letter text"
-                  className="m-0 max-h-80 overflow-y-auto bg-paper px-4 py-3.5 font-sans text-[12.5px] leading-relaxed whitespace-pre-wrap text-ink"
+                  className="max-h-80 overflow-y-auto bg-paper px-4 py-3.5 font-sans text-[12.5px] leading-relaxed whitespace-pre-wrap text-ink"
                 >
                   {c.claim_text}
                 </pre>
@@ -210,8 +210,8 @@ export function ApprovalPanel({
 
       {status === "rejected" && (
         <>
-          <p className="m-0 font-mono text-[12px] font-medium tracking-[0.1em] text-muted uppercase">Rejected</p>
-          <p className="m-0 text-[14px] leading-relaxed text-text">
+          <p className="font-mono text-[12px] font-medium tracking-[0.1em] text-muted uppercase">Rejected</p>
+          <p className="text-[14px] leading-relaxed text-text">
             You rejected this at {fmtWhen(c.approval?.rejected_at)}. No letter was drafted and nothing was sealed; the check
             ended in Step Functions with the error Rejected.
           </p>
@@ -220,8 +220,8 @@ export function ApprovalPanel({
 
       {status === "expired" && (
         <>
-          <p className="m-0 font-mono text-[12px] font-medium tracking-[0.1em] text-muted uppercase">Expired</p>
-          <p className="m-0 text-[14px] leading-relaxed text-text">
+          <p className="font-mono text-[12px] font-medium tracking-[0.1em] text-muted uppercase">Expired</p>
+          <p className="text-[14px] leading-relaxed text-text">
             No answer within 24 hours: the approval closed at {fmtWhen(c.approval?.expired_at)} and nothing was drafted.
             Check the item again from My things to open a new case.
           </p>
@@ -230,10 +230,10 @@ export function ApprovalPanel({
 
       {!status && (
         <>
-          <p className="m-0 font-mono text-[12px] font-medium tracking-[0.1em] text-muted uppercase">
+          <p className="font-mono text-[12px] font-medium tracking-[0.1em] text-muted uppercase">
             {opening ? "Opening the approval" : "No approval open"}
           </p>
-          <p className="m-0 text-[14px] leading-relaxed text-text">
+          <p className="text-[14px] leading-relaxed text-text">
             {opening
               ? "The check hands this case to you in a moment: Step Functions is starting WaitForApproval."
               : "This case was decided before approvals existed, so there is nothing to approve. Check the item again from My things to open one that waits for you."}
@@ -242,7 +242,7 @@ export function ApprovalPanel({
       )}
 
       {error && (
-        <p role="alert" className="m-0 text-[13px] text-alert">
+        <p role="alert" className="text-[13px] text-alert">
           {error}
         </p>
       )}

@@ -11,6 +11,10 @@ What is recorded:
 * the feed: page 1 of every source and of all sources, plus ``--pages`` pages in all; the last
   recorded page's ``next_cursor`` is set to null so "Load more" ends where the recording ends;
 * the wall: ``/items``, ``/items/<id>`` for every item with a case, and each case's notice;
+* ``/case``: each case (``/cases/<id>``) and its item's ``check-status``; for a sealed case also
+  both verify answers (``verify-evidence`` and ``?tamper=1``) and the claim letter, downloaded
+  next to the JSON with its ``/cases/<id>/claim`` answer pointing at that copy. Demo mode replays
+  a sealed case from the moment it waited for approval (``app/src/lib/case.ts``);
 * ``/ingest``: each ``--replay-runs`` run view (``/ingest/runs/<id>``: real step timings, rows,
   notices), a ``/ingest/runs`` list of exactly those runs (a demo can only replay what it has),
   and each run's PDF itself, downloaded next to the JSON with its ``/ingest/pdf`` answer pointing
@@ -139,6 +143,23 @@ def record_ingest(rec: Recorder, run_ids: tuple[str, ...] | list[str]) -> None:
     rec.record("/ingest/runs", {"runs": summaries, "count": len(summaries)})
 
 
+def record_case(rec: Recorder, item_id: str, case_id: str) -> dict:
+    """What /case asks for: the case, the item's check-status, and for a sealed case both verify
+    answers and the claim letter itself (a presigned claims-bucket URL would expire)."""
+    case = rec.get(f"/cases/{enc(case_id)}")
+    rec.get(f"/items/{enc(item_id)}/check-status")
+    if (case.get("evidence") or {}).get("snapshot_s3_key"):
+        rec.get(f"/cases/{enc(case_id)}/verify-evidence")
+        rec.get(f"/cases/{enc(case_id)}/verify-evidence?tamper=1")
+    if case.get("claim_pdf_s3_key"):
+        path = f"/cases/{enc(case_id)}/claim"
+        link = rec.get(path)
+        name = f"{case_id}.pdf"
+        rec.blobs[name] = download(link["url"])
+        rec.record(path, {**link, "url": f"/fixtures/{name}"})
+    return case
+
+
 def record_all(
     api_url: str, pages: int, replay_runs: tuple[str, ...] | list[str] = REPLAY_RUNS
 ) -> Recorder:
@@ -153,6 +174,7 @@ def record_all(
         if not item.get("case_id"):
             continue
         detail = rec.get(f"/items/{enc(item['item_id'])}")
+        record_case(rec, str(item["item_id"]), str(item["case_id"]))
         notice_id = (detail.get("case") or {}).get("notice_id")
         if notice_id and notice_id not in seen_notices:
             seen_notices.add(notice_id)

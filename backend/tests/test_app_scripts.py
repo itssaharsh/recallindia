@@ -113,6 +113,11 @@ def test_record_all_fetches_each_case_and_its_notice_once() -> None:
         "/items/demo-alert": {"item_id": "demo-alert", "case": case},
         "/items/demo-twin": {"item_id": "demo-twin", "case": {**case, "case_id": "c2"}},
         "/v1/notices/cdsco_nsq%23JUL-2026-cdsco_portal-b75cfffe3713": {"pk": notice_pk},
+        # the case page: a waiting case has no evidence and no letter yet
+        "/cases/c1": case,
+        "/cases/c2": {**case, "case_id": "c2"},
+        "/items/demo-alert/check-status": {"status": "WAITING_FOR_APPROVAL"},
+        "/items/demo-twin/check-status": {"status": "WAITING_FOR_APPROVAL"},
     }
     fixtures_recorder = FakeRecorder(pages)
     original = fixtures.Recorder
@@ -123,6 +128,38 @@ def test_record_all_fetches_each_case_and_its_notice_once() -> None:
         fixtures.Recorder = original
     assert rec.asked.count("/v1/notices/cdsco_nsq%23JUL-2026-cdsco_portal-b75cfffe3713") == 1
     assert "/items/demo-clear-01" not in rec.asked  # no case: the wall never asks for it
+    assert {"/cases/c1", "/cases/c2", "/items/demo-alert/check-status"} <= set(rec.asked)
+    assert not any("verify-evidence" in p or p.endswith("/claim") for p in rec.asked)
+
+
+def test_a_sealed_case_records_both_verify_answers_and_the_letter_itself(monkeypatch) -> None:
+    case = {
+        "case_id": "case-1",
+        "claim_pdf_s3_key": "case-1.pdf",
+        "evidence": {"snapshot_s3_key": "evidence/case-1/ab.json"},
+    }
+    link = {
+        "case_id": "case-1",
+        "key": "case-1.pdf",
+        "url": "https://s3.example/c?sig=1",
+        "expires_in": 600,
+    }
+    rec = FakeRecorder(
+        {
+            "/cases/case-1": case,
+            "/items/demo-alert/check-status": {"status": "SUCCEEDED"},
+            "/cases/case-1/verify-evidence": {"valid": True},
+            "/cases/case-1/verify-evidence?tamper=1": {"valid": False, "tampered": True},
+            "/cases/case-1/claim": link,
+        }
+    )
+    monkeypatch.setattr(fixtures, "download", lambda url: b"%PDF-1.4 letter")
+    assert fixtures.record_case(rec, "demo-alert", "case-1") is case
+    assert rec.bodies["GET /cases/case-1/verify-evidence"] == {"valid": True}
+    assert rec.bodies["GET /cases/case-1/verify-evidence?tamper=1"]["valid"] is False
+    # the recorded link points at the same-origin copy: the presigned one lives 10 minutes
+    assert rec.bodies["GET /cases/case-1/claim"] == {**link, "url": "/fixtures/case-1.pdf"}
+    assert rec.blobs == {"case-1.pdf": b"%PDF-1.4 letter"}
 
 
 def test_ingest_replays_record_the_view_the_list_and_the_pdf_itself(monkeypatch) -> None:

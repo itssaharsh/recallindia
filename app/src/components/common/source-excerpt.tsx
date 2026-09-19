@@ -38,10 +38,10 @@ export function SourceExcerpt({
     paragraphs = hit ? [hit] : paragraphs.slice(0, 1);
   }
   return (
-    <figure className="m-0">
-      <blockquote className="m-0 space-y-2 bg-paper px-3.5 py-3 text-[13px] leading-relaxed text-ink">
+    <figure>
+      <blockquote className="space-y-2 bg-paper px-3.5 py-3 text-[13px] leading-relaxed text-ink">
         {paragraphs.map((p, i) => (
-          <p key={i} className="m-0">
+          <p key={i}>
             {quote ? highlight(p, quote) : squash(p)}
           </p>
         ))}

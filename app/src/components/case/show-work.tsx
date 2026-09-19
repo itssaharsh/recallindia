@@ -97,8 +97,8 @@ export function ShowWork({
         <div id="case-work" className="grid gap-8 pt-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
           <div className="min-w-0 space-y-5">
             <div className="space-y-2">
-              <h3 className="m-0 font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">Verification chain</h3>
-              <ol className="m-0 list-none space-y-1.5 p-0">
+              <h3 className="font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">Verification chain</h3>
+              <ol className="list-none space-y-1.5 p-0">
                 {CHAIN.map((name) => {
                   const step = steps?.find((s) => s.name === name);
                   const state: StepState = step?.state ?? "done";
@@ -117,27 +117,27 @@ export function ShowWork({
               </ol>
             </div>
             <div className="space-y-2">
-              <h3 className="m-0 font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">
+              <h3 className="font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">
                 Verifier reasoning{c.verifier ? ` · ${c.verifier}` : ""}
                 {typeof c.confidence === "number" ? ` · confidence ${c.confidence}` : ""}
               </h3>
-              <p className="m-0 border-l-2 border-line py-0.5 pl-3 font-mono text-[12px] leading-relaxed break-words text-text">
+              <p className="border-l-2 border-line py-0.5 pl-3 font-mono text-[12px] leading-relaxed break-words text-text">
                 {c.reasoning || c.reason}
               </p>
               {c.verifier !== "bedrock" && (
-                <p className="m-0 text-xs text-muted">Rules decide: no language model is in the decision path.</p>
+                <p className="text-xs text-muted">Rules decide: no language model is in the decision path.</p>
               )}
             </div>
             {c.execution_arn && (
               <div className="space-y-1">
-                <h3 className="m-0 font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">Step Functions execution</h3>
-                <p className="m-0 font-mono text-[12px] break-all text-text">{c.execution_arn}</p>
+                <h3 className="font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">Step Functions execution</h3>
+                <p className="font-mono text-[12px] break-all text-text">{c.execution_arn}</p>
               </div>
             )}
           </div>
           <div className="min-w-0 space-y-2">
-            <h3 className="m-0 font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">Audit trail</h3>
-            <ol className="m-0 list-none border-t border-line p-0 font-mono text-[12px]">
+            <h3 className="font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">Audit trail</h3>
+            <ol className="list-none border-t border-line p-0 font-mono text-[12px]">
               {(c.audit ?? []).map((a, i) => {
                 const detail = detailText(a.detail);
                 return (
@@ -153,7 +153,7 @@ export function ShowWork({
                 );
               })}
             </ol>
-            <p className="m-0 text-xs text-muted">Times in UTC. Every entry is appended by the step that did the work.</p>
+            <p className="text-xs text-muted">Times in UTC. Every entry is appended by the step that did the work.</p>
           </div>
         </div>
       )}
