@@ -25,6 +25,8 @@ SOURCE_INDEX = "source-published_at-index"
 # (Case rows, pk = case_id) and ``rk = "event"`` (Event rows, pk = events#<event_id>) -- for
 # GET /events and the /mine timeline (``query_rk``).
 RK_INDEX = "rk-ts-index"
+# items and cases: one partition per household (sparse; rows without the key are invisible)
+HOUSEHOLD_INDEX = "household_id-index"
 
 
 def table_name(kind: TableKind) -> str:
@@ -147,6 +149,37 @@ def query_brand(brand_lc: str, limit: int = 50) -> list[dict]:
         IndexName=BRAND_INDEX, KeyConditionExpression=Key("brand_lc").eq(brand_lc), Limit=limit
     )
     return list(resp.get("Items", []))
+
+
+def query_household(kind: TableKind, household_id: str, limit: int = 200) -> list[dict]:
+    """Items or cases of one household (GSI ``household_id-index``), newest first.
+
+    The wall and the case list are read through this index, never with a scan: a household is
+    a partition, so one household's rows cost one query no matter how many households exist.
+    """
+    if is_demo():
+        rows = [
+            r
+            for r in _load(kind).values()
+            if str(r.get("household_id") or "demo") == household_id and r.get("rk") != "event"
+        ]
+    else:
+        from boto3.dynamodb.conditions import Key
+
+        rows = []
+        kwargs: dict[str, Any] = {
+            "IndexName": HOUSEHOLD_INDEX,
+            "KeyConditionExpression": Key("household_id").eq(household_id),
+            "Limit": limit,
+        }
+        while len(rows) < limit:
+            resp = _table(kind).query(**kwargs)
+            rows.extend(resp.get("Items", []))
+            if "LastEvaluatedKey" not in resp:
+                break
+            kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
+    rows.sort(key=lambda r: str(r.get("created_at") or ""), reverse=True)
+    return rows[:limit]
 
 
 def _source_sort_key(item: dict) -> tuple[str, str]:

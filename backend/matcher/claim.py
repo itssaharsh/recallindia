@@ -22,14 +22,15 @@ from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
 
-from common import dynamo, s3
+from common import case_state, dynamo, s3
 from common.notices import now_iso
-from common.schemas import AuditEvent, Item
+from common.schemas import Item
 
 log = logging.getLogger(__name__)
 
 TEMPLATE = Path(__file__).with_name("templates") / "claim_letter.txt.j2"
 DEFAULT_REMEDY = "a refund or a replacement"
+VEHICLE_REMEDY = "the free repair the recall provides"
 SOURCE_NAME = {
     "cdsco_nsq": "Central Drugs Standard Control Organisation (CDSCO)",
     "nhtsa": "US National Highway Traffic Safety Administration (NHTSA)",
@@ -116,11 +117,16 @@ def letter_context(case: dict, item: dict, notice: dict, today: str) -> dict:
         notice_ref = f"{SHORT_SOURCE.get(source, source.upper())} recall {notice.get('notice_id')}"
         subject = f"Refund, repair or replacement: {product} ({ident}) is covered by {notice_ref}"
     remedy_text = str(notice.get("remedy") or "").strip()
+    default_remedy = VEHICLE_REMEDY if kind == "vehicle" else DEFAULT_REMEDY
     remedy = (
-        f'the remedy the notice sets out ("{remedy_text.rstrip(".")}"), or {DEFAULT_REMEDY}'
+        f'the remedy the notice sets out ("{remedy_text.rstrip(".")}"), or {default_remedy}'
         if remedy_text
-        else DEFAULT_REMEDY
+        else default_remedy
     )
+    # a vehicle recall is matched on make, model and year: the dealer confirms it by VIN
+    vehicles = notice.get("vehicles") if isinstance(notice.get("vehicles"), list) else []
+    by_make_model_year = kind == "vehicle" and bool(vehicles)
+    evidence = case.get("evidence") if isinstance(case.get("evidence"), dict) else {}
     purchase = item.get("purchase_date")
     published = notice.get("published_at")
     return {
@@ -145,7 +151,31 @@ def letter_context(case: dict, item: dict, notice: dict, today: str) -> dict:
         "remedy": remedy,
         "sold_after_notice": bool(case.get("sold_after_notice")) and bool(purchase),
         "days_after": _days_between(published, purchase),
+        "bought_from": str(item.get("bought_from") or "").strip(),
+        "source_short": SHORT_SOURCE.get(source, source.upper()),
+        "by_make_model_year": by_make_model_year,
+        "vehicle_span": _vehicle_span(vehicles) if by_make_model_year else "",
+        # the letter cites the evidence sealed a step earlier (SealEvidence -> WriteLetter)
+        "evidence_sha": str(evidence.get("sha256") or ""),
+        "evidence_signed_at": _date(evidence.get("signed_at")) or "",
+        "evidence_locked_until": _date(evidence.get("object_lock_retain_until")) or "",
     }
+
+
+def _vehicle_span(vehicles: list) -> str:
+    """ "2022-2023 Jeep Compass" from the notice's own vehicle rows."""
+    years, names = [], []
+    for v in vehicles:
+        if not isinstance(v, dict):
+            continue
+        for key in ("year_from", "year_to"):
+            if isinstance(v.get(key), int):
+                years.append(int(v[key]))
+        name = " ".join(str(v.get(k) or "").strip() for k in ("make", "model")).strip().title()
+        if name and name not in names:
+            names.append(name)
+    span = f"{min(years)}-{max(years)}" if years else ""
+    return " ".join(x for x in (span, ", ".join(names)) if x)
 
 
 def render_text(context: dict) -> str:
@@ -205,17 +235,9 @@ def render_pdf(text: str, *, case_id: str, title: str) -> bytes:
     return out.getvalue()
 
 
-def _append_audit(case: dict, event: str, detail: dict) -> None:
-    case.setdefault("audit", []).append(
-        AuditEvent(ts=now_iso(), event=event, detail=detail).model_dump()
-    )
-
-
 def draft(case_id: str) -> dict:
     """Draft, render and store the letter for ``case_id``; returns the step result."""
-    case = dynamo.get("cases", case_id)
-    if case is None:
-        raise LookupError(f"case {case_id!r} not found")
+    case = case_state.begin(case_id, status="writing_letter", step="write_letter")
     item = dynamo.get("items", Item.make_pk(str(case.get("item_id")))) or {}
     notice = dynamo.get("notices", str(case.get("notice_id"))) or {}
     if not notice:
@@ -225,19 +247,24 @@ def draft(case_id: str) -> dict:
     text = render_text(context)
     pdf = render_pdf(text, case_id=case_id, title=context["subject"])
     key = s3.put_bytes("claims", f"{case_id}.pdf", pdf, "application/pdf")
-    case.update(
-        claim_pdf_s3_key=key,
-        claim_text=text,
-        claim_addressee=context["addressee"],
-        claim_created_at=now,
+    case_state.finish(
+        case_id,
+        step="write_letter",
+        fields={
+            "claim_pdf_s3_key": key,
+            "claim_text": text,
+            "claim_addressee": context["addressee"],
+            "claim_created_at": now,
+        },
+        event="claim.drafted",
+        detail={
+            "pdf_s3_key": key,
+            "bytes": len(pdf),
+            "addressee": context["addressee"],
+            "template": TEMPLATE.name,
+            "sold_after_notice": context["sold_after_notice"],
+        },
     )
-    _append_audit(
-        case,
-        "claim.drafted",
-        {"pdf_s3_key": key, "bytes": len(pdf), "addressee": context["addressee"],
-         "template": TEMPLATE.name, "sold_after_notice": context["sold_after_notice"]},
-    )  # fmt: skip
-    dynamo.put("cases", case)
     return {
         "case_id": case_id,
         "claim_pdf_s3_key": key,
@@ -259,10 +286,15 @@ def handler(event: dict | None, context: object) -> dict:
         error = f"{type(exc).__name__}: {exc}"
         log.warning("claim for %s failed: %s", case_id, error)
         try:
-            case = dynamo.get("cases", case_id) if case_id else None
-            if case is not None:
-                _append_audit(case, "claim.failed", {"error": error})
-                dynamo.put("cases", case)
+            if case_id:
+                case_state.finish(
+                    case_id,
+                    step="write_letter",
+                    status="error",
+                    event="claim.failed",
+                    detail={"error": error},
+                    error=error,
+                )
         except Exception:
             pass
         return {"case_id": case_id or None, "degraded": True, "error": error}

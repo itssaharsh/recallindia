@@ -30,9 +30,10 @@ from common.demo_mode import is_demo
 from common.notices import is_meta
 
 try:
-    from api import case_api, ingest_api, match_api, notices_query, ui_api
+    from api import case_api, household_api, ingest_api, match_api, notices_query, ui_api
 except ModuleNotFoundError:  # Lambda layout: CodeUri backend/api/ -> siblings at /var/task
     import case_api  # type: ignore[no-redef]
+    import household_api  # type: ignore[no-redef]
     import ingest_api  # type: ignore[no-redef]
     import match_api  # type: ignore[no-redef]
     import notices_query  # type: ignore[no-redef]
@@ -41,8 +42,9 @@ except ModuleNotFoundError:  # Lambda layout: CodeUri backend/api/ -> siblings a
 CORS_HEADERS = {
     "content-type": "application/json",
     "access-control-allow-origin": "*",
-    "access-control-allow-methods": "GET,POST,OPTIONS",
-    "access-control-allow-headers": "content-type",
+    "access-control-allow-methods": "GET,POST,PATCH,OPTIONS",
+    # x-household scopes every write and the wall: the browser sends it on those routes only
+    "access-control-allow-headers": "content-type,x-household",
 }
 Route = Callable[[dict, dict], dict]
 GZIP_MIN_BYTES = 1024  # below this the gzip header costs more than it saves
@@ -228,7 +230,16 @@ ROUTES: list[tuple[str, re.Pattern[str], Route]] = [
     ("POST", re.compile(r"^/items/(?P<id>[^/]+)/check/?$"), _wrap(match_api.check_item)),
     ("GET", re.compile(r"^/items/(?P<id>[^/]+)/check-status/?$"), _wrap(ui_api.check_status)),
     ("GET", re.compile(r"^/items/(?P<id>[^/]+)/?$"), _wrap(match_api.get_item)),
-    ("GET", re.compile(r"^/cases/(?P<id>[^/]+)/?$"), _wrap(match_api.get_case)),
+    ("PATCH", re.compile(r"^/items/(?P<id>[^/]+)/?$"), _wrap(match_api.patch_item)),
+    ("POST", re.compile(r"^/households/?$"), _wrap(household_api.create_household)),
+    (
+        "POST",
+        re.compile(r"^/households/(?P<id>[^/]+)/reset/?$"),
+        _wrap(household_api.reset_household),
+    ),
+    ("GET", re.compile(r"^/households/(?P<id>[^/]+)/?$"), _wrap(household_api.get_household)),
+    ("GET", re.compile(r"^/cases/?$"), _wrap(case_api.list_cases)),
+    ("GET", re.compile(r"^/cases/(?P<id>[^/]+)/?$"), _wrap(case_api.get_case)),
     ("GET", re.compile(r"^/events/?$"), _wrap(match_api.list_events)),
     ("POST", re.compile(r"^/cases/(?P<id>[^/]+)/approve/?$"), _wrap(case_api.approve_case)),
     ("POST", re.compile(r"^/cases/(?P<id>[^/]+)/reject/?$"), _wrap(case_api.reject_case)),

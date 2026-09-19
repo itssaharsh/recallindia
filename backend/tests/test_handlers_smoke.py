@@ -43,6 +43,7 @@ def _api_event(method: str, path: str, qs: dict | None = None) -> dict:
         "routeKey": f"{method} {path}",
         "rawPath": path,
         "queryStringParameters": qs or {},
+        "headers": {"x-household": "hh_test2345"},
         "requestContext": {"http": {"method": method, "path": path}},
     }
 

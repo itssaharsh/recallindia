@@ -32,7 +32,7 @@ from urllib.parse import unquote
 from pydantic import ValidationError
 
 from common import approval as approval_gate
-from common import dynamo
+from common import dynamo, households
 from common.demo_mode import is_demo
 from common.schemas import Case, Item, ItemKind
 
@@ -255,28 +255,39 @@ def create_items(_params: dict, event: dict) -> Result:
     ids = [item["item_id"] for item in items]
     if len(set(ids)) != len(ids):
         return 400, {"error": "duplicate item_id in request", "field": "item_id"}
+    household = households.from_event(event)
+    if households.is_demo_household(household):
+        return 403, {"error": "demo_read_only"}
+    already = len(dynamo.query_household("items", household, limit=households.MAX_ITEMS + 1))
+    if already + len(items) > households.MAX_ITEMS:
+        return 429, {
+            "error": "demo_busy",
+            "detail": f"a household holds at most {households.MAX_ITEMS} things",
+        }
     for item in items:
+        item["household_id"] = household
         dynamo.put("items", item)
-    return 201, {"items": items, "count": len(items)}
+    return 201, {"items": items, "count": len(items), "household_id": household}
 
 
 # --- GET /items, GET /items/{id} -------------------------------------------------------
 
 
-def list_items(_params: dict, _event: dict) -> Result:
-    """``GET /items``: the wall, newest ``created_at`` first, then name (see module docstring)."""
-    rows = dynamo.scan_all("items", limit=ITEMS_SCAN_LIMIT)
+def list_items(_params: dict, event: dict) -> Result:
+    """``GET /items``: one household's wall (``household_id-index``), newest first, then name."""
+    household = households.from_event(event)
+    rows = dynamo.query_household("items", household, limit=ITEMS_SCAN_LIMIT)
     items = [r for r in rows if isinstance(r, dict) and str(r.get("pk", "")).startswith("user#")]
     items.sort(key=lambda i: str(i.get("name") or "").lower())
     items.sort(key=lambda i: str(i.get("created_at") or ""), reverse=True)
-    return 200, {"items": items, "count": len(items)}
+    return 200, {"items": items, "count": len(items), "household_id": household}
 
 
-def get_item(params: dict, _event: dict) -> Result:
+def get_item(params: dict, event: dict) -> Result:
     """``GET /items/{id}``: the item plus ``case`` (its current Case row, or null)."""
     item_id = _path_id(params)
     item = dynamo.get("items", Item.make_pk(item_id)) if item_id else None
-    if item is None:
+    if item is None or not households.readable(item, households.from_event(event)):
         return 404, {"error": "not found", "item_id": item_id}
     case = None
     if item.get("case_id"):
@@ -296,7 +307,7 @@ def execution_name(item_id: str, now: str) -> str:
     return f"check-{tail}-{stamp}-{secrets.token_hex(2)}"[:80]
 
 
-def check_item(params: dict, _event: dict) -> Result:
+def check_item(params: dict, event: dict) -> Result:
     """``POST /items/{id}/check``: start a MatchStateMachine execution for the item.
 
     Live: ``start_execution(input={"item_id"})``, then ``item.last_check_arn`` /
@@ -305,8 +316,11 @@ def check_item(params: dict, _event: dict) -> Result:
     """
     item_id = _path_id(params)
     item = dynamo.get("items", Item.make_pk(item_id)) if item_id else None
-    if item is None:
+    household = households.from_event(event)
+    if item is None or not households.owns(item, household):
         return 404, {"error": "not found", "item_id": item_id}
+    if households.is_demo_household(household):
+        return 403, {"error": "demo_read_only", "item_id": item_id}
     if is_demo():
         return run_demo_check(item)
     machine_arn = os.environ.get("MATCH_STATE_MACHINE_ARN")
@@ -466,6 +480,42 @@ def run_demo_check(item: dict) -> Result:
         "notify": notify,
         "errors": errors or None,
     }
+
+
+# --- PATCH /items/{id} -----------------------------------------------------------------
+
+PATCHABLE = ("batch", "serial", "reg_no", "model", "brand", "name", "bought_from",
+             "purchase_date", "year")  # fmt: skip
+
+
+def patch_item(params: dict, event: dict) -> Result:
+    """``PATCH /items/{id}``: fix a field the scan got wrong (usually the batch), then re-check.
+
+    This is the "Confirm batch" action on a needs-you card (UI-SPEC C-10): the user corrects the
+    code the photo could not settle, and the item goes straight back through the matcher.
+    """
+    item_id = _path_id(params)
+    item = dynamo.get("items", Item.make_pk(item_id)) if item_id else None
+    household = households.from_event(event)
+    if item is None or not households.owns(item, household):
+        return 404, {"error": "not found", "item_id": item_id}
+    if households.is_demo_household(household):
+        return 403, {"error": "demo_read_only", "item_id": item_id}
+    body = parse_json_body(event)
+    if not isinstance(body, dict) or not body:
+        return 400, {"error": "body must be a JSON object of fields to change"}
+    unknown = [k for k in body if k not in PATCHABLE]
+    if unknown:
+        return 400, {"error": f"cannot change {unknown[0]!r}", "field": unknown[0]}
+    for key, value in body.items():
+        if key == "year":
+            item[key] = _year(value) if value not in (None, "") else None
+        else:
+            text = str(value).strip() if value is not None else ""
+            item[key] = text or None
+    dynamo.put("items", item)
+    status, checked = check_item(params, event)
+    return 200, {"item": dynamo.get("items", Item.make_pk(item_id)), "check": checked}
 
 
 # --- GET /cases/{id} ------------------------------------------------------------------

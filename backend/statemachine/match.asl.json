@@ -263,7 +263,7 @@
     },
     "WaitForApproval": {
       "Type": "Task",
-      "Comment": "SPEC step 6 (alert only; IsAlert routes here). lambda:invoke.waitForTaskToken: the Approval Lambda stores $$.Task.Token on the case (approval.status = waiting, token_issued_at) and the execution pauses until the case page calls POST /cases/{id}/approve (SendTaskSuccess -> Claim) or /reject (SendTaskFailure 'Rejected' -> the Rejected Fail state). No heartbeat; after TimeoutSeconds (24 h) States.Timeout -> ExpireApproval marks the case expired. The SendTaskSuccess output {approved, approver, approved_at} lands in $.approval. Retry covers only Lambda service errors (never States.ALL: retrying a rejection or a timeout would issue a fresh token and reopen the wait); any other failure -> Failed.",
+      "Comment": "SPEC step 6 (alert only; IsAlert routes here). lambda:invoke.waitForTaskToken: the Approval Lambda stores $$.Task.Token on the case (approval.status = waiting, token_issued_at) and the execution pauses until the case page calls POST /cases/{id}/approve (SendTaskSuccess -> SealEvidence) or /reject (SendTaskFailure 'Rejected' -> the Rejected Fail state). No heartbeat; after TimeoutSeconds (24 h) States.Timeout -> ExpireApproval marks the case expired. The SendTaskSuccess output {approved, approver, approved_at} lands in $.approval. Retry covers only Lambda service errors (never States.ALL: retrying a rejection or a timeout would issue a fresh token and reopen the wait); any other failure -> Failed.",
       "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
       "Parameters": {
         "FunctionName": "${ApprovalFunctionArn}",
@@ -313,7 +313,7 @@
           "Next": "Failed"
         }
       ],
-      "Next": "Claim"
+      "Next": "SealEvidence"
     },
     "ExpireApproval": {
       "Type": "Task",
@@ -355,18 +355,18 @@
       "Type": "Fail",
       "Comment": "The human said no: POST /cases/{id}/reject -> SendTaskFailure('Rejected'); the case is already approval.status = rejected. The execution fails on purpose -- no claim letter, no evidence.",
       "Error": "Rejected",
-      "Cause": "The claim was rejected on the case page (POST /cases/{id}/reject -> SendTaskFailure); no letter, no evidence."
+      "Cause": "The claim was rejected on the case page (POST /cases/{id}/reject -> SendTaskFailure); no evidence, no letter."
     },
-    "Claim": {
+    "SealEvidence": {
       "Type": "Task",
-      "Comment": "SPEC step 7, after approval: Jinja2 template (no model) addressed by item.kind (pharmacy / dealer / retailer), rendered to PDF with reportlab -> claims bucket <case_id>.pdf; claim_pdf_s3_key + claim_text on the case. Never raises: a failure is {degraded, error} and the chain goes on to Evidence.",
-      "Resource": "${ClaimFunctionArn}",
+      "Comment": "UI-SPEC pipeline step 2 (after the human gate): snapshot the notice's source (CDSCO PDF / portal row, US recall JSON) into the evidence bucket under S3 Object Lock (GOVERNANCE, 30 days), SHA-256, KMS Sign (RSASSA_PKCS1_V1_5_SHA_256) -> case.evidence. It runs BEFORE the letter so the letter can cite the sealed copy.",
+      "Resource": "${EvidenceFunctionArn}",
       "Parameters": {
+        "action": "seal",
         "case_id.$": "$.notify.case_id",
-        "item_id.$": "$.item_id",
         "run.$": "$.run"
       },
-      "ResultPath": "$.claim",
+      "ResultPath": "$.seal_evidence",
       "Retry": [
         {
           "ErrorEquals": [
@@ -377,7 +377,7 @@
           "BackoffRate": 2
         }
       ],
-      "Next": "Evidence",
+      "Next": "WriteLetter",
       "Catch": [
         {
           "ErrorEquals": [
@@ -389,15 +389,16 @@
       ],
       "TimeoutSeconds": 150
     },
-    "Evidence": {
+    "WriteLetter": {
       "Type": "Task",
-      "Comment": "SPEC step 8: snapshot the notice's source (CDSCO PDF / portal row, US recall JSON) into the evidence bucket under S3 Object Lock (GOVERNANCE, 30 days), SHA-256, KMS Sign (RSASSA_PKCS1_V1_5_SHA_256) -> case.evidence. GET /cases/{id}/verify-evidence re-hashes and calls KMS Verify.",
-      "Resource": "${EvidenceFunctionArn}",
+      "Comment": "UI-SPEC pipeline step 3: a Jinja2 template (no model) addressed by item.kind or the shop the buyer named, rendered to PDF with reportlab -> claims bucket <case_id>.pdf. It cites the evidence sealed in the previous state. Never raises: a failure is {degraded, error} and the chain goes on to VerifyEvidence.",
+      "Resource": "${ClaimFunctionArn}",
       "Parameters": {
         "case_id.$": "$.notify.case_id",
+        "item_id.$": "$.item_id",
         "run.$": "$.run"
       },
-      "ResultPath": "$.evidence",
+      "ResultPath": "$.write_letter",
       "Retry": [
         {
           "ErrorEquals": [
@@ -408,7 +409,7 @@
           "BackoffRate": 2
         }
       ],
-      "Next": "Done",
+      "Next": "VerifyEvidence",
       "Catch": [
         {
           "ErrorEquals": [
@@ -418,6 +419,38 @@
           "Next": "Failed"
         }
       ],
+      "TimeoutSeconds": 150
+    },
+    "VerifyEvidence": {
+      "Type": "Task",
+      "Comment": "UI-SPEC pipeline step 4: read the locked snapshot back by version id, hash it again and ask KMS Verify. On success the case is 'verified' -- which is what the certificate and the seal on /case show. The tamper test is a separate read-only endpoint.",
+      "Resource": "${EvidenceFunctionArn}",
+      "Parameters": {
+        "action": "verify",
+        "case_id.$": "$.notify.case_id",
+        "run.$": "$.run"
+      },
+      "ResultPath": "$.verify",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Failed"
+        }
+      ],
+      "Next": "Done",
       "TimeoutSeconds": 150
     },
     "Done": {

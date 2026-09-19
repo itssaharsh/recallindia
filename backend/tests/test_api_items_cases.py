@@ -62,6 +62,8 @@ def _event(method: str, path: str, qs: dict | None = None, body=None, **kw) -> d
         "rawPath": path,
         "queryStringParameters": {k: str(v) for k, v in (qs or {}).items()},
         "requestContext": {"http": {"method": method, "path": path}},
+        # items and cases are scoped by household; "demo" is read-only (P08-P09 §1d)
+        "headers": {"x-household": "hh_test2345"},
         "body": json.dumps(body) if isinstance(body, (dict, list)) else body,
         **kw,
     }

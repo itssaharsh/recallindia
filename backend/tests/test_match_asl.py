@@ -157,13 +157,20 @@ def test_pipeline_order_and_result_paths(asl) -> None:
     assert s["Decide"]["Next"] == "Notify"
     assert s["Notify"]["Type"] == "Task" and s["Notify"]["ResultPath"] == "$.notify"
     assert s["Notify"]["Next"] == "IsAlert"
-    assert s["WaitForApproval"]["Type"] == "Task" and s["WaitForApproval"]["Next"] == "Claim"
+    # after the human gate: seal the evidence, then write the letter that cites it, then verify
+    assert s["WaitForApproval"]["Type"] == "Task"
+    assert s["WaitForApproval"]["Next"] == "SealEvidence"
+    assert s["SealEvidence"]["ResultPath"] == "$.seal_evidence"
+    assert s["SealEvidence"]["Next"] == "WriteLetter"
+    assert s["WriteLetter"]["ResultPath"] == "$.write_letter"
+    assert s["WriteLetter"]["Next"] == "VerifyEvidence"
+    assert s["VerifyEvidence"]["ResultPath"] == "$.verify"
+    assert s["VerifyEvidence"]["Next"] == "Done"
+    assert s["SealEvidence"]["Parameters"]["action"] == "seal"
+    assert s["VerifyEvidence"]["Parameters"]["action"] == "verify"
     assert s["WaitForApproval"]["ResultPath"] == "$.approval"
-    assert s["Claim"]["Type"] == "Task" and s["Claim"]["Next"] == "Evidence"
-    assert s["Claim"]["ResultPath"] == "$.claim"
-    assert s["Evidence"]["Type"] == "Task" and s["Evidence"]["Next"] == "Done"
-    assert s["Evidence"]["ResultPath"] == "$.evidence"
-    for name in ("Claim", "Evidence"):
+    for name in ("SealEvidence", "WriteLetter", "VerifyEvidence"):
+        assert s[name]["Type"] == "Task", name
         assert s[name]["Parameters"]["case_id.$"] == "$.notify.case_id", name
     assert s["Done"]["Type"] == "Succeed"
     assert s["Failed"]["Type"] == "Fail" and s["Failed"]["Error"] == "MatchPipelineFailed"
@@ -422,9 +429,14 @@ def test_decide_function_is_a_read_only_matcher_lambda(template) -> None:
 def test_cases_table_has_the_rk_ts_gsi(template) -> None:
     props = template["Resources"]["CasesTable"]["Properties"]
     attrs = {a["AttributeName"]: a["AttributeType"] for a in props["AttributeDefinitions"]}
-    assert attrs == {"pk": "S", "rk": "S", "ts": "S"}
+    assert attrs == {"pk": "S", "rk": "S", "ts": "S", "household_id": "S"}
     assert props["KeySchema"] == [{"AttributeName": "pk", "KeyType": "HASH"}]
-    [gsi] = props["GlobalSecondaryIndexes"]
+    by_name = {g["IndexName"]: g for g in props["GlobalSecondaryIndexes"]}
+    assert set(by_name) == {"rk-ts-index", "household_id-index"}
+    assert by_name["household_id-index"]["KeySchema"] == [
+        {"AttributeName": "household_id", "KeyType": "HASH"}
+    ]
+    gsi = by_name["rk-ts-index"]
     assert gsi["IndexName"] == "rk-ts-index"
     assert gsi["KeySchema"] == [
         {"AttributeName": "rk", "KeyType": "HASH"},

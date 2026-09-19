@@ -38,6 +38,11 @@ def key_id() -> str:
     return DEMO_KEY_ID if is_demo() else str(os.environ.get("KMS_KEY_ID") or "")
 
 
+def key_alias() -> str:
+    """The signing key's alias, as the evidence certificate names it."""
+    return "alias/demo-local-hmac" if is_demo() else str(os.environ.get("KMS_KEY_ALIAS") or "")
+
+
 def sign_digest(digest: bytes) -> tuple[str, str]:
     """``(signature_b64, key_id)`` for a SHA-256 digest. Live errors propagate to the caller."""
     if is_demo():

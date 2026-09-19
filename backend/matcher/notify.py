@@ -31,7 +31,7 @@ from typing import Any
 from common import dynamo
 from common.demo_mode import is_demo
 from common.notices import now_iso
-from common.schemas import AuditEvent, Case, Event, Item, RangeCheck
+from common.schemas import DEMO_HOUSEHOLD, AuditEvent, Case, Event, Item, RangeCheck
 
 log = logging.getLogger(__name__)
 
@@ -283,10 +283,16 @@ def _record_case(*, item: dict, item_id: str, decide: dict, run: dict, now: str)
     range_check = _range_check(decide)
     verifier = decide.get("verifier") if decide.get("verifier") in VERIFIERS else None
     covers = decide.get("covers_item")
+    # decision -> the case's own status (UI-SPEC §7); an alert waits for the human next
+    status = {"alert": "matching", "hold": "needs_you", "dismiss": "near_miss"}.get(
+        decision, "matching"
+    )
     case = Case(
         case_id=case_id,
         pk=Case.make_pk(case_id),
         item_id=item_id,
+        household_id=str(item.get("household_id") or DEMO_HOUSEHOLD),
+        status=status,
         notice_id=notice_pk or "",
         decision=decision,  # type: ignore[arg-type]
         reason=reason,

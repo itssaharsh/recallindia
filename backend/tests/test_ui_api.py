@@ -16,7 +16,11 @@ from pollers import cdsco_portal, nhtsa
 
 
 def _call(method: str, path: str, body: object = None) -> tuple[int, dict]:
-    event = {"requestContext": {"http": {"method": method}}, "rawPath": path}
+    event = {
+        "requestContext": {"http": {"method": method}},
+        "rawPath": path,
+        "headers": {"x-household": "hh_test2345"},
+    }
     if body is not None:
         event["body"] = json.dumps(body)
     resp = app.handler(event, None)

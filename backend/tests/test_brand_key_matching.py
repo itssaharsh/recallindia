@@ -34,7 +34,11 @@ def portal(monkeypatch: pytest.MonkeyPatch):
 
 
 def _call(method: str, path: str, body: dict | None = None) -> dict:
-    event = {"requestContext": {"http": {"method": method}}, "rawPath": path}
+    event = {
+        "requestContext": {"http": {"method": method}},
+        "rawPath": path,
+        "headers": {"x-household": "hh_test2345"},
+    }
     if body is not None:
         event["body"] = json.dumps(body)
     return json.loads(app.handler(event, None)["body"])

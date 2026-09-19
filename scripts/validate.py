@@ -65,9 +65,14 @@ class MockApi:
         from api import app
 
         self._handler = app.handler
+        self.household = ""
 
     def call(self, method: str, path: str) -> tuple[int, dict]:
-        event = {"requestContext": {"http": {"method": method}}, "rawPath": path}
+        event = {
+            "requestContext": {"http": {"method": method}},
+            "rawPath": path,
+            "headers": {"x-household": self.household} if self.household else {},
+        }
         resp = self._handler(event, None)
         return resp["statusCode"], json.loads(resp["body"] or "{}")
 
@@ -81,11 +86,14 @@ class LiveApi:
 
         self._base = api_url.rstrip("/")
         self._sfn = boto3.client("stepfunctions")
+        self.household = ""
 
     def call(self, method: str, path: str) -> tuple[int, dict]:
         req = urllib.request.Request(
             self._base + path, method=method, data=b"" if method == "POST" else None
         )
+        if self.household:
+            req.add_header("x-household", self.household)
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 return resp.status, json.loads(resp.read() or b"{}")
@@ -115,12 +123,50 @@ class LiveApi:
 # --- run + assert ------------------------------------------------------------------
 
 
-def check_all(api, timeout: int) -> list[dict]:
+def item_key(row: dict) -> tuple:
+    """What makes a copied item the same thing as its demo-world entry."""
+    return (
+        str(row.get("kind") or ""),
+        str(row.get("name") or "").lower(),
+        str(row.get("batch") or row.get("serial") or row.get("reg_no") or row.get("year") or ""),
+    )
+
+
+def own_household(api) -> dict[str, str]:
+    """Make a copy of the demo wall and map each demo item to its copy's id.
+
+    The demo household is read-only, so a validation run gets its own copy (UI-SPEC §7): the
+    same 15 things, new ids.
+    """
+    status, made = api.call("POST", "/households")
+    if status not in (200, 201) or not made.get("household_id"):
+        raise SystemExit(f"validate: POST /households -> HTTP {status}: {made.get('error')}")
+    api.household = str(made["household_id"])
+    status, listing = api.call("GET", "/items")
+    if status != 200:
+        raise SystemExit(f"validate: GET /items -> HTTP {status}")
+    rows = listing.get("items", [])
+    by_source = {str(r["copied_from"]): str(r["item_id"]) for r in rows if r.get("copied_from")}
+    by_fields = {item_key(r): str(r["item_id"]) for r in rows}
+    copies: dict[str, str] = {}
+    for entry in demo_world.DEMO_ITEMS:
+        found = by_source.get(entry["item_id"]) or by_fields.get(item_key(entry))
+        if found:
+            copies[entry["item_id"]] = found
+    missing = [e["item_id"] for e in demo_world.DEMO_ITEMS if e["item_id"] not in copies]
+    if missing:
+        raise SystemExit(f"validate: the copy is missing {missing}")
+    print(f"validate: own household {api.household} with {len(copies)} copied things")
+    return copies
+
+
+def check_all(api, timeout: int, copies: dict[str, str] | None = None) -> list[dict]:
     rows: list[dict] = []
     for entry in demo_world.DEMO_ITEMS:
-        item_id = entry["item_id"]
+        item_id = (copies or {}).get(entry["item_id"], entry["item_id"])
         quoted = urllib.parse.quote(item_id, safe="")
-        row = {"item_id": item_id, "name": entry["name"], "expected": entry["expected"]}
+        row = {"item_id": entry["item_id"], "copy_id": item_id, "name": entry["name"],
+               "expected": entry["expected"]}  # fmt: skip
         status, started = api.call("POST", f"/items/{quoted}/check")
         if status not in (200, 202):
             row.update(decision="ERROR", detail=f"check -> HTTP {status}: {started.get('error')}")
@@ -231,7 +277,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"validate: mode={mode}; checking {len(demo_world.DEMO_ITEMS)} items sequentially")
 
     t0 = time.monotonic()
-    rows = check_all(api, args.timeout)
+    copies = own_household(api)
+    rows = check_all(api, args.timeout, copies)
     print_table(rows)
     problems = assess(rows)
     counts = {

@@ -19,6 +19,10 @@ RAW_EXCERPT_MAX = 4096
 UNKNOWN_BRAND = "unknown"
 
 Adapter = Literal["cdsco_portal", "cdsco_pdf"]
+# No accounts: one header (``X-Household``) scopes items and cases. Everything unlabelled,
+# and every read without the header, belongs to the read-only demo household.
+DEMO_HOUSEHOLD = "demo"
+
 ItemKind = Literal["medicine", "vehicle", "appliance", "other"]
 ItemStatus = Literal["clear", "hold", "alert"]
 # A case is only ever written for a candidate notice: alert / hold / dismiss.
@@ -122,10 +126,15 @@ class Notice(_Strict):
 
 
 class Item(_Strict):
-    """Something the user owns (``items`` table); pk ``user#item_id``."""
+    """Something the user owns (``items`` table); pk ``user#item_id``.
+
+    ``household_id`` is the only scoping in this app (no accounts): it comes from the
+    ``X-Household`` header, defaults to ``demo`` and is the GSI key the wall is read by.
+    """
 
     pk: str
     item_id: str
+    household_id: str = DEMO_HOUSEHOLD
     kind: ItemKind
     name: str
     brand: str | None = None
@@ -137,6 +146,10 @@ class Item(_Strict):
     year: int | None = None
     purchase_date: str | None = None
     photo_s3_key: str | None = None
+    # who sold it, as the buyer would write it on a letter ("Apollo Pharmacy, Koramangala")
+    bought_from: str | None = None
+    # set when this item came from "Make my own copy": the demo item it was copied from
+    copied_from: str | None = None
     mfg_date: str | None = None  # "2025-10" as read off the strip (P06 Scan strip)
     exp_date: str | None = None
     status: ItemStatus = "clear"
@@ -175,6 +188,8 @@ class Evidence(_Strict):
 
     sha256: str
     kms_key_id: str
+    # the human-readable name of the same key, for the certificate
+    key_alias: str | None = None
     signature_b64: str
     signing_algorithm: str = "RSASSA_PKCS1_V1_5_SHA_256"
     object_lock_mode: str = "GOVERNANCE"
@@ -189,6 +204,25 @@ class Evidence(_Strict):
 
 
 ApprovalStatus = Literal["waiting", "approved", "rejected", "expired"]
+# The case's own state machine (UI-SPEC §7). "matching" is the window between the check
+# starting and Notify writing the outcome; the rest follow the approval gate. "invalid" is
+# never stored: a tamper test is a client-side question about a stored signature.
+CaseStatus = Literal[
+    "matching",
+    "waiting_approval",
+    "approving",
+    "sealing",
+    "writing_letter",
+    "verifying",
+    "verified",
+    "rejected",
+    "expired",
+    "error",
+    "needs_you",
+    "near_miss",
+    "clear",
+]
+PIPELINE_STEPS = ("approve", "seal_evidence", "write_letter", "verify")
 
 
 class Approval(_Strict):
@@ -207,6 +241,23 @@ class Approval(_Strict):
     expired_at: str | None = None
     approver: str = "demo-user"
     reason: str | None = None
+
+
+class StepRecord(_Strict):
+    """One step of the post-approval pipeline, as the UI draws it (C-17)."""
+
+    started_at: str | None = None
+    finished_at: str | None = None
+    error: str | None = None
+
+
+class CaseSteps(_Strict):
+    """Approve -> seal evidence -> write letter -> verify signature (the letter cites the seal)."""
+
+    approve: StepRecord = Field(default_factory=StepRecord)
+    seal_evidence: StepRecord = Field(default_factory=StepRecord)
+    write_letter: StepRecord = Field(default_factory=StepRecord)
+    verify: StepRecord = Field(default_factory=StepRecord)
 
 
 class AuditEvent(_Strict):
@@ -229,8 +280,13 @@ class Case(_Strict):
     case_id: str
     pk: str
     item_id: str
+    household_id: str = DEMO_HOUSEHOLD
     notice_id: str
     decision: Decision
+    # the case's own state (UI-SPEC §7); the decision says what was found, the status says
+    # where the case is in the approval pipeline
+    status: CaseStatus = "matching"
+    steps: CaseSteps = Field(default_factory=CaseSteps)
     reason: str
     quoted_sentence: str = ""
     range_check: RangeCheck | None = None

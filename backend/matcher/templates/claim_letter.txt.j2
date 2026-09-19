@@ -1,7 +1,7 @@
 {{ today }}
 
-To: {{ addressee_role }}
-{{ addressee_place }}
+To: {% if bought_from %}{{ bought_from }}{% else %}{{ addressee_role }}
+{{ addressee_place }}{% endif %}
 
 Subject: {{ subject }}
 
@@ -18,10 +18,14 @@ This {{ thing }} is covered by {{ notice_ref }}, published on {{ published }} by
 
 I bought it on {{ purchase_date }}, {{ days_after }} day{{ "s" if days_after != 1 }} after the notice was published on {{ published }}. Selling goods after they have been publicly identified as {% if is_nsq %}not of standard quality{% else %}subject to a safety recall{% endif %} may amount to a deficiency in service or an unfair trade practice under the Consumer Protection Act, 2019.
 {%- endif %}
+{% if by_make_model_year %}
+
+{{ source_short }} lists this recall for {{ vehicle_span }}. My {{ thing }} matches by make, model and model year; please confirm it against my VIN before the work.
+{%- endif %}
 
 I request {{ remedy }}. Please reply in writing within 15 days of receiving this letter.
 
-A copy of the notice as published is kept by RecallIndia under reference {{ case_id }}, in write-once storage and digitally signed, and can be produced on request.
+A copy of the notice as published is kept by RecallIndia under reference {{ case_id }}{% if evidence_sha %}: SHA-256 {{ evidence_sha }}, signed with an AWS KMS key on {{ evidence_signed_at }} and held in write-once storage until {{ evidence_locked_until }}{% endif %}. It can be produced on request.
 
 Yours faithfully,
 

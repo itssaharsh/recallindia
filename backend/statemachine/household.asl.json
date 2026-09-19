@@ -1,0 +1,61 @@
+{
+  "Comment": "Check every item of a new household copy. A Map with MaxConcurrency 3 starts the MatchStateMachine three at a time instead of fifteen at once, so a visitor clicking 'Make my own copy' cannot start a Textract stampede. The executions are started, not awaited (startExecution, not .sync): an alert pauses at WaitForApproval for up to 24 h, and this run must not wait for a human.",
+  "StartAt": "CheckEach",
+  "States": {
+    "CheckEach": {
+      "Type": "Map",
+      "ItemsPath": "$.items",
+      "MaxConcurrency": 3,
+      "ItemProcessor": {
+        "ProcessorConfig": { "Mode": "INLINE" },
+        "StartAt": "StartCheck",
+        "States": {
+          "StartCheck": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::states:startExecution",
+            "Parameters": {
+              "StateMachineArn": "${MatchStateMachineArn}",
+              "Input": {
+                "item_id.$": "$.item_id",
+                "household_id.$": "$.household_id"
+              }
+            },
+            "ResultPath": "$.started",
+            "Retry": [
+              {
+                "ErrorEquals": [
+                  "StepFunctions.ExecutionLimitExceeded",
+                  "StepFunctions.ThrottlingException",
+                  "States.Timeout"
+                ],
+                "IntervalSeconds": 2,
+                "MaxAttempts": 4,
+                "BackoffRate": 2
+              }
+            ],
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "ResultPath": "$.error",
+                "Next": "Skipped"
+              }
+            ],
+            "Next": "Stagger"
+          },
+          "Stagger": {
+            "Type": "Wait",
+            "Comment": "Hold the slot for two seconds so the three in flight stay three: the checks themselves run in their own executions.",
+            "Seconds": 2,
+            "End": true
+          },
+          "Skipped": {
+            "Type": "Pass",
+            "Comment": "One item failed to start (throttling past the retries). The rest of the copy still gets checked; the card shows its own error state.",
+            "End": true
+          }
+        }
+      },
+      "End": true
+    }
+  }
+}

@@ -150,6 +150,13 @@ def main(argv: list[str] | None = None) -> int:
 
     written = seed(args.mock)
     alert = written[0]
+    # the demo household's finished case lives at a fixed id: /case/?id=case_demo_ft5427
+    import seed_demo_case
+
+    case_args = ["--mock"] if args.mock else ["--live", "--profile", args.profile]
+    seeded_case = seed_demo_case.main(case_args)
+    if seeded_case != 0:
+        print("seed_demo: the demo case could not be sealed (see above)", file=sys.stderr)
     print(
         f"seed_demo: alert notice {alert['notice_pk']} published {alert['published_at']} -> "
         f"purchase_date {alert['purchase_date']} (+{demo_world.PURCHASE_OFFSET_DAYS} days)\n"

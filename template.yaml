@@ -80,6 +80,7 @@ Globals:
         EVIDENCE_BUCKET: !Ref EvidenceBucket
         CLAIMS_BUCKET: !Ref ClaimsBucket
         KMS_KEY_ID: !Ref SigningKey
+        KMS_KEY_ALIAS: !Sub alias/recallindia-signing
         BEDROCK_REGION: !Ref BedrockRegion
         BEDROCK_FALLBACK_REGION: !Ref BedrockFallbackRegion
         BEDROCK_ENABLED: !Ref BedrockEnabled
@@ -157,9 +158,20 @@ Resources:
       AttributeDefinitions:
         - AttributeName: pk
           AttributeType: S
+        - AttributeName: household_id
+          AttributeType: S
       KeySchema:
         - AttributeName: pk
           KeyType: HASH
+      GlobalSecondaryIndexes:
+        # The wall is one household's items: one partition, one query, never a scan. The index
+        # is sparse, so a row without household_id is invisible here (scripts/backfill_household.py).
+        - IndexName: household_id-index
+          KeySchema:
+            - AttributeName: household_id
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
 
   CasesTable:
     DeletionPolicy: Delete
@@ -175,10 +187,19 @@ Resources:
           AttributeType: S
         - AttributeName: ts
           AttributeType: S
+        - AttributeName: household_id
+          AttributeType: S
       KeySchema:
         - AttributeName: pk
           KeyType: HASH
       GlobalSecondaryIndexes:
+        # GET /cases for one household (the wall's statuses), same sparse-index rule as items
+        - IndexName: household_id-index
+          KeySchema:
+            - AttributeName: household_id
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
         # Case rows (rk=case, pk=case_id) and in-app Event rows (rk=event, pk=events#<id>)
         # share this table; GET /events and the /mine timeline list each kind newest-first
         # by ts through common.dynamo.query_rk.
@@ -303,8 +324,9 @@ Resources:
     Properties:
       CorsConfiguration:
         AllowOrigins: !Ref AppOrigins
-        AllowMethods: [GET, POST, OPTIONS]
-        AllowHeaders: [content-type]
+        AllowMethods: [GET, POST, PATCH, OPTIONS]
+        # x-household scopes items, cases and approvals (there is no auth)
+        AllowHeaders: [content-type, x-household]
         MaxAge: 600
 
   ApiFunction:
@@ -317,6 +339,7 @@ Resources:
         Variables:
           MATCH_STATE_MACHINE_ARN: !Ref MatchStateMachine
           INGEST_STATE_MACHINE_ARN: !Ref IngestStateMachine
+          HOUSEHOLD_STATE_MACHINE_ARN: !Ref HouseholdStateMachine
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref NoticesTable
@@ -337,6 +360,7 @@ Resources:
                 - states:StartExecution
               Resource:
                 - !Ref MatchStateMachine
+                - !Ref HouseholdStateMachine
                 - !Ref IngestStateMachine
             - Sid: TaskTokenAndStatus
               Effect: Allow
@@ -824,6 +848,19 @@ Resources:
             FunctionName: !Ref ClaimFunction
         - LambdaInvokePolicy:
             FunctionName: !Ref EvidenceFunction
+
+  # "Make my own copy": check the 15 copied items three at a time (Map, MaxConcurrency 3)
+  HouseholdStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: !Sub recallindia-household-${AWS::AccountId}
+      Type: STANDARD
+      DefinitionUri: backend/statemachine/household.asl.json
+      DefinitionSubstitutions:
+        MatchStateMachineArn: !Ref MatchStateMachine
+      Policies:
+        - StepFunctionsExecutionPolicy:
+            StateMachineName: !GetAtt MatchStateMachine.Name
 
   IngestStateMachine:
     Type: AWS::Serverless::StateMachine

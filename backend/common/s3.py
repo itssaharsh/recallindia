@@ -75,7 +75,8 @@ def put_locked(
         path.write_bytes(data)
         sidecar = path.with_name(path.name + ".retention.json")
         sidecar.write_text(
-            json.dumps({"Mode": mode, "RetainUntilDate": until.isoformat()}), encoding="utf-8"
+            json.dumps({"Mode": mode, "RetainUntilDate": until.strftime("%Y-%m-%dT%H:%M:%SZ")}),
+            encoding="utf-8",
         )
         return None
     resp = _client().put_object(
@@ -90,12 +91,49 @@ def put_locked(
     return resp.get("VersionId")
 
 
-def presigned_url(kind: BucketKind, key: str, expires: int = 900) -> str:
-    """Time-limited GET URL for ``key`` (``file://<abs path>`` in demo mode)."""
+def head_lock(kind: BucketKind, key: str, version_id: str | None = None) -> dict:
+    """What S3 itself says about an object's lock: ``{mode, retain_until, version_id, bytes}``.
+
+    The retention on the certificate is read back from S3 rather than computed here, so it is
+    the bucket's answer (the default rule may hold it longer than the PUT asked for).
+    """
+    if is_demo():
+        path = _local_path(kind, key)
+        sidecar = path.with_name(path.name + ".retention.json")
+        held = json.loads(sidecar.read_text()) if sidecar.exists() else {}
+        return {
+            "mode": held.get("Mode"),
+            "retain_until": held.get("RetainUntilDate"),
+            "version_id": version_id,
+            "bytes": path.stat().st_size if path.exists() else 0,
+        }
+    kwargs: dict[str, Any] = {"Bucket": bucket_name(kind), "Key": key}
+    if version_id:
+        kwargs["VersionId"] = version_id
+    resp = _client().head_object(**kwargs)
+    until = resp.get("ObjectLockRetainUntilDate")
+    return {
+        "mode": resp.get("ObjectLockMode"),
+        "retain_until": until.astimezone(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ") if until else None,
+        "version_id": resp.get("VersionId") or version_id,
+        "bytes": int(resp.get("ContentLength") or 0),
+    }
+
+
+def presigned_url(
+    kind: BucketKind, key: str, expires: int = 900, params: dict | None = None
+) -> str:
+    """Time-limited GET URL for ``key`` (``file://<abs path>`` in demo mode).
+
+    ``params`` adds response overrides, e.g. ``ResponseContentDisposition=attachment`` for the
+    claim letter's Download button.
+    """
     if is_demo():
         return _local_path(kind, key).resolve().as_uri()
     return _client().generate_presigned_url(
-        "get_object", Params={"Bucket": bucket_name(kind), "Key": key}, ExpiresIn=expires
+        "get_object",
+        Params={"Bucket": bucket_name(kind), "Key": key, **(params or {})},
+        ExpiresIn=expires,
     )
 
 

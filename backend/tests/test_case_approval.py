@@ -23,8 +23,19 @@ from pollers import cdsco_portal
 REAL_TOKEN = "AQCEAAAAKgAAAAMAAAAAAAAAA-real-task-token"  # pragma: allowlist secret
 
 
-def _call(method: str, path: str, body: object = None, qs: dict | None = None) -> tuple[int, dict]:
+HOUSEHOLD = "hh_test2345"  # the tests act as one household; "demo" is read-only
+
+
+def _call(
+    method: str,
+    path: str,
+    body: object = None,
+    qs: dict | None = None,
+    household: str | None = HOUSEHOLD,
+) -> tuple[int, dict]:
     event = {"requestContext": {"http": {"method": method}}, "rawPath": path}
+    if household:
+        event["headers"] = {"x-household": household}
     if body is not None:
         event["body"] = json.dumps(body)
     if qs:
@@ -133,16 +144,19 @@ def test_an_events_row_is_not_a_case(live_gate, action):
 @pytest.mark.parametrize("action", ["approve", "reject"])
 def test_a_dismissed_case_is_409(live_gate, world, action):
     status, body = _call("POST", f"/cases/{world['dismiss']}/{action}")
-    assert status == 409 and "dismiss" in body["error"]
+    assert status == 409 and "not waiting for approval" in body["error"]
+    assert body["status"] == "near_miss"
     assert live_gate.calls == []
 
 
 def test_a_hold_case_is_409(live_gate, world):
     case = dynamo.get("cases", world["dismiss"])
     case["decision"] = "hold"
+    case["status"] = "needs_you"
     dynamo.put("cases", case)
     status, body = _call("POST", f"/cases/{world['dismiss']}/approve")
-    assert status == 409 and "hold" in body["error"] and live_gate.calls == []
+    assert status == 409 and "not waiting for approval" in body["error"]
+    assert body["status"] == "needs_you" and live_gate.calls == []
 
 
 def test_an_alert_that_is_not_waiting_yet_is_409(live_gate, world):
@@ -150,7 +164,8 @@ def test_an_alert_that_is_not_waiting_yet_is_409(live_gate, world):
     del case["approval"]
     dynamo.put("cases", case)
     status, body = _call("POST", f"/cases/{world['alert']}/approve")
-    assert status == 409 and body["approval"] is None and live_gate.calls == []
+    assert status == 409 and "not waiting for approval" in body["error"]
+    assert live_gate.calls == []  # no token on the case: nothing to spend
 
 
 def test_approve_sends_task_success_once_and_the_second_call_is_409(live_gate, world):
@@ -159,14 +174,14 @@ def test_approve_sends_task_success_once_and_the_second_call_is_409(live_gate, w
     assert body["approval"]["status"] == "approved" and "task_token" not in body["approval"]
     [(kind, token, output)] = live_gate.calls
     assert (kind, token) == ("success", REAL_TOKEN)
-    assert output["approved"] is True and output["approver"] == "demo-user"
+    assert output["approved"] is True and output["approver"] == f"household:{HOUSEHOLD}"
     stored = dynamo.get("cases", world["alert"])
     assert "task_token" not in stored["approval"] and stored["approval"]["approved_at"]
     assert [a["event"] for a in stored["audit"]].count("approval.approved") == 1
     # single use: again, or the opposite answer, is refused before Step Functions
     for action in ("approve", "reject"):
         status, body = _call("POST", f"/cases/{world['alert']}/{action}")
-        assert status == 409 and "already approved" in body["error"]
+        assert status == 409 and "not waiting for approval" in body["error"]
     assert len(live_gate.calls) == 1
 
 
@@ -174,7 +189,8 @@ def test_reject_sends_task_failure_and_the_case_is_rejected(live_gate, world):
     status, body = _call("POST", f"/cases/{world['alert']}/reject")
     assert status == 200 and body["approval"]["status"] == "rejected"
     [(kind, token, error, cause)] = live_gate.calls
-    assert (kind, token, error) == ("failure", REAL_TOKEN, "Rejected") and "demo-user" in cause
+    assert (kind, token, error) == ("failure", REAL_TOKEN, "Rejected")
+    assert "no evidence, no letter" in cause
     status, _ = _call("POST", f"/cases/{world['alert']}/approve")
     assert status == 409 and len(live_gate.calls) == 1
 
@@ -195,7 +211,8 @@ def test_two_racing_answers_one_wins(live_gate, world, monkeypatch):
 
     monkeypatch.setattr(gate, "end_wait", lost)
     status, body = _call("POST", f"/cases/{world['alert']}/approve")
-    assert status == 409 and "a moment ago" in body["error"] and live_gate.calls == []
+    assert status == 409 and "not waiting for approval" in body["error"]
+    assert live_gate.calls == []
 
 
 def test_a_dead_token_on_approve_expires_the_case(monkeypatch, world):
@@ -244,16 +261,18 @@ def test_request_refuses_a_non_alert_or_a_missing_token(world):
 def approved(world):
     status, body = _call("POST", f"/cases/{world['alert']}/approve")
     assert status == 200, body
-    assert not body["demo_chain"]["claim"]["degraded"], body
-    assert not body["demo_chain"]["evidence"]["degraded"], body
+    assert not body["demo_chain"]["write_letter"]["degraded"], body
+    assert not body["demo_chain"]["seal_evidence"]["degraded"], body
     return world
 
 
 def test_approving_drafts_the_claim_and_seals_the_evidence(approved):
     case = dynamo.get("cases", approved["alert"])
     events = [a["event"] for a in case["audit"]]
-    assert events.index("approval.approved") < events.index("claim.drafted")
-    assert events.index("claim.drafted") < events.index("evidence.signed")
+    # the letter cites the seal, so the seal comes first (UI-SPEC §7)
+    assert events.index("approval.approved") < events.index("evidence.signed")
+    assert events.index("evidence.signed") < events.index("claim.drafted")
+    assert events.index("claim.drafted") < events.index("evidence.verified")
     status, body = _call("GET", f"/items/{approved['alert_item']}/check-status")
     assert status == 200 and body["status"] == "SUCCEEDED"
     assert {s["name"]: s["state"] for s in body["approval_steps"]} == {
@@ -329,18 +348,13 @@ def test_evidence_is_the_portal_row_sealed_hashed_and_signed(approved, tmp_path)
     assert ev["snapshot_kind"] == "portal_row" and ev["content_type"] == "application/json"
     assert ev["object_lock_mode"] == "GOVERNANCE" and ev["kms_key_id"] == signing.DEMO_KEY_ID
     data = s3.get_bytes("evidence", ev["snapshot_s3_key"])
-    assert (
-        signing.sha256_hex(data)
-        == ev["sha256"]
-        == ev["snapshot_s3_key"].split("/")[-1][:16] + ev["sha256"][16:]
-    )
+    # the object is named by what it holds: evidence/<case>/<sha256>.bin
+    assert signing.sha256_hex(data) == ev["sha256"]
+    assert ev["snapshot_s3_key"].endswith(f"{ev['sha256']}.bin")
     snapshot = json.loads(data)
     assert "FT5427" in json.dumps(snapshot["row"]) and "filteredNsqDrugTable" in snapshot["url"]
-    retention = json.loads(
-        (
-            s3._local_path("evidence", ev["snapshot_s3_key"]).with_suffix(".json.retention.json")
-        ).read_text()
-    )
+    local = s3._local_path("evidence", ev["snapshot_s3_key"])
+    retention = json.loads(local.with_name(local.name + ".retention.json").read_text())
     assert retention["Mode"] == "GOVERNANCE"
     assert retention["RetainUntilDate"][:10] == ev["object_lock_retain_until"][:10]
     assert signing.verify_digest(bytes.fromhex(ev["sha256"]), ev["signature_b64"], ev["kms_key_id"])
@@ -350,11 +364,15 @@ def test_evidence_is_the_portal_row_sealed_hashed_and_signed(approved, tmp_path)
 def test_verify_is_valid_tamper_is_invalid_and_verify_again_is_valid(approved):
     path = f"/cases/{approved['alert']}/verify-evidence"
     status, ok = _call("GET", path)
-    assert status == 200 and ok["valid"] is True and ok["sha256"] == ok["recorded_sha256"]
+    assert status == 200 and ok["valid"] is True and ok["sha256"] == ok["recomputed_sha256"]
+    assert ok["flipped_byte_index"] is None and ok["key_alias"]
     assert ok["tampered"] is False and ok["demo_control"] is None and ok["signed_at"]
     status, bad = _call("GET", path, qs={"tamper": "1"})
     assert status == 200 and bad["valid"] is False and bad["tampered"] is True
-    assert bad["sha256"] != bad["recorded_sha256"] and "demo control" in bad["demo_control"]
+    assert bad["sha256"] != bad["recomputed_sha256"] and "demo control" in bad["demo_control"]
+    # the changed byte is named, so the UI can show what it flipped (C-19 tamper lines)
+    assert bad["flipped_byte_index"] is not None
+    assert bad["byte_after"] == bad["byte_before"] ^ 0x01
     status, again = _call("GET", path)
     assert again["valid"] is True  # nothing stored changed
 
