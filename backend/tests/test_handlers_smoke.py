@@ -68,7 +68,8 @@ def test_every_handler_returns_dict(module_name):
 def test_cdsco_fetch_portal():
     from ingest import cdsco_fetch
 
-    out = cdsco_fetch.handler({}, None)
+    # P03: the archive PDF adapter is the default; the P02 portal branch is opt-in.
+    out = cdsco_fetch.handler({"adapter": "portal"}, None)
     assert out["adapter"] == "cdsco_portal"
     assert out["month"] == "JUL-2026"
     assert out["rows_in"] == 239
