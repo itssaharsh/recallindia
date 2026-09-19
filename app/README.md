@@ -12,7 +12,8 @@ Live: https://main.d2jn22qjgettr5.amplifyapp.com. Demo data: add `?demo=1`.
 |---|---|
 | `/` | Feed: header counter (`N notices · S sources · last poll hh:mm:ss`), source chips with poller health, 40px ledger rows, "Load 50 more" (cursor), page 1 re-polled every 15 s. Clicking a row opens the notice sheet with the full notice, the source's own words on paper, and links to the source and the PDF. `?source=cdsco_nsq` deep-links a filter. |
 | `/mine/` | Item wall: an outcome line, filters, and item cards. The alert face shows the decision's first clause, a range bar and the quoted source row. The dismissed face (amber edge) shows the exact reason. The clear face shows "No match in N sources as of hh:mm". While a check runs, the card flips to a live checklist. The add sheet has three tabs: Scan strip, Paste lines, Vehicle. |
-| `/ingest/`, `/case/`, `/api/` | Designed stubs for later prompts. `/case/?id=<case>`; on Amplify, `/case/<case>` is rewritten to the same page. |
+| `/ingest/` | The PDF-to-feed dissolve (below). `?run=<id>` follows a live run, `?replay=<id>[&speed=2]` replays a stored one. |
+| `/case/`, `/api/` | Designed stubs for later prompts. `/case/?id=<case>`; on Amplify, `/case/<case>` is rewritten to the same page. |
 | anything else | The designed 404 page, served with a real 404 status. |
 
 ## Run it
@@ -47,6 +48,7 @@ src/lib/format.ts          times (viewer's local, 24h), counts (en-IN), notice c
 src/components/shell/      app state (demo flag, stats poll), rail, top bar
 src/components/feed/       feed view, rows, source filters, notice sheet
 src/components/mine/       wall, item card (flip), checklist, add sheet
+src/components/ingest/     /ingest: view, PDF stage, dissolve engine + column, checklist, recent runs
 src/components/common/     empty state, status tag, source chip, source excerpt, range bar, stubs
 src/components/ui/         shadcn (radix-nova) with the DESIGN.md radius scale and surfaces
 ```
@@ -64,6 +66,45 @@ src/components/ui/         shadcn (radix-nova) with the DESIGN.md radius scale a
   never "recalled". A clean item reads "no match in N sources as of <time>".
 - Loading states use skeletons in the row and card geometry, never spinners. Every empty state
   says what would be here, why it isn't, and the one action that changes that.
+
+## /ingest: the dissolve
+
+The actual CDSCO alert PDF is on the left, rendered by react-pdf. The pdf.js worker is copied from
+`node_modules` into `public/pdf.worker.min.js` on every build by `scripts/copy-pdf-worker.mjs`, so it
+is served from this origin as `.js`. On the right is a counter and a feed column. Above them, the
+IngestStateMachine's five steps: ○ ◐ ● with the real microcopy ("Textract reading 6 pages ·
+poll 3 · 12.4 s") and a `textract` / `pdfplumber` chip.
+
+- **Run ingest** sends `POST /ingest/run {"force": true, "month": "JUN-2025"}`, which starts live
+  Textract. The page then polls `GET /ingest/status/{id}` every 1.5 s. Once Extract has written its
+  rows, it reads `GET /ingest/runs/{id}` once: every row with its bbox and the notice it became.
+- **The dissolve.** Faint outlines appear at each row's bbox. Row by row, 45 ms apart, the row
+  lifts off the page (-8px, ×1.02, 120 ms) and springs into the next slot on the right (stiffness
+  380, damping 32, 300 ms). The flying row is a crop of the page's own pixels, and it fades into
+  the structured row. The counter ticks with each landing. Pages turn by themselves. A
+  continuation line that Normalise merged flies into the row above and does not count. Reduced
+  motion: the rows crossfade in, with no flight.
+- **Replay** (`?replay=<id>`) plays a stored run with its real step timings from the execution
+  history and its real Textract poll times. Runs from before the poll history existed get poll
+  times rebuilt from the backoff schedule, and the API marks them `estimated`. `?demo=1` replays the
+  recorded June 2025 run (`ingest-20260919084944-ab53`) with the PDF served from `/fixtures`, so
+  no API is involved.
+
+**Why it is built the way it is.** The rule is 50+ fps with Chrome's CPU throttled 4×. The first
+version averaged 30 fps; tracing found the causes and these fixed them:
+- Each flight carries a crop of a pre-decoded page image, not its own `<canvas>`. Canvases became
+  texture layers that were uploaded at every commit.
+- Lift and flight are one animation on one element, eased at the effect level. A `linear()` easing
+  on an individual keyframe did not run on the compositor.
+- The checklist, stage, column and flight layer each get their own compositor layer (`.ingest-layer`).
+- Rows land by direct DOM writes while the dissolve runs; React renders the full list once, at the end.
+- Turning the page is a style write; the react-pdf page tree is memoized.
+- Outlines have no CSS transitions. Their `transition*` events were going through React's root
+  listener about 1,200 times per dissolve.
+- Geometry is measured once per dissolve.
+
+Measured on the production build (the same `app/out` that was deployed), 30 s recording at 4× CPU:
+the dissolve averages 54–55 fps, and its worst second is 50–51 fps.
 
 ## The live checklist
 

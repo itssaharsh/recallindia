@@ -132,3 +132,36 @@ P06 (the app) is live on **Amplify Hosting**: app `recallindia` (`d2jn22qjgettr5
 After the checks the wall was reset to the seeded 15 (`make seed-live && make validate-live` → PASS: 2 alert, 1 dismiss, 12 clear).
 
 Still open: an SES verified identity for `NOTIFY_EMAIL`. `EnableSchedules=false` is set in `samconfig.toml`, so the pollers run only when invoked (`make poll-live`); the header's "last poll" shows the last manual run.
+
+## Update 2026-09-19 (4)
+
+**Schedules on.** `EnableSchedules=true` was set in `samconfig.toml` and deployed at 18:23:59Z. The
+first scheduled runs followed within a minute and wrote their `meta#` rows:
+- `cdsco_portal`: 18:24:32Z, 239 rows re-pulled, all unchanged.
+- `cpsc`: 18:24:36Z, 57 fetched.
+- nhtsa / openfda: 18:24:50Z / 18:24:39Z.
+
+CloudWatch `AWS/Scheduler InvocationAttemptCount` was 4 in the 18:15 window (one per schedule) and
+has been 3 every 15 minutes since (cpsc, nhtsa, openfda), with no `TargetErrorCount`. The CDSCO
+portal poll is daily: next run around 18:24Z.
+
+**`/ingest` (P07) live.** Run `ingest-20260919192223-3c5a`, started with "Run ingest" on the
+Amplify app, went through live Textract:
+
+| Step | Result |
+|---|---|
+| Fetch | 3.2 s |
+| Extract | 17.2 s; 4 Textract polls, now recorded with their times |
+| Normalise | 55 rows · 0 new · 55 unchanged |
+| Diff | 0 new since the last run |
+| Publish | done; 27.1 s end to end |
+
+The dissolve landed 55 rows, equal to `notices_out`; 2 continuation lines merged. The banner read
+"55 notices · Textract · CDSCO NSQ June 2025 · 0 new since last run". Replaying that run
+(`/ingest/?replay=ingest-20260919192223-3c5a`) plays the same steps and ends on the same banner.
+`?demo=1` replays `ingest-20260919084944-ab53` with every API request blocked.
+
+Perf gate: Chrome with 4× CPU throttling, a 30 s recording that includes the whole dissolve. The
+dissolve averages 54.4–55.5 fps over two runs, and its worst second is 50–51 fps. The first 4 s
+of the recording (pdf.js rasterising the 6 pages before the run starts) is below that.
+

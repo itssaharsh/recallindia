@@ -37,6 +37,9 @@ make             # lists every target
 
 - **Live app**: https://main.d2jn22qjgettr5.amplifyapp.com (Amplify Hosting, static export;
   `?demo=1` for recorded data). **API**: https://ilbmeuwrt7.execute-api.ap-south-1.amazonaws.com.
+  The PDF-to-feed dissolve is at `/ingest/`; [docs/media/ingest.mp4](docs/media/ingest.mp4) is a 20 s capture.
+- **Polls are scheduled** (`EnableSchedules=true` since 2026-09-19): EventBridge Scheduler runs
+  cpsc / nhtsa / openfda every 15 minutes and the CDSCO portal daily.
 - **No LLM in the decision path (by design; Bedrock quotas held at 0 on this account, increase
   denied — model path implemented behind a flag).** `BEDROCK_ENABLED` defaults to `false`; the
   verifier, normaliser and (later) claim letter are deterministic Python / templates.
@@ -272,6 +275,8 @@ demo mode and the design rules are in [app/README.md](app/README.md); the screen
 | `POST /items/ocr` | Runs Textract `DetectDocumentText` on that upload. When the full image yields no batch, it crops the right, left, bottom and top edge bands and reads them too, because the batch stamp is often printed vertically along one edge. Deterministic rules then read batch / Mfg / Exp / maker / product into a form the user confirms. Nothing is saved. |
 | `POST /items/normalise` | One product per pasted line: Comprehend `BatchDetectEntities` spans plus rules give brand / product / batch / vehicle make-year-registration, with a confidence. A row under 0.8 needs a tap. Nothing is saved; the app posts the confirmed rows to `POST /items`. |
 | `GET /items/{id}/check-status` | The five match steps as `pending` / `running` / `done` / `failed` / `skipped`, read from the execution history. It drives the card's live checklist. |
+| `GET /ingest/runs` | The last 10 IngestStateMachine runs (Step Functions `ListExecutions`, no table scan): month, method, rows in, notices out, new, started, duration. |
+| `GET /ingest/runs/{id}` | One run as `/ingest` replays it: the step timings in milliseconds from the execution history; the Textract poll cadence (exact since 2026-09-19, rebuilt from the backoff schedule and marked `estimated` for older runs); every extracted row with its bbox and the notice it became, from the same deterministic mapping Normalise uses. A continuation line merged into the row above carries `merged_into`. Rows come from the run's own copy, `cdsco/runs/<run_id>.rows.json`, so a later run of the same PDF cannot change an earlier run's replay. |
 
 JSON responses of 1 KB or more are gzipped when the client accepts it; a feed page drops from
 116 KB to about 26 KB.

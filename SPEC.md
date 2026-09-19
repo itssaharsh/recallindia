@@ -51,6 +51,7 @@ EventBridge daily → `cdsco_fetch` Lambda:
 Routes: `/` feed · `/ingest` hero · `/mine` item wall · `/case/[id]` · `/api` docs (light theme) · 404. The app is a static export (`output: "export"`, client-side fetch), so `/case/[id]` is one `/case/` page that reads `?id=`; an Amplify rewrite serves `/case/<id>` from it.
 Public API: `GET /v1/notices?source=&since=&q=` · `GET /v1/notices/{id}` · `GET /v1/diff?date=`.
 App API: `POST /items` (paste lines | strip photo → Textract batch OCR | vehicle reg) · `POST /items/{id}/check` (starts state machine) · `GET /cases/{id}` · `POST /cases/{id}/approve|reject` · `GET /cases/{id}/verify-evidence` · `POST /ingest/run` (demo trigger).
+P07 additions: `GET /ingest/runs` (last 10 runs, from ListExecutions) · `GET /ingest/runs/{id}` (a run for replay: ms step timings, Textract poll cadence, rows with the notice each became); Extract keeps `textract.history` (every poll with its time) and a per-run rows copy `cdsco/runs/<run_id>.rows.json`.
 P06 additions: `GET /v1/stats` (per-source counts + poller health for the header and pills) · `POST /uploads` (presigned PUT, `raw/uploads/<uuid>.jpg`) · `POST /items/ocr {key}` (Textract → prefilled form, nothing saved) · `POST /items/normalise {lines|text}` (Comprehend + rules → rows with confidence, nothing saved) · `GET /items/{id}/check-status` (the five match steps from the execution history, for the card's live checklist).
 
 ### AWS AI services actually used (`backend/common/aws_ai.py`, all verified live 2026-09-19)
