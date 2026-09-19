@@ -1,1 +1,1 @@
-# stdlib only. Shared deps ship in CommonLayer.
+pillow>=10,<12  # Scan strip: crop the photo's edge bands for Textract (api/strip_ocr.py)

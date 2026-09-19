@@ -1,0 +1,19 @@
+{
+ "input": "Pantoprazole Tablets IP Finecure Pharmaceuticals PEP5001",
+ "Entities": [
+  {
+   "Score": 0.42698943614959717,
+   "Type": "ORGANIZATION",
+   "Text": "Pantoprazole",
+   "BeginOffset": 0,
+   "EndOffset": 12
+  },
+  {
+   "Score": 0.6201847195625305,
+   "Type": "COMMERCIAL_ITEM",
+   "Text": "PEP5001",
+   "BeginOffset": 49,
+   "EndOffset": 56
+  }
+ ]
+}

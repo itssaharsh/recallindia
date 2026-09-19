@@ -58,3 +58,16 @@ def presigned_url(kind: BucketKind, key: str, expires: int = 900) -> str:
     return _client().generate_presigned_url(
         "get_object", Params={"Bucket": bucket_name(kind), "Key": key}, ExpiresIn=expires
     )
+
+
+def presigned_put_url(kind: BucketKind, key: str, content_type: str, expires: int = 300) -> str:
+    """Time-limited PUT URL a browser uploads ``key`` to directly (``Content-Type`` is signed,
+    so the upload must send exactly ``content_type``). Demo: the local ``file://`` path, which
+    a browser cannot PUT to -- demo mode reads the recorded Textract response instead."""
+    if is_demo():
+        return _local_path(kind, key).resolve().as_uri()
+    return _client().generate_presigned_url(
+        "put_object",
+        Params={"Bucket": bucket_name(kind), "Key": key, "ContentType": content_type},
+        ExpiresIn=expires,
+    )

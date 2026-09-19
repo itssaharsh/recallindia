@@ -1,0 +1,12 @@
+{
+ "input": "Havells Efficiencia Neo Ceiling Fan 1200mm",
+ "Entities": [
+  {
+   "Score": 0.9957125782966614,
+   "Type": "QUANTITY",
+   "Text": "1200mm",
+   "BeginOffset": 36,
+   "EndOffset": 42
+  }
+ ]
+}

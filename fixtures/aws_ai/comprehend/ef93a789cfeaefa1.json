@@ -1,0 +1,26 @@
+{
+ "input": "Bajaj Majesty DX-6 Dry Iron",
+ "Entities": [
+  {
+   "Score": 0.5352387428283691,
+   "Type": "ORGANIZATION",
+   "Text": "Bajaj",
+   "BeginOffset": 0,
+   "EndOffset": 5
+  },
+  {
+   "Score": 0.4447802007198334,
+   "Type": "COMMERCIAL_ITEM",
+   "Text": "Majesty",
+   "BeginOffset": 6,
+   "EndOffset": 13
+  },
+  {
+   "Score": 0.8447341322898865,
+   "Type": "COMMERCIAL_ITEM",
+   "Text": "DX-6 Dry Iron",
+   "BeginOffset": 14,
+   "EndOffset": 27
+  }
+ ]
+}

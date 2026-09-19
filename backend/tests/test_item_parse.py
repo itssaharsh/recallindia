@@ -58,15 +58,24 @@ def test_the_acceptance_line_with_comprehend() -> None:
     row = parse_paste_line(FINECURE, ORG)
     assert row["kind"] == "medicine" and row["brand"] == "Finecure Pharmaceuticals"
     assert row["batch"] == "PEP5001" and row["name"] == "Pantoprazole Tablets IP"
-    assert row["confidence"] >= 0.9 and row["needs_confirm"] is False
+    assert row["confidence"] >= 0.85 and row["needs_confirm"] is False
+    assert "agree" in row["why"][0]
 
 
-def test_the_acceptance_line_without_comprehend_asks_for_a_tap() -> None:
+def test_the_acceptance_line_without_comprehend_still_reads() -> None:
     row = parse_paste_line(FINECURE, [])
-    assert row["brand"] == "Finecure Pharmaceuticals"  # the company-word fallback
+    assert row["brand"] == "Finecure Pharmaceuticals"  # the company-name rule alone
     assert row["batch"] == "PEP5001" and row["name"] == "Pantoprazole Tablets IP"
-    assert row["needs_confirm"] is True and row["confidence"] < 0.8
-    assert any("company word" in w for w in row["why"])
+    assert row["why"][0] == "brand: company name"
+
+
+def test_a_company_name_beats_a_differing_organisation_tag() -> None:
+    """Comprehend tagged the trade name 'Dolo' as the ORGANIZATION; the maker is Micro Labs."""
+    row = parse_paste_line(
+        "Dolo 650 Micro Labs ZZ0000", [{"Type": "ORGANIZATION", "Text": "Dolo", "Score": 0.91}]
+    )
+    assert row["brand"] == "Micro Labs" and row["name"] == "Dolo 650" and row["batch"] == "ZZ0000"
+    assert row["needs_confirm"] is True and "Dolo" in row["why"][0]
 
 
 def test_labelled_batch_and_order_do_not_matter() -> None:
@@ -107,7 +116,41 @@ def test_vehicle_line() -> None:
 
 def test_nothing_recognisable_needs_confirm() -> None:
     row = parse_paste_line("thing from the market", [])
+    assert row["brand"] == "thing" and row["why"][0] == "brand guessed from the first word"
+    assert row["needs_confirm"] is True
+
+
+def test_a_medicine_with_no_brand_evidence_gets_no_brand() -> None:
+    row = parse_paste_line("Crocin Advance 500mg Tablets GSK", [])
     assert row["brand"] is None and row["needs_confirm"] is True
+
+
+# --- the six lines recorded live from Comprehend (fixtures/aws_ai/comprehend/) -------------------
+
+
+@pytest.mark.parametrize(
+    ("line", "kind", "name", "brand", "batch", "model", "tap"),
+    [
+        ("Pantoprazole Tablets IP Finecure Pharmaceuticals PEP5001", "medicine",
+         "Pantoprazole Tablets IP", "Finecure Pharmaceuticals", "PEP5001", None, False),
+        ("Paracetamol Tablets IP 650mg Forgo Pharmaceuticals FT5427", "medicine",
+         "Paracetamol Tablets IP 650mg", "Forgo Pharmaceuticals", "FT5427", None, False),
+        ("Havells Efficiencia Neo Ceiling Fan 1200mm", "appliance",
+         "Efficiencia Neo Ceiling Fan 1200mm", "Havells", None, None, True),
+        ("Bajaj Majesty DX-6 Dry Iron", "appliance",
+         "Majesty Dry Iron", "Bajaj", None, "DX-6", True),
+        ("Jeep Compass 2022 MH12AB1234", "vehicle", "Jeep Compass", "Jeep", None, "compass", False),
+        ("Dolo 650 Micro Labs ZZ0000", "other", "Dolo 650", "Micro Labs", "ZZ0000", None, True),
+    ],
+)  # fmt: skip
+def test_recorded_comprehend_lines(line, kind, name, brand, batch, model, tap) -> None:
+    from common.aws_ai import comprehend_entities
+
+    row = parse_paste_line(line, comprehend_entities(line))  # the real recorded spans
+    assert (row["kind"], row["name"], row["brand"], row["batch"], row["model"]) == (
+        kind, name, brand, batch, model,
+    )  # fmt: skip
+    assert row["needs_confirm"] is tap
 
 
 # --- strip photos ----------------------------------------------------------------------------

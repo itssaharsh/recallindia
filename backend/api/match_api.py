@@ -48,6 +48,9 @@ ITEM_STRING_FIELDS = (
     "reg_no",
     "make",
     "purchase_date",
+    "photo_s3_key",
+    "mfg_date",
+    "exp_date",
 )
 MAX_ITEMS_PER_POST = 100
 ITEMS_SCAN_LIMIT = 500

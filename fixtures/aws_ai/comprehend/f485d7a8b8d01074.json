@@ -1,0 +1,26 @@
+{
+ "input": "Paracetamol Tablets IP 650mg Forgo Pharmaceuticals FT5427",
+ "Entities": [
+  {
+   "Score": 0.9351475238800049,
+   "Type": "QUANTITY",
+   "Text": "650mg",
+   "BeginOffset": 23,
+   "EndOffset": 28
+  },
+  {
+   "Score": 0.7094830274581909,
+   "Type": "ORGANIZATION",
+   "Text": "Forgo Pharmaceuticals",
+   "BeginOffset": 29,
+   "EndOffset": 50
+  },
+  {
+   "Score": 0.4498624801635742,
+   "Type": "COMMERCIAL_ITEM",
+   "Text": "FT5427",
+   "BeginOffset": 51,
+   "EndOffset": 57
+  }
+ ]
+}

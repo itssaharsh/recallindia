@@ -210,6 +210,21 @@ def textract_detect_text(bucket: str, key: str) -> dict:
     )
 
 
+def textract_detect_text_bytes(data: bytes, *, demo_band: str) -> dict:
+    """Raw ``DetectDocumentText`` response for image bytes (a cropped edge band of the photo).
+
+    Textract reads the photo's dominant text orientation; a batch stamp printed vertically
+    along the strip's edge is the minority and gets skipped. Cropped to that edge band, the
+    stamp dominates and is read. Live: ``Document={"Bytes": data}`` (<= 5 MB). Demo: the band
+    ``demo_band`` recorded next to the full-photo response (``Edges`` in the fixture), or an
+    empty response when that band was not recorded.
+    """
+    if is_demo():
+        edges = _json_fixture(_TEXTRACT_FIXTURE).get("Edges") or {}
+        return edges.get(demo_band) or {"Blocks": []}
+    return _call("textract", _textract_client().detect_document_text, Document={"Bytes": data})
+
+
 def textract_lines(response: dict) -> list[dict]:
     """The LINE blocks of a ``DetectDocumentText`` response, top to bottom.
 

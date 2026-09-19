@@ -25,11 +25,12 @@ from common.demo_mode import is_demo
 from common.notices import is_meta
 
 try:
-    from api import ingest_api, match_api, notices_query
+    from api import ingest_api, match_api, notices_query, ui_api
 except ModuleNotFoundError:  # Lambda layout: CodeUri backend/api/ -> siblings at /var/task
     import ingest_api  # type: ignore[no-redef]
     import match_api  # type: ignore[no-redef]
     import notices_query  # type: ignore[no-redef]
+    import ui_api  # type: ignore[no-redef]
 
 CORS_HEADERS = {
     "content-type": "application/json",
@@ -197,10 +198,15 @@ ROUTES: list[tuple[str, re.Pattern[str], Route]] = [
     ("GET", re.compile(r"^/v1/notices/?$"), list_notices),
     ("GET", re.compile(r"^/v1/notices/(?P<id>[^/]+(?:/[^/]+)?)/?$"), get_notice),
     ("GET", re.compile(r"^/v1/diff/?$"), diff),
+    ("GET", re.compile(r"^/v1/stats/?$"), _wrap(ui_api.stats)),
+    ("POST", re.compile(r"^/uploads/?$"), _wrap(ui_api.create_upload)),
+    ("POST", re.compile(r"^/items/ocr/?$"), _wrap(ui_api.items_ocr)),
+    ("POST", re.compile(r"^/items/normalise/?$"), _wrap(ui_api.items_normalise)),
     ("GET", re.compile(r"^/items/?$"), _wrap(match_api.list_items)),
     ("POST", re.compile(r"^/items/?$"), _wrap(match_api.create_items)),
     # /items/{id}/check before /items/{id}: first match wins
     ("POST", re.compile(r"^/items/(?P<id>[^/]+)/check/?$"), _wrap(match_api.check_item)),
+    ("GET", re.compile(r"^/items/(?P<id>[^/]+)/check-status/?$"), _wrap(ui_api.check_status)),
     ("GET", re.compile(r"^/items/(?P<id>[^/]+)/?$"), _wrap(match_api.get_item)),
     ("GET", re.compile(r"^/cases/(?P<id>[^/]+)/?$"), _wrap(match_api.get_case)),
     ("GET", re.compile(r"^/events/?$"), _wrap(match_api.list_events)),

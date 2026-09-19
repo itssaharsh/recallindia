@@ -1,0 +1,19 @@
+{
+ "input": "Dolo 650 Micro Labs ZZ0000",
+ "Entities": [
+  {
+   "Score": 0.9101592302322388,
+   "Type": "ORGANIZATION",
+   "Text": "Dolo",
+   "BeginOffset": 0,
+   "EndOffset": 4
+  },
+  {
+   "Score": 0.41521167755126953,
+   "Type": "COMMERCIAL_ITEM",
+   "Text": "650",
+   "BeginOffset": 5,
+   "EndOffset": 8
+  }
+ ]
+}

@@ -137,6 +137,8 @@ class Item(_Strict):
     year: int | None = None
     purchase_date: str | None = None
     photo_s3_key: str | None = None
+    mfg_date: str | None = None  # "2025-10" as read off the strip (P06 Scan strip)
+    exp_date: str | None = None
     status: ItemStatus = "clear"
     # Set by POST /items (UTC ISO seconds, "Z"); GET /items sorts newest-first on it.
     created_at: str | None = None

@@ -1,0 +1,19 @@
+{
+ "input": "Jeep Compass 2022 MH12AB1234",
+ "Entities": [
+  {
+   "Score": 0.9457616806030273,
+   "Type": "ORGANIZATION",
+   "Text": "Jeep",
+   "BeginOffset": 0,
+   "EndOffset": 4
+  },
+  {
+   "Score": 0.9558132290840149,
+   "Type": "COMMERCIAL_ITEM",
+   "Text": "Compass 2022 MH12AB1234",
+   "BeginOffset": 5,
+   "EndOffset": 28
+  }
+ ]
+}

@@ -96,10 +96,22 @@ _EXP_LABEL = re.compile(
     r"\b(?:exp(?:iry)?|use\s+before|best\s+before)\.?\s*(?:date|dt)?\.?\s*[:.\-]?\s*" + _DATE_VALUE,
     re.IGNORECASE,
 )
+# The maker, as CDSCO lists it ("Manufactured By"), wins over the marketer: a strip often names
+# both ("Marketed by: Meyer Organics" / "Manufactured in India by: Acme Generics LLP").
 _MAKER_LABEL = re.compile(
-    r"\b(?:mfd\.?\s*by|mfg\.?\s*by|manufactured\s+by|made\s+by|mkt\.?\s*by|mkd\.?\s*by"
-    r"|marketed\s+by)\b\s*[:.\-]?\s*(.*)$",
+    r"\b(?:mfd\.?\s*by|mfg\.?\s*by|manufactured\s+(?:in\s+[a-z]+\s+)?(?:for\s+\S+\s+)?by"
+    r"|made\s+(?:in\s+[a-z]+\s+)?by)\b\s*[:.\-]?\s*(.*)$",
     re.IGNORECASE,
+)
+_MARKETER_LABEL = re.compile(
+    r"\b(?:mkt\.?\s*by|mkd\.?\s*by|marketed\s+by|distributed\s+by)\b\s*[:.\-]?\s*(.*)$",
+    re.IGNORECASE,
+)
+# Inside an edge band the stamp's "B." is often lost ("No.446AG710"); accept a bare "No." there,
+# never after a licence / registration prefix ("M.L. No. MNB/15/880" is the manufacturing licence).
+_EDGE_NO = re.compile(r"(?<![A-Za-z])no\.?\s*[:.]?\s*([A-Z0-9][A-Z0-9\-/]{2,19})", re.IGNORECASE)
+_NOT_A_BATCH_PREFIX = re.compile(
+    r"\b(m\.?\s*l|lic(?:en[cs]e)?|reg(?:n|d)?|plot|khasra)\.?\s*$", re.I
 )
 _SMALL_PRINT = re.compile(
     r"\b(each|contains|composition|store|keep|dosage|directions|schedule|warning|caution"
@@ -203,91 +215,134 @@ def _remove(text: str, part: str | None) -> str:
     return re.sub(re.escape(part), " ", text, count=1, flags=re.IGNORECASE)
 
 
+def _overlaps(a: str, b: str) -> bool:
+    x, y = a.lower(), b.lower()
+    return x in y or y in x
+
+
+def _brand_evidence(text: str, entities: list[dict], kind: str) -> tuple[str | None, float, str]:
+    """``(brand, confidence, why)`` from two independent signals.
+
+    A company-word run ("Finecure Pharmaceuticals", "Micro Labs") and Comprehend's ORGANIZATION
+    span. Agreeing, they are strong. Disagreeing, the company-word run wins: Comprehend often
+    tags a trade name ("Dolo") or the drug ("Pantoprazole") as the organisation. With neither,
+    an appliance's first word is a guess worth one tap; a medicine gets no brand.
+    """
+    org = _best_entity(entities, "ORGANIZATION")
+    company = _company_fallback(text)
+    if company and org and _overlaps(company, org["Text"]):
+        longer = max((company, _clean(org["Text"]).rstrip(",.")), key=len)
+        return longer, max(0.95, float(org["Score"])), "brand: company name and Comprehend agree"
+    if company and org:
+        return (
+            company,
+            0.8,
+            (
+                f"brand: company name '{company}' (Comprehend's ORGANIZATION was "
+                f"'{_clean(org['Text'])}')"
+            ),
+        )
+    if company:
+        return company, 0.9, "brand: company name"
+    if org:
+        score = float(org["Score"])
+        return (
+            _clean(org["Text"]).rstrip(",."),
+            score,
+            f"brand: Comprehend ORGANIZATION ({score:.2f})",
+        )
+    if kind in ("appliance", "other"):
+        first = text.split()[0].strip(",.;") if text.split() else ""
+        if first and not looks_like_batch(first) and not _STRENGTH.match(first):
+            return first, 0.6, "brand guessed from the first word"
+    return None, 0.4, "no brand found"
+
+
+def _tagged(entities: list[dict], token: str) -> bool:
+    return any(
+        e.get("Type") in ("COMMERCIAL_ITEM", "OTHER") and token.lower() in str(e["Text"]).lower()
+        for e in entities
+    )
+
+
 def parse_paste_line(line: str, entities: list[dict] | None = None) -> dict:
     """One pasted line -> an item row with ``confidence`` and ``needs_confirm``.
 
-    ``entities`` are Comprehend spans for this line (``[]`` when none were found or recorded):
-    ORGANIZATION becomes the brand; without one, a capitalised run ending in a company word
-    ("... Pharmaceuticals", "... Labs") is used at lower confidence. The batch is a labelled
-    value ("batch FT5427") or the last batch-shaped token; for a vehicle the make, model, year
-    and registration are read instead; what is left is the name.
+    ``entities`` are Comprehend spans for this line (``[]`` when none were found or recorded).
+    The brand comes from ``_brand_evidence``; the batch is a labelled value ("batch FT5427") or
+    the last batch-shaped token; a vehicle's make / model / year / registration are read from
+    the whole line; what is left is the name. Every value is verbatim from the line.
     """
     text = _clean(line)
-    row: dict[str, Any] = {"line": text, "kind": detect_kind(text), "name": "", "brand": None,
-                           "model": None, "batch": None, "make": None, "year": None,
-                           "reg_no": None}  # fmt: skip
-    why: list[str] = []
-    confidence = 1.0
+    entities = entities or []
+    kind = detect_kind(text)
+    row: dict[str, Any] = {"line": text, "kind": kind, "name": "", "brand": None, "model": None,
+                           "batch": None, "make": None, "year": None, "reg_no": None}  # fmt: skip
+    brand, brand_conf, brand_why = _brand_evidence(text, entities, kind)
+    why = [brand_why]
+    confidence = brand_conf
 
-    org = _best_entity(entities or [], "ORGANIZATION")
-    if org:
-        row["brand"] = _clean(org["Text"]).rstrip(",.")
-        confidence *= max(0.5, float(org.get("Score", 0.5)))
-        why.append(f"brand from Comprehend ORGANIZATION ({float(org.get('Score', 0)):.2f})")
-    rest = _remove(text, row["brand"])
-
-    if row["kind"] == "vehicle":
-        low = rest.lower()
+    if kind == "vehicle":
+        low = text.lower()
         make_word = next((w for w in VEHICLE_MAKES if re.search(rf"\b{re.escape(w)}\b", low)), None)
-        row["make"] = VEHICLE_MAKES.get(make_word or "", None)
-        row["brand"] = row["brand"] or (make_word.title() if make_word else None)
-        year = _YEAR.search(rest)
+        row["make"] = VEHICLE_MAKES.get(make_word or "")
+        row["brand"] = (
+            brand
+            if brand and make_word and _overlaps(brand, make_word)
+            else (make_word.title() if make_word else brand)
+        )
+        year = _YEAR.search(text)
         row["year"] = int(year.group(1)) if year else None
-        reg = _REG_NO.search(rest.upper())
+        reg = _REG_NO.search(text.upper())
         row["reg_no"] = reg.group(1).replace(" ", "") if reg else None
         after = (
-            re.split(rf"\b{re.escape(make_word)}\b", rest, maxsplit=1, flags=re.I)[-1]
-            if make_word
-            else rest
+            re.split(rf"\b{re.escape(make_word)}\b", text, maxsplit=1, flags=re.I)[-1]
+            if (make_word)
+            else text
         )
-        model_words = [
-            w for w in after.split() if not _YEAR.fullmatch(w) and not _REG_NO.fullmatch(w.upper())
-        ]
-        row["model"] = model_words[0].lower() if model_words else None
-        row["name"] = " ".join(
-            p for p in (make_word and make_word.title(), row["model"] and row["model"].title()) if p
-        )
+        words = [w for w in after.split()
+                 if not _YEAR.fullmatch(w) and not _REG_NO.fullmatch(w.upper())]  # fmt: skip
+        row["model"] = words[0].lower() if words else None
+        row["name"] = " ".join(w.title() for w in (make_word, row["model"]) if w)
+        confidence = max(confidence, 0.9) if make_word else confidence
         if not row["year"]:
             confidence *= 0.7
             why.append("no model year: the range check needs one")
         if not row["model"]:
             confidence *= 0.6
+            why.append("no model")
     else:
+        row["brand"] = brand
+        rest = _remove(text, brand)
         labelled = _BATCH_LABEL.search(rest)
         if labelled:
-            batch = labelled.group(1).upper()
+            batch, batch_conf = labelled.group(1).upper(), 1.0
             rest = rest[: labelled.start()] + " " + rest[labelled.end() :]
         else:
-            tokens = [t.strip(".,;:()") for t in rest.split()]
-            shaped = [t for t in tokens if looks_like_batch(t)]
+            shaped = [t.strip(".,;:()") for t in rest.split() if looks_like_batch(t)]
             batch = shaped[-1].upper() if shaped else None
+            batch_conf = (0.95 if _tagged(entities, shaped[-1]) else 0.9) if shaped else 0.5
             rest = _remove(rest, shaped[-1]) if shaped else rest
-        if row["kind"] == "medicine":
-            row["batch"] = batch
-            if not batch:
-                confidence *= 0.6
-                why.append("no batch: add it so the check can compare it")
-        elif batch and _MODEL_TOKEN.match(batch):
+        if batch and _MODEL_TOKEN.match(batch) and kind != "medicine":
             row["model"] = batch  # "DX-6": an appliance model number, not a batch
         elif batch:
-            row["batch"] = batch  # a lot / batch code on a line we could not call a medicine
-        if not row["brand"]:
-            fallback = _company_fallback(rest)
-            if fallback:
-                row["brand"] = fallback
-                rest = _remove(rest, fallback)
-                confidence *= 0.75
-                why.append("brand read from the company word (no Comprehend entity)")
+            row["batch"] = batch
+            confidence *= batch_conf
+        elif kind == "medicine":
+            confidence *= batch_conf
+            why.append("no batch: add it so the check can compare it")
         row["name"] = _clean(_LABEL_WORDS.sub(" ", rest)).strip(" ,;|-/")
 
-    if not row["brand"]:
-        confidence *= 0.5
-        why.append("no brand found")
     if not row["name"]:
         confidence *= 0.3
         why.append("no product name left")
     row["confidence"] = round(confidence, 2)
-    row["needs_confirm"] = confidence < CONFIRM_BELOW or not row["brand"] or not row["name"]
+    row["needs_confirm"] = (
+        confidence < CONFIRM_BELOW
+        or not row["brand"]
+        or not row["name"]
+        or (kind == "medicine" and not row["batch"])
+    )
     row["why"] = why
     return row
 
@@ -303,11 +358,25 @@ def _first_match(lines: list[dict], pattern: re.Pattern[str]) -> tuple[str | Non
     return None, 0.0
 
 
+def _edge_batch(line: dict) -> str | None:
+    """A bare "No. <code>" read inside an edge band, unless it follows a licence prefix."""
+    for m in _EDGE_NO.finditer(line["text"]):
+        if _NOT_A_BATCH_PREFIX.search(line["text"][: m.start()]):
+            continue
+        if looks_like_batch(m.group(1)):
+            return m.group(1).upper()
+    return None
+
+
 def _batch_from_lines(lines: list[dict]) -> tuple[str | None, float]:
     for index, line in enumerate(lines):
         m = _BATCH_LABEL.search(line["text"])
         if m and any(ch.isdigit() for ch in m.group(1)):
             return m.group(1).upper(), float(line.get("confidence", 0.0))
+        if line.get("edge"):
+            edge = _edge_batch(line)
+            if edge:
+                return edge, float(line.get("confidence", 0.0))
         if _BATCH_LABEL_ONLY.search(line["text"]) and index + 1 < len(lines):
             nxt = lines[index + 1]["text"].split()
             if nxt and looks_like_batch(nxt[0]):
@@ -316,8 +385,16 @@ def _batch_from_lines(lines: list[dict]) -> tuple[str | None, float]:
 
 
 def _maker_from_lines(lines: list[dict]) -> tuple[str | None, float]:
+    for label in (_MAKER_LABEL, _MARKETER_LABEL):  # the manufacturer first, then the marketer
+        found = _company_after(lines, label)
+        if found[0]:
+            return found
+    return None, 0.0
+
+
+def _company_after(lines: list[dict], label: re.Pattern[str]) -> tuple[str | None, float]:
     for index, line in enumerate(lines):
-        m = _MAKER_LABEL.search(line["text"])
+        m = label.search(line["text"])
         if not m:
             continue
         value = m.group(1).strip()
@@ -337,7 +414,8 @@ def _product_from_lines(lines: list[dict]) -> tuple[str | None, float]:
     for index, line in enumerate(lines):
         text = line["text"]
         if (_BATCH_LABEL.search(text) or _MFG_LABEL.search(text) or _EXP_LABEL.search(text)
-                or _MAKER_LABEL.search(text) or _SMALL_PRINT.search(text)):  # fmt: skip
+                or _MAKER_LABEL.search(text) or _MARKETER_LABEL.search(text)
+                or _SMALL_PRINT.search(text) or line.get("edge")):  # fmt: skip
             continue
         words = [w for w in re.findall(r"[A-Za-z]{3,}", text)]
         if not words:

@@ -47,6 +47,12 @@ Parameters:
     Type: String
     Default: apac.amazon.nova-lite-v1:0
     Description: Nova Lite - CDSCO rows to Notice schema.
+  AppOrigins:
+    Type: CommaDelimitedList
+    Default: http://localhost:3000
+    Description: >-
+      Browser origins allowed to call the HTTP API and to GET/PUT the raw bucket through
+      presigned URLs: the Amplify app URL plus local development.
 
 Conditions:
   SchedulesEnabled: !Equals [!Ref EnableSchedules, "true"]
@@ -206,12 +212,13 @@ Resources:
       # The /ingest page (P07) loads the archive PDF in the browser straight from the
       # presigned URL GET /ingest/pdf hands out; without CORS on the bucket S3 answers a
       # cross-origin fetch with no Access-Control-Allow-Origin and pdf.js gets nothing.
-      # Read-only, and the presigned URL is still the only credential. pdf.js streams with
-      # Range requests, so the range/length headers are exposed too.
+      # The presigned URL is still the only credential. pdf.js streams with Range requests, so
+      # the range/length headers are exposed too. PUT: the Scan strip tab (P06) uploads the
+      # photo straight to uploads/<uuid>.jpg through a presigned PUT from POST /uploads.
       CorsConfiguration:
         CorsRules:
-          - AllowedOrigins: ["*"]
-            AllowedMethods: [GET, HEAD]
+          - AllowedOrigins: !Ref AppOrigins
+            AllowedMethods: [GET, HEAD, PUT]
             AllowedHeaders: ["*"]
             ExposedHeaders: [Content-Length, Content-Range, Accept-Ranges, ETag]
             MaxAge: 3600
@@ -295,9 +302,10 @@ Resources:
     Type: AWS::Serverless::HttpApi
     Properties:
       CorsConfiguration:
-        AllowOrigins: ["*"]
+        AllowOrigins: !Ref AppOrigins
         AllowMethods: [GET, POST, OPTIONS]
         AllowHeaders: [content-type]
+        MaxAge: 600
 
   ApiFunction:
     Type: AWS::Serverless::Function
@@ -351,6 +359,12 @@ Resources:
                 - textract:DetectDocumentText
                 - textract:AnalyzeDocument
               Resource: "*"
+            - Sid: PasteNormalise
+              Effect: Allow
+              Action:
+                - comprehend:DetectEntities
+                - comprehend:BatchDetectEntities
+              Resource: "*"
       Events:
         Health:
           Type: HttpApi
@@ -376,6 +390,36 @@ Resources:
             ApiId: !Ref HttpApi
             Method: GET
             Path: "/v1/diff"
+        Stats:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: "/v1/stats"
+        CreateUpload:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: POST
+            Path: "/uploads"
+        ItemsOcr:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: POST
+            Path: "/items/ocr"
+        ItemsNormalise:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: POST
+            Path: "/items/normalise"
+        CheckStatus:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: "/items/{id}/check-status"
         CreateItem:
           Type: HttpApi
           Properties:
