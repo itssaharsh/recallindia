@@ -1,6 +1,6 @@
-import { memo } from "react";
+import { memo, useSyncExternalStore } from "react";
 
-import { STEP_LABEL, fmtSeconds, stepCopy, type PlayState } from "@/lib/ingest";
+import { STEP_LABEL, fmtSeconds, stepCopy, type PlayStore } from "@/lib/ingest";
 import type { StepState } from "@/lib/types";
 
 // ○ pending · ◐ running · ● done (R25: every planned step on screen with its real state; never a
@@ -33,9 +33,14 @@ export function MethodChip({ method }: { method: string }) {
 }
 
 /** The IngestStateMachine's five steps, left to right, with what each one is doing right now. */
-export const IngestChecklist = memo(function IngestChecklist({ play }: { play: PlayState }) {
+export const IngestChecklist = memo(function IngestChecklist({ store }: { store: PlayStore }) {
+  // the only subscriber to the running clocks (10 updates a second while a step runs)
+  const play = useSyncExternalStore(store.subscribe, store.get, store.get);
   return (
-    <ol className="m-0 grid list-none gap-px border border-line bg-line p-0 md:grid-cols-5" aria-label="Ingest steps">
+    <ol
+      className="ingest-layer m-0 grid list-none gap-px border border-line bg-line p-0 md:grid-cols-5"
+      aria-label="Ingest steps"
+    >
       {play.steps.map((step) => (
         <li key={step.name} className="flex min-w-0 flex-col gap-1 bg-surface-1 px-3 py-2.5">
           <div className="flex min-w-0 items-center gap-2">
@@ -45,10 +50,14 @@ export const IngestChecklist = memo(function IngestChecklist({ play }: { play: P
             <span className={`truncate text-[13px] font-medium ${step.state === "pending" ? "text-muted" : "text-text"}`}>
               {STEP_LABEL[step.name]}
             </span>
-            {step.name === "Extract" && play.method && <MethodChip method={play.method} />}
             <span className="ml-auto shrink-0 font-mono text-[11px] text-muted tabular-nums">{fmtSeconds(step.ms)}</span>
           </div>
           <p className={`m-0 text-xs leading-snug ${step.state === "failed" ? "text-alert" : "text-muted"}`}>
+            {step.name === "Extract" && play.method && (
+              <>
+                <MethodChip method={play.method} />{" "}
+              </>
+            )}
             {stepCopy(step, play)}
             <span className="sr-only"> ({WORD[step.state]})</span>
           </p>

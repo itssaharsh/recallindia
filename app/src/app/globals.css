@@ -155,23 +155,17 @@
 }
 
 /* /ingest: an outline per extracted row over the PDF page; the dissolve engine sets its state:
-   shown (read) -> lifted (rising off the page) -> gone (an empty slot) -> done (page whole again). */
+   shown (read) -> gone (its row lifted off: an empty slot) -> done (the page whole again).
+   State changes are instant on purpose: 57 CSS transitions fire ~1,200 transition events through
+   React's root listener during a dissolve (measured), and the flight covers the change anyway. */
 .ingest-outline {
   opacity: 0;
   border: 1px solid color-mix(in oklch, var(--evidence) 65%, transparent);
-  transition:
-    opacity 180ms linear,
-    background-color 180ms linear;
 }
 .ingest-outline[data-state="shown"],
-.ingest-outline[data-state="lifted"],
 .ingest-outline[data-state="gone"],
 .ingest-outline[data-state="done"] {
   opacity: 1;
-}
-.ingest-outline[data-state="lifted"] {
-  border-color: var(--evidence);
-  background-color: color-mix(in oklch, var(--evidence) 22%, transparent);
 }
 .ingest-outline[data-state="gone"] {
   background-color: var(--paper);
@@ -196,9 +190,12 @@
   .ingest-fade-in {
     animation-duration: 150ms !important;
   }
-  .ingest-outline {
-    transition-duration: 150ms !important;
-  }
+}
+/* Parts of /ingest that change many times a second get their own compositor layer, so a change
+   repaints that part, not the whole document (a full-document paint measured ~11 ms at 4x CPU). */
+.ingest-layer {
+  will-change: transform;
+  contain: layout paint;
 }
 
 /* Feed rows off-screen skip layout and paint (cheap virtualisation for "Load more" lists). */

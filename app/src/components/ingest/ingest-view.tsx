@@ -5,13 +5,15 @@ import { useReducedMotion } from "motion/react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { useAppState } from "@/components/shell/app-state";
 import { Button } from "@/components/ui/button";
 import { apiGet, apiPost } from "@/lib/api";
 import {
   IDLE_STATE,
+  PlayStore,
+  coarse,
   isTerminal,
   methodLabel,
   monthLabel,
@@ -49,7 +51,7 @@ type Mode = "idle" | "live" | "replay";
 type Phase = "waiting" | "running" | "done";
 
 const runEnd = (view: RunView) => Math.max(0, ...view.steps.map((s) => s.end_ms ?? 0));
-const sameState = (a: PlayState, b: PlayState) => JSON.stringify(a) === JSON.stringify(b);
+const IDLE_COARSE = coarse(IDLE_STATE);
 
 export function IngestView() {
   const { demo, ready, href } = useAppState();
@@ -65,7 +67,14 @@ export function IngestView() {
   const [view, setView] = useState<RunView | null>(null);
   const [status, setStatus] = useState<{ body: StatusBody; at: number } | null>(null);
   const [clock, setClock] = useState<number | null>(null);
-  const [play, setPlay] = useState<PlayState>(IDLE_STATE);
+  const store = useMemo(() => new PlayStore(IDLE_STATE), []);
+  // the page re-renders when a step changes state, not when a running step's clock ticks
+  useSyncExternalStore(
+    store.subscribe,
+    () => coarse(store.get()),
+    () => IDLE_COARSE,
+  );
+  const play: PlayState = store.get();
   const [phase, setPhase] = useState<Phase>("waiting");
   const [pdfKey, setPdfKey] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -90,11 +99,11 @@ export function IngestView() {
     setView(null);
     setStatus(null);
     setClock(null);
-    setPlay(IDLE_STATE);
+    store.set(IDLE_STATE);
     setPhase("waiting");
     setPage(1);
     setError(null);
-  }, []);
+  }, [store]);
   useEffect(() => () => cancel.current?.(), []);
 
   const loadRuns = useCallback(() => {
@@ -186,13 +195,13 @@ export function IngestView() {
       } else {
         return true;
       }
-      setPlay((prev) => (sameState(prev, next!) ? prev : next!));
+      store.set(next);
       return over;
     };
     if (compute()) return;
     const id = setInterval(() => compute() && clearInterval(id), TICK_MS);
     return () => clearInterval(id);
-  }, [mode, view, clock, speed, status]);
+  }, [mode, view, clock, speed, status, store]);
 
   // the dissolve starts when the run's rows exist and every page is rendered
   const rows = view?.rows_ready && play.rowsReady ? view.rows : null;
@@ -264,7 +273,7 @@ export function IngestView() {
         </div>
       </div>
 
-      <IngestChecklist play={play} />
+      <IngestChecklist store={store} />
 
       {error && (
         <p
@@ -289,6 +298,7 @@ export function IngestView() {
             {play.newSinceLast ?? "—"} new since last run
           </p>
           <Link
+            prefetch={false}
             href={href("/?source=cdsco_nsq")}
             className="ml-auto inline-flex h-8 items-center gap-1 rounded-sm border border-line px-3 text-[13px] text-primary-strong hover:bg-surface-3"
           >
@@ -329,7 +339,7 @@ export function IngestView() {
 
       <RecentRuns runs={runs} error={runsError} active={runId} />
       {/* flights live here, above everything, never catching the pointer */}
-      <div ref={layer} aria-hidden className="pointer-events-none fixed inset-0 z-40 overflow-hidden" />
+      <div ref={layer} aria-hidden className="ingest-layer pointer-events-none fixed inset-0 z-40 overflow-hidden" />
     </section>
   );
 }

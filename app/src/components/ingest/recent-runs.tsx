@@ -2,6 +2,7 @@
 
 import { History, Play } from "lucide-react";
 import Link from "next/link";
+import { memo } from "react";
 
 import { useAppState } from "@/components/shell/app-state";
 import { fmtWhen } from "@/lib/format";
@@ -10,7 +11,15 @@ import { fmtSeconds, monthLabel, type RunSummary } from "@/lib/ingest";
 import { MethodChip } from "./ingest-checklist";
 
 /** The last runs of the IngestStateMachine, each replayable with its real step timings. */
-export function RecentRuns({ runs, error, active }: { runs: RunSummary[] | null; error: string | null; active: string | null }) {
+export const RecentRuns = memo(function RecentRuns({
+  runs,
+  error,
+  active,
+}: {
+  runs: RunSummary[] | null;
+  error: string | null;
+  active: string | null;
+}) {
   const { href } = useAppState();
   return (
     <section aria-labelledby="runs-title" className="flex flex-col gap-2">
@@ -25,7 +34,9 @@ export function RecentRuns({ runs, error, active }: { runs: RunSummary[] | null;
           ))}
         </ul>
       )}
-      {runs && runs.length === 0 && <p className="m-0 text-xs text-muted">No runs yet: &ldquo;Run ingest&rdquo; starts the first one.</p>}
+      {runs && runs.length === 0 && (
+        <p className="m-0 text-xs text-muted">No runs yet: &ldquo;Run ingest&rdquo; starts the first one.</p>
+      )}
       {runs && runs.length > 0 && (
         <ul className="m-0 list-none border-t border-line p-0">
           {runs.map((r) => (
@@ -47,6 +58,7 @@ export function RecentRuns({ runs, error, active }: { runs: RunSummary[] | null;
               </span>
               {r.status === "SUCCEEDED" || r.status === "FAILED" ? (
                 <Link
+                  prefetch={false}
                   href={href(`/ingest/?replay=${encodeURIComponent(r.run_id)}`)}
                   className="inline-flex h-7 items-center gap-1 rounded-sm px-2 text-primary-strong hover:bg-surface-2"
                 >
@@ -61,4 +73,4 @@ export function RecentRuns({ runs, error, active }: { runs: RunSummary[] | null;
       )}
     </section>
   );
-}
+});

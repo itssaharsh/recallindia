@@ -38,12 +38,57 @@ export function springEasing(stiffness = 380, damping = 32, mass = 1, durationMs
   return `linear(${points.map((p) => +p.toFixed(4)).join(", ")})`;
 }
 
+/** The spring (0 -> ~1 over FLIGHT_MS) as a function of time, for composing curves. */
+function springAt(stiffness = 380, damping = 32, mass = 1): (u: number) => number {
+  const dt = 0.0002;
+  const steps = Math.round(FLIGHT_MS / 1000 / dt);
+  const xs: number[] = [];
+  let x = 0;
+  let v = 0;
+  for (let i = 0; i <= steps; i++) {
+    xs.push(x);
+    const a = (-stiffness * (x - 1) - damping * v) / mass;
+    v += a * dt;
+    x += v * dt;
+  }
+  const tail = xs[xs.length - 1];
+  return (u) => {
+    const i = Math.min(xs.length - 1, Math.round(u * (xs.length - 1)));
+    const blend = u <= 0.8 ? 0 : ((u - 0.8) / 0.2) ** 2 * (3 - 2 * ((u - 0.8) / 0.2));
+    return u >= 1 ? 1 : xs[i] + (1 - tail) * blend;
+  };
+}
+
+/**
+ * Lift + flight as ONE effect-level easing over three keyframes (row -> lifted -> slot, the lifted
+ * keyframe at LIFT_MS / (LIFT_MS + FLIGHT_MS)): an ease-out for the lift, then the spring. Kept at
+ * effect level on purpose: a `linear()` easing on an individual keyframe measured as not running on
+ * the compositor (26.8 fps at 4x CPU vs 46), while an effect-level `linear()` does.
+ */
+export function launchEasing(samples = 72): string {
+  const lift = LIFT_MS / (LIFT_MS + FLIGHT_MS);
+  const spring = springAt();
+  const points: number[] = [];
+  for (let i = 0; i <= samples; i++) {
+    const t = i / samples;
+    if (t <= lift) {
+      const u = t / lift;
+      points.push(lift * (1 - (1 - u) ** 3)); // ease-out over the lift segment
+    } else {
+      const u = (t - lift) / (1 - lift);
+      points.push(lift + (1 - lift) * spring(u));
+    }
+  }
+  points[points.length - 1] = 1;
+  return `linear(${points.map((p) => +p.toFixed(4)).join(", ")})`;
+}
+
 let cached: string | null = null;
-/** The flight easing, or a close cubic-bezier where `linear()` is not supported. */
+/** The launch easing, or a close cubic-bezier where `linear()` is not supported. */
 export function flightEasing(): string {
   if (cached) return cached;
   const supported = typeof CSS !== "undefined" && CSS.supports?.("animation-timing-function", "linear(0, 1)");
-  cached = supported ? springEasing() : "cubic-bezier(0.22, 1, 0.36, 1)";
+  cached = supported ? launchEasing() : "cubic-bezier(0.22, 1, 0.36, 1)";
   return cached;
 }
 

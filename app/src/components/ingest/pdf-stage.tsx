@@ -1,7 +1,7 @@
 "use client";
 
 import { FileText } from "lucide-react";
-import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 
 import type { IngestRow } from "@/lib/ingest";
@@ -16,8 +16,10 @@ export interface StageHandle {
   outline: (row: number) => HTMLElement | null;
   /** every outline, for switching their state together */
   outlines: () => HTMLElement[];
-  /** the rendered canvas of a page (the dissolve copies a row's pixels from it) */
-  canvas: (page: number) => HTMLCanvasElement | null;
+  /** the rendered page as a decoded image (a flight shows its row as a crop of it) */
+  pageImage: (page: number) => string | null;
+  /** the page's box on screen (every page sits in the same box) */
+  pageRect: () => DOMRect | null;
   pageCount: () => number;
 }
 
@@ -54,6 +56,18 @@ export function PdfStage({
   const [numPages, setNumPages] = useState(0);
   const [failed, setFailed] = useState<string | null>(null);
   const rendered = useRef(new Set<number>());
+  // Each rendered page, encoded once to an object URL and decoded ahead of time. A flight shows
+  // its row as a background crop of this image: a per-flight <canvas> becomes a texture layer
+  // that is uploaded at commit, which measured as the largest cost of the dissolve at 4x CPU.
+  const images = useRef(new Map<number, { url: string; img: HTMLImageElement }>());
+  const [imagesReady, setImagesReady] = useState(0);
+
+  const dropImages = useCallback(() => {
+    images.current.forEach(({ url }) => URL.revokeObjectURL(url));
+    images.current.clear();
+    setImagesReady(0);
+  }, []);
+  useEffect(() => dropImages, [dropImages]);
 
   useEffect(() => {
     const el = box.current;
@@ -65,16 +79,22 @@ export function PdfStage({
 
   useEffect(() => {
     rendered.current = new Set();
+    dropImages();
     setNumPages(0);
     setFailed(null);
-  }, [url]);
+  }, [url, dropImages]);
+
+  useEffect(() => {
+    if (numPages > 0 && imagesReady === numPages) onReady?.(numPages);
+  }, [imagesReady, numPages, onReady]);
 
   useImperativeHandle(
     handle,
     () => ({
       outline: (row) => outlines.current.get(row) ?? null,
       outlines: () => [...outlines.current.values()],
-      canvas: (n) => (pageBoxes.current.get(n)?.querySelector("canvas") as HTMLCanvasElement | null) ?? null,
+      pageImage: (n) => images.current.get(n)?.url ?? null,
+      pageRect: () => pageBoxes.current.get(1)?.getBoundingClientRect() ?? null,
       pageCount: () => numPages,
     }),
     [numPages],
@@ -105,67 +125,103 @@ export function PdfStage({
     [],
   );
 
-  const pageDone = (n: number) => {
+  const pageDone = useCallback((n: number) => {
     rendered.current.add(n);
-    if (rendered.current.size === numPages && numPages > 0) onReady?.(numPages);
-  };
+    const canvas = pageBoxes.current.get(n)?.querySelector("canvas");
+    if (!canvas) return;
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.src = url;
+      const previous = images.current.get(n);
+      if (previous) URL.revokeObjectURL(previous.url);
+      images.current.set(n, { url, img });
+      img
+        .decode()
+        .catch(() => undefined)
+        .then(() => setImagesReady(images.current.size));
+    }, "image/png");
+  }, []);
+
+  // Turning the page is a style write, not a render: the page tree below is memoized without
+  // `page`, so react-pdf's six pages and every outline are not reconciled on each turn.
+  const pageNow = useRef(page);
+  pageNow.current = page;
+  const onLoad = useCallback((doc: { numPages: number }) => setNumPages(doc.numPages), []);
+  const onLoadError = useCallback((err: Error) => setFailed(err.message), []);
 
   const dpr = typeof window === "undefined" ? 1 : Math.min(2, window.devicePixelRatio || 1);
 
+  const doc = useMemo(
+    () =>
+      url && !failed && width > 0 ? (
+        <Document
+          file={url}
+          suspense={false}
+          loading={<PagePlaceholder text="Opening the PDF" />}
+          error={<PagePlaceholder text="The PDF could not be opened" />}
+          onLoadSuccess={onLoad}
+          onLoadError={onLoadError}
+        >
+          {Array.from({ length: numPages }, (_, i) => {
+            const n = i + 1;
+            const shown = n === pageNow.current;
+            return (
+              <div
+                key={n}
+                ref={setPageBox(n)}
+                className={n === 1 ? "relative" : "absolute inset-0"}
+                style={{ visibility: shown ? "visible" : "hidden" }}
+              >
+                <Page
+                  pageNumber={n}
+                  width={width}
+                  devicePixelRatio={dpr}
+                  renderTextLayer={false}
+                  renderAnnotationLayer={false}
+                  loading={null}
+                  onRenderSuccess={() => pageDone(n)}
+                />
+                <div className="pointer-events-none absolute inset-0">
+                  {(byPage.get(n) ?? []).map((r) => (
+                    <div
+                      key={r.row}
+                      ref={setOutline(r.row)}
+                      data-row={r.row}
+                      className="ingest-outline absolute"
+                      style={{
+                        left: `${r.bbox!.left * 100}%`,
+                        top: `${r.bbox!.top * 100}%`,
+                        width: `${r.bbox!.width * 100}%`,
+                        height: `${r.bbox!.height * 100}%`,
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </Document>
+      ) : null,
+    [url, failed, width, numPages, byPage, dpr, onLoad, onLoadError, pageDone, setPageBox, setOutline],
+  );
+
+  useLayoutEffect(() => {
+    pageBoxes.current.forEach((el, n) => {
+      const shown = n === page;
+      el.style.visibility = shown ? "visible" : "hidden";
+      if (shown) el.removeAttribute("aria-hidden");
+      else el.setAttribute("aria-hidden", "true");
+    });
+  }, [page, doc]);
+
   return (
     <figure className="m-0 flex min-w-0 flex-col gap-2">
-      <div ref={box} className="relative min-h-40 overflow-hidden bg-paper">
+      <div ref={box} className="ingest-layer relative min-h-40 overflow-hidden bg-paper">
         {!url && !failed && <PagePlaceholder text="The alert PDF appears here when a run fetches it" />}
         {failed && <PagePlaceholder text={`The PDF could not be shown: ${failed}`} />}
-        {url && !failed && width > 0 && (
-          <Document
-            file={url}
-            suspense={false}
-            loading={<PagePlaceholder text="Opening the PDF" />}
-            error={<PagePlaceholder text="The PDF could not be opened" />}
-            onLoadSuccess={(doc) => setNumPages(doc.numPages)}
-            onLoadError={(err) => setFailed(err.message)}
-          >
-            {Array.from({ length: numPages }, (_, i) => {
-              const n = i + 1;
-              return (
-                <div
-                  key={n}
-                  ref={setPageBox(n)}
-                  className={n === 1 ? "relative" : "absolute inset-0"}
-                  style={{ visibility: n === page ? "visible" : "hidden" }}
-                  aria-hidden={n !== page}
-                >
-                  <Page
-                    pageNumber={n}
-                    width={width}
-                    devicePixelRatio={dpr}
-                    renderTextLayer={false}
-                    renderAnnotationLayer={false}
-                    loading={null}
-                    onRenderSuccess={() => pageDone(n)}
-                  />
-                  <div className="pointer-events-none absolute inset-0">
-                    {(byPage.get(n) ?? []).map((r) => (
-                      <div
-                        key={r.row}
-                        ref={setOutline(r.row)}
-                        data-row={r.row}
-                        className="ingest-outline absolute"
-                        style={{
-                          left: `${r.bbox!.left * 100}%`,
-                          top: `${r.bbox!.top * 100}%`,
-                          width: `${r.bbox!.width * 100}%`,
-                          height: `${r.bbox!.height * 100}%`,
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </Document>
-        )}
+        {doc}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div role="group" aria-label="Page" className="flex items-center gap-1">

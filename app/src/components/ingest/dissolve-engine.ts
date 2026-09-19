@@ -7,11 +7,11 @@
 import type { IngestRow } from "@/lib/ingest";
 import {
   FLIGHT_MS,
-  LIFT_EASING,
   LIFT_MS,
   MAX_ANIMATED,
   OUTLINES_LEAD_MS,
   PAGE_SETTLE_MS,
+  ROW_H,
   STAGGER_MS,
   flightEasing,
 } from "@/lib/ingest-motion";
@@ -31,23 +31,24 @@ export interface DissolveOptions {
   onDone: () => void;
 }
 
-type Outline = "shown" | "lifted" | "gone" | "done";
+type Outline = "shown" | "gone" | "done";
 const setOutline = (el: HTMLElement | null, state: Outline) => el && (el.dataset.state = state);
 
-/** Copy a row's pixels out of the rendered page, so the real PDF row is what lifts off. */
-function snapshot(stage: StageHandle, row: IngestRow): HTMLCanvasElement | null {
-  const source = stage.canvas(row.page);
-  if (!source || !row.bbox || !source.width) return null;
-  const sx = row.bbox.left * source.width;
-  const sy = row.bbox.top * source.height;
-  const sw = row.bbox.width * source.width;
-  const sh = row.bbox.height * source.height;
-  const out = document.createElement("canvas");
-  out.width = Math.max(1, Math.round(sw));
-  out.height = Math.max(1, Math.round(sh));
-  out.getContext("2d")?.drawImage(source, sx, sy, sw, sh, 0, 0, out.width, out.height);
-  out.className = "absolute inset-0 h-full w-full";
-  return out;
+/**
+ * The row's own pixels: its region of the page image, fitted to the flight's box (`size`). The
+ * flight is then scaled onto the lifted row, so at take-off the crop sits exactly over the row.
+ */
+function crop(stage: StageHandle, row: IngestRow, size: DOMRect): Partial<CSSStyleDeclaration> | null {
+  const url = stage.pageImage(row.page);
+  if (!url || !row.bbox || !row.bbox.width || !row.bbox.height) return null;
+  const w = size.width / row.bbox.width;
+  const h = size.height / row.bbox.height;
+  return {
+    backgroundImage: `url(${url})`,
+    backgroundRepeat: "no-repeat",
+    backgroundSize: `${w}px ${h}px`,
+    backgroundPosition: `${-row.bbox.left * w}px ${-row.bbox.top * h}px`,
+  };
 }
 
 /** Start the dissolve; returns a cancel function (removes every flight, stops the clock). */
@@ -56,26 +57,27 @@ export function runDissolve(o: DissolveOptions): () => void {
     .filter((r) => r.bbox && (r.notice || r.merged_into !== null))
     .sort((a, b) => a.page - b.page || a.row - b.row);
   const events: { at: number; run: () => void }[] = [];
-  let page = order[0]?.page ?? 1;
+  const first = order[0]?.page ?? 1;
+  let page = first; // advanced by the loop below: the first event must not read it later
   events.push({
     at: 0,
     run: () => {
-      o.showPage(page);
+      o.showPage(first);
       o.stage.outlines().forEach((el) => setOutline(el, "shown"));
+      measure();
     },
   });
   let t = OUTLINES_LEAD_MS;
   for (const row of order) {
     if (row.page !== page) {
       const next = row.page;
-      t += LIFT_MS; // the page's last row finishes lifting before the page turns
+      t += LIFT_MS; // the page's last row has lifted off before the page turns
       events.push({ at: t, run: () => o.showPage(next) });
       t += PAGE_SETTLE_MS;
       page = next;
     }
     const at = t;
-    events.push({ at, run: () => lift(row) });
-    events.push({ at: at + (o.reduce ? 0 : LIFT_MS), run: () => fly(row) });
+    events.push({ at, run: () => launch(row) });
     t += STAGGER_MS;
   }
   events.sort((a, b) => a.at - b.at);
@@ -86,68 +88,84 @@ export function runDissolve(o: DissolveOptions): () => void {
   let landed: { row: IngestRow; el: HTMLElement | null }[] = [];
   const removals: { el: HTMLElement; frame: number }[] = [];
   const animations = new Set<Animation>();
-  const lifts = new Map<number, Animation>();
   let frame = 0;
   let raf = 0;
   let cancelled = false;
   const t0 = performance.now();
+  // Geometry is measured once: every page sits in the same box and the column does not move while
+  // rows land, so a flight never forces a layout (a getBoundingClientRect per flight after DOM
+  // changes cost ~2 synchronous layouts per row at 4x CPU).
+  let geometry: { page: DOMRect; list: DOMRect; visible: number } | null = null;
+  const measure = () => {
+    const pageBox = o.stage.pageRect();
+    const col = o.column.measure();
+    geometry = pageBox && col ? { page: pageBox, list: col.box, visible: col.visible } : null;
+  };
 
-  function lift(row: IngestRow) {
-    const el = o.stage.outline(row.row);
-    setOutline(el, "lifted");
-    if (!el || o.reduce) return;
-    const a = el.animate([{ transform: "none" }, { transform: "translateY(-8px) scale(1.02)" }], {
-      duration: LIFT_MS,
-      easing: LIFT_EASING,
-      fill: "forwards",
-    });
-    animations.add(a);
-    lifts.set(row.row, a);
+  /** where a row sits on the page, on screen */
+  function rowRect(row: IngestRow): DOMRect | null {
+    if (!geometry || !row.bbox) return null;
+    const { page } = geometry;
+    return new DOMRect(
+      page.left + row.bbox.left * page.width,
+      page.top + row.bbox.top * page.height,
+      row.bbox.width * page.width,
+      row.bbox.height * page.height,
+    );
   }
-
-  /** the row has left: its outline drops back into place as an empty slot on the page */
-  function vacate(row: IngestRow, el: HTMLElement | null) {
-    lifts.get(row.row)?.cancel();
-    lifts.delete(row.row);
-    setOutline(el, "gone");
+  function slot(k: number): DOMRect | null {
+    if (!geometry) return null;
+    const { list, visible } = geometry;
+    return new DOMRect(list.left, list.top + Math.min(k, visible - 1) * ROW_H, list.width, ROW_H);
   }
+  /** translateY -8px, scale 1.02 about the centre */
+  const lifted = (r: DOMRect) =>
+    new DOMRect(r.left - r.width * 0.01, r.top - r.height * 0.01 - 8, r.width * 1.02, r.height * 1.02);
+  /** the transform that puts an element laid out at `to` over `from` */
+  const over = (from: DOMRect, to: DOMRect) =>
+    `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${from.width / to.width}, ${from.height / to.height})`;
 
-  function fly(row: IngestRow) {
+  /**
+   * One row, one element, one animation: the flight is laid out at its feed slot but starts
+   * transformed exactly over the row (its pixels are a crop of the page), lifts off (120 ms,
+   * -8px, x1.02) and springs to the slot (300 ms). The outline under it becomes an empty slot.
+   */
+  function launch(row: IngestRow) {
     const outline = o.stage.outline(row.row);
     const k = row.notice ? nextSlot++ : slotOf.get(row.merged_into ?? -1);
     if (row.notice) slotOf.set(row.row, k!);
-    const from = outline?.getBoundingClientRect();
-    const to = k === undefined ? null : o.column.slotRect(k);
+    const from = rowRect(row);
+    const to = k === undefined ? null : slot(k);
+    setOutline(outline, "gone");
     // reduced motion, or the cap of animated rows reached (never at a 45 ms stagger): no
     // flight, the row crossfades into the column
     if (o.reduce || inFlight >= MAX_ANIMATED || !to || !from || !from.width) {
-      vacate(row, outline);
       landed.push({ row, el: null });
       return;
     }
-    const { el, paper, row: content } = buildFlight(row.notice, snapshot(o.stage, row));
+    const { el, paper } = buildFlight(row.notice, crop(o.stage, row, to));
     Object.assign(el.style, { left: `${to.left}px`, top: `${to.top}px`, width: `${to.width}px`, height: `${to.height}px` });
     o.layer.append(el);
-    vacate(row, outline);
-    const start = `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${from.width / to.width}, ${from.height / to.height})`;
-    const flight = el.animate([{ transform: start }, { transform: "none" }], {
-      duration: FLIGHT_MS,
-      easing: flightEasing(),
-      fill: "forwards",
-    });
-    // the page's pixels hand over to the structured row; a continuation line just fades out
+    const total = LIFT_MS + FLIGHT_MS;
+    // three keyframes with linear interpolation and ONE effect-level easing (lift, then spring):
+    // effect-level linear() runs on the compositor, per-keyframe linear() measured as not
+    const flight = el.animate(
+      [
+        { transform: over(from, to), offset: 0 },
+        { transform: over(lifted(from), to), offset: LIFT_MS / total },
+        { transform: "none", offset: 1 },
+      ],
+      { duration: total, easing: flightEasing(), fill: "forwards" },
+    );
+    // the page's pixels fade off the structured row beneath them (a continuation line has no row
+    // beneath: it just fades out). One opacity animation: every animated child is a layer.
     const fadeOut = paper.animate([{ opacity: 1 }, { opacity: 0 }], {
-      duration: row.notice ? FLIGHT_MS * 0.75 : FLIGHT_MS,
-      easing: "linear",
-      fill: "forwards",
-    });
-    const fadeIn = content.animate([{ opacity: 0 }, { opacity: 1 }], {
-      duration: FLIGHT_MS * 0.6,
-      delay: FLIGHT_MS * 0.2,
+      duration: FLIGHT_MS * 0.8,
+      delay: LIFT_MS + (row.notice ? FLIGHT_MS * 0.1 : 0),
       easing: "linear",
       fill: "both",
     });
-    [flight, fadeOut, fadeIn].forEach((a) => animations.add(a));
+    [flight, fadeOut].forEach((a) => animations.add(a));
     inFlight++;
     flight.onfinish = () => {
       inFlight--;

@@ -190,6 +190,54 @@ export interface PlayState {
   error: string | null;
 }
 
+/**
+ * The play state lives outside React state: it changes 10 times a second while a step runs (its
+ * clock), and only the checklist needs that. The page subscribes to `coarse` instead, so it
+ * re-renders a handful of times per run, not 10 times a second during the dissolve.
+ */
+export class PlayStore {
+  private state: PlayState;
+  private key: string;
+  private listeners = new Set<() => void>();
+
+  constructor(initial: PlayState) {
+    this.state = initial;
+    this.key = JSON.stringify(initial);
+  }
+
+  get = () => this.state;
+
+  subscribe = (fn: () => void) => {
+    this.listeners.add(fn);
+    return () => {
+      this.listeners.delete(fn);
+    };
+  };
+
+  set(next: PlayState) {
+    const key = JSON.stringify(next);
+    if (key === this.key) return;
+    this.state = next;
+    this.key = key;
+    this.listeners.forEach((fn) => fn());
+  }
+}
+
+/** Everything the page layout depends on: step states and results, not the running clocks. */
+export function coarse(s: PlayState): string {
+  return JSON.stringify([
+    s.status,
+    s.steps.map((step) => step.state),
+    s.method,
+    s.month,
+    s.rowsIn,
+    s.noticesOut,
+    s.newSinceLast,
+    s.rowsReady,
+    s.error,
+  ]);
+}
+
 const TERMINAL = new Set(["SUCCEEDED", "FAILED", "TIMED_OUT", "ABORTED"]);
 export const isTerminal = (status: string) => TERMINAL.has(status);
 
