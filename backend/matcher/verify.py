@@ -56,6 +56,7 @@ log = logging.getLogger("matcher.verify")
 RAW_EXCERPT_MAX = 4096
 PRODUCT_THRESHOLD = 90
 FALLBACK_QUOTE_CHARS = 240
+MAX_LINE_QUOTE_CHARS = 400  # a widened single-needle quote is cut at a sentence end
 MAX_TOKENS = 400
 
 QUOTE_NOT_FOUND = "quote not found in source"
@@ -129,8 +130,14 @@ def quote_from_excerpt(notice: dict, item: dict) -> str:
         notice.get("hazard_or_failed_test"),
     )
     spans = [span for span in (_find_span(n, raw) for n in needles) if span]
-    if spans:
+    if len(spans) > 1:
         return raw[min(s[0] for s in spans) : max(s[1] for s in spans)]
+    if spans:
+        # Only the bare product name matched (an NHTSA notice has no batch, and its hazard field
+        # is prefixed with a component name that never appears in the excerpt). "Jeep Compass"
+        # alone is verbatim but says nothing, so widen to the source's own line around it -- the
+        # summary carrying the defect text -- still character-for-character from the excerpt.
+        return _line_around(raw, spans[0])
     names = [" ".join(str(item.get(k) or "").split()) for k in ("name", "brand", "make", "model")]
     first_word = next((n.split()[0] for n in names[:1] if n and len(n.split()[0]) >= 4), "")
     sentences = [s.strip() for s in _SENTENCE_SPLIT.split(raw) if s.strip()]
@@ -140,6 +147,22 @@ def quote_from_excerpt(notice: dict, item: dict) -> str:
             if low in sentence.lower():
                 return sentence
     return raw[:FALLBACK_QUOTE_CHARS].strip() or raw.strip()[:FALLBACK_QUOTE_CHARS]
+
+
+def _line_around(raw: str, span: tuple[int, int], limit: int = MAX_LINE_QUOTE_CHARS) -> str:
+    """The newline-delimited line of ``raw`` containing ``span``, cut at a sentence end.
+
+    Always a verbatim substring: it is a slice of ``raw``, and when the line is longer than
+    ``limit`` it is cut back to the last ``". "`` that still keeps the matched span inside.
+    """
+    start = raw.rfind("\n", 0, span[0]) + 1
+    end = raw.find("\n", span[1])
+    end = len(raw) if end == -1 else end
+    line = raw[start:end]
+    if len(line) > limit:
+        cut = line.rfind(". ", span[1] - start, limit)
+        line = line[: cut + 1] if cut != -1 else line[:limit]
+    return line.strip() or raw[span[0] : span[1]]
 
 
 def fixture_key_for(notice_pk: str | None) -> str:

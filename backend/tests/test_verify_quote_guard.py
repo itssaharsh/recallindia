@@ -255,3 +255,29 @@ def test_fixture_key_for() -> None:
     assert fixture_key_for("a b/c#d") == "notice-a_b_c_d"
     assert len(fixture_key_for("x" * 200)) == len("notice-") + 80
     assert fixture_key_for(None) == "notice-"
+
+
+def test_a_bare_product_match_widens_to_the_source_line_verbatim() -> None:
+    """NHTSA: no batch, and the hazard field carries a component prefix the excerpt never has, so
+    only "Jeep Compass" matches. The quote must be the source's own summary line, not two words."""
+    summary = (
+        "Chrysler (FCA US, LLC) is recalling certain 2022 Jeep Compass vehicles. "
+        "The front seat head restraints were not welded properly."
+    )
+    raw = summary + "\nImproperly welded head restraints can increase the risk of injury."
+    notice = {
+        "product": "Jeep Compass",
+        "batches": [],
+        "hazard_or_failed_test": "SEATS:FRONT ASSEMBLY:HEAD RESTRAINT: Improperly welded",
+        "raw_excerpt": raw,
+    }
+    quote = quote_from_excerpt(notice, {"kind": "vehicle", "name": "Jeep Compass"})
+    assert quote == summary  # the whole line, not "Jeep Compass"
+    assert quote_is_verbatim(quote, raw)
+    assert "head restraints were not welded" in quote
+
+    # a very long line is cut at a sentence end and stays a verbatim prefix of that line
+    long_line = "Maker is recalling certain Jeep Compass vehicles. " + "Filler sentence here. " * 40
+    cut = quote_from_excerpt({**notice, "raw_excerpt": long_line}, {"name": "x"})
+    assert len(cut) <= 400 and cut.endswith(".") and long_line.startswith(cut)
+    assert quote_is_verbatim(cut, long_line)
