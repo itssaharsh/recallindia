@@ -42,13 +42,27 @@ make             # lists every target
   cpsc / nhtsa / openfda every 15 minutes and the CDSCO portal daily.
 - **No LLM in the decision path (by design; Bedrock quotas held at 0 on this account, increase
   denied — model path implemented behind a flag).** `BEDROCK_ENABLED` defaults to `false`; the
-  verifier, normaliser and (later) claim letter are deterministic Python / templates.
+  verifier, normaliser and claim letter are deterministic Python / templates.
 - **Textract works** (account on the Paid plan since 2026-09-19): the live `/ingest` run on the
   June 2025 archive PDF used Textract TABLES (57 data rows → 55 notices). `pdfplumber`
   `page.find_tables()` stays the first-class fallback; older archive layouts return fewer than 5
   Textract rows and take it.
 - **Comprehend, Translate and Polly work** in `ap-south-1` (`Kajal` neural voice available);
   wrappers with DEMO_MODE fixtures live in `backend/common/aws_ai.py`.
+- **Case approval, claim letter and signed evidence (P08/P09) work live.** An alert pauses the
+  match execution at `WaitForApproval` (a Step Functions task token,
+  [docs/media/sfn-wait.png](docs/media/sfn-wait.png)). Approve on `/case/<id>` resumes it. Claim
+  drafts the letter (Jinja2 → reportlab PDF), and Evidence seals the source under S3 Object Lock
+  with a KMS signature. The certificate then stamps VERIFIED, and "Tamper test" turns it to
+  SIGNATURE INVALID. Proof on the live snapshot:
+
+  ```
+  $ aws s3api get-object-retention --bucket recallindia-evidencebucket-hag3vmz07ecy \
+      --key evidence/case-20260919203956-f2609d/7860c169e932f79b.json --version-id VrMBdNxagMGs1yyIxxNqqJwD1Qc_7kUE
+  { "Retention": { "Mode": "GOVERNANCE", "RetainUntilDate": "2026-10-19T21:09:26+00:00" } }
+  $ aws s3api delete-object --bucket recallindia-evidencebucket-hag3vmz07ecy --key … --version-id …
+  An error occurred (AccessDenied) when calling the DeleteObject operation: Access Denied because object protected by object lock.
+  ```
 - **SES identity is pending**: no verified identity in `ap-south-1` yet (sandbox). Alert emails are
   logged as `email.skipped` and never fail an execution; set `NOTIFY_EMAIL` once one is verified.
 
@@ -229,8 +243,9 @@ Reading `GET /ingest/status/{arn}`:
   `counts` (`created` / `updated` / `unchanged` / `upserted` + `rows_in` / `notices_out`),
   `diff` (`new` / `updated` / `existing` / `total` / `previous`), `pdf` (`pdf_s3_key`,
   `pdf_url`, `month`, `pages`), `rows_s3_key`, `error` (null unless something failed).
-  Textract is blocked on this account (Free plan), so live runs report `method: "pdfplumber"`
-  with `fallback_used.extract: true` after the Textract attempt fails.
+  When Textract fails or reads too few rows, the run reports `method: "pdfplumber"` with
+  `fallback_used.extract: true` (the account has been on the Paid plan since 2026-09-19, so live
+  runs use Textract).
 
 See [ADR-005](docs/adr/ADR-005-source-index-and-cursor-pagination.md) for why the listing is
 index-only with a per-source cursor and why `q` is a post-filter.
@@ -244,7 +259,11 @@ index-only with a per-source cursor and why `q` is a post-filter.
 | `POST /items` | JSON bulk create (`{"items": [{kind, name, brand, model, batch, serial, make, year, purchase_date}]}` or one object). `name` is required. |
 | `GET /items`, `GET /items/{id}` | The item wall; an item carries `status` (`clear` / `hold` / `alert`), `case_id`, `last_check_arn`. The items table holds one demo user's wall, so a bounded scan is acceptable here (notices never are scanned). |
 | `POST /items/{id}/check` | Starts the `MatchStateMachine` (202 + execution ARN). In `DEMO_MODE=1` the same five steps run in-process and the response already carries the decision. |
-| `GET /cases/{id}` | The case: decision, reason, quoted sentence, range check, `verifier`, `reasoning`, `sold_after_notice`, audit. |
+| `GET /cases/{id}` | The case: decision, reason, quoted sentence, range check, `verifier`, `reasoning`, `sold_after_notice`, `approval` (never the task token), `claim_text`, `evidence`, audit. |
+| `POST /cases/{id}/approve` | `SendTaskSuccess` on the waiting execution. Single-use: a conditional update removes the token, so a second answer (or a race) is 409. An unknown case is 404; a dismiss / hold case, or one not waiting yet, is 409. Neither calls Step Functions. |
+| `POST /cases/{id}/reject` | `SendTaskFailure(error="Rejected")`; the case becomes `rejected` and the execution fails with no letter and no evidence. Same 404 / 409 rules. |
+| `GET /cases/{id}/claim` | A 10-minute presigned link to the claim letter PDF (404 until it is drafted). |
+| `GET /cases/{id}/verify-evidence[?tamper=1]` | Re-reads the locked snapshot version, re-hashes it and asks KMS `Verify`: `{valid, sha256, recorded_sha256, signed_at, key_id, …}`. `tamper=1` flips one byte of the downloaded copy in memory first (labelled `demo_control`); nothing stored changes. |
 | `GET /events?since=&limit=&cursor=` | In-app events, newest first (`case.alert`, `case.hold`, `case.dismiss`, `item.clear`, `email.sent`, `email.skipped`). |
 
 The pipeline is Candidates → (Map, max 2 at a time) Verify → RangeCheck → Decide → Notify, all deterministic Python:
@@ -254,6 +273,12 @@ The pipeline is Candidates → (Map, max 2 at a time) Verify → RangeCheck → 
 - **RangeCheck**: batches exact or case/space-insensitive; serial ranges (`A12–A99`, `4000-5200`, `starting with 24`); vehicle model year; no identifier → `inside: null`.
 - **Decide**: `alert` = covers and inside; `hold` = covers but no identifier, or verification unavailable; `dismiss` with the exact reason (`batch FT5428 not in listed batches [FT5427]`, `model X not covered; notice lists Y`, `year 2021 outside 2017–2019`); no candidates → the item is `clear` with `no match in 4 sources as of <time>` and no case is written.
 - **Notify**: writes the case, sets the item status (a dismissed near-miss stays `clear` but keeps its `case_id` so the wall can show the amber reason), appends audit, writes an event, and emails `NOTIFY_EMAIL` on `alert` only. Until an SES identity is verified the send is logged as `email.skipped` and the execution still succeeds.
+
+An `alert` then waits for the human:
+
+- **WaitForApproval** (`lambda:invoke.waitForTaskToken`): the Lambda stores the task token and `approval.token_issued_at` on the case. There is no heartbeat, and `TimeoutSeconds` is 86400. On timeout, ExpireApproval marks the case `expired`. Only `Lambda.*` errors are retried, because retrying a rejection or a timeout would reopen the wait.
+- **Claim**: a Jinja2 template (`StrictUndefined`, no model) addressed by item kind: pharmacy, dealer or retailer. It cites the notice (id, source, URL, row), the product and batch / serial / year, the failed test or hazard, and the remedy (or "refund or replacement"). When the item was sold after the notice, it adds the purchase date against the notice date and a general Consumer Protection Act, 2019 paragraph with no section numbers. reportlab renders it to `claims/<case_id>.pdf`; the text stays on the case.
+- **Evidence**: the source's own bytes (the alert PDF, the portal row, or the recall record from the regulator's API) go to the evidence bucket with Object Lock GOVERNANCE, retained for 30 days. The SHA-256 is signed with KMS (RSA_2048, `RSASSA_PKCS1_V1_5_SHA_256`). Why this and not a hash in the table: [ADR-007](docs/adr/ADR-007-object-lock-kms-evidence.md).
 
 ```bash
 make items-add NAME="Paracetamol Tablets IP 650mg" BRAND="Forgo Pharmaceuticals" BATCH=FT5427 PURCHASED=2026-08-01
@@ -266,7 +291,7 @@ make case-get ID=case-20260919...
 
 A static Next.js export on Amplify Hosting that calls the HTTP API from the browser. Routes,
 demo mode and the design rules are in [app/README.md](app/README.md); the screenshots are in
-[docs/media/](docs/media/) (`ui-*.png`). The app adds these endpoints to the API:
+[docs/media/](docs/media/) (`ui-*.png`; the case page is `ui-case*.png`). The app adds these endpoints to the API:
 
 | Endpoint | What it does |
 |---|---|
@@ -274,7 +299,7 @@ demo mode and the design rules are in [app/README.md](app/README.md); the screen
 | `POST /uploads` | A presigned PUT (5 min) for one strip photo to `raw/uploads/<uuid>.jpg`, so the photo goes from the phone to S3 without passing through the API. |
 | `POST /items/ocr` | Runs Textract `DetectDocumentText` on that upload. When the full image yields no batch, it crops the right, left, bottom and top edge bands and reads them too, because the batch stamp is often printed vertically along one edge. Deterministic rules then read batch / Mfg / Exp / maker / product into a form the user confirms. Nothing is saved. |
 | `POST /items/normalise` | One product per pasted line: Comprehend `BatchDetectEntities` spans plus rules give brand / product / batch / vehicle make-year-registration, with a confidence. A row under 0.8 needs a tap. Nothing is saved; the app posts the confirmed rows to `POST /items`. |
-| `GET /items/{id}/check-status` | The five match steps as `pending` / `running` / `done` / `failed` / `skipped`, read from the execution history. It drives the card's live checklist. |
+| `GET /items/{id}/check-status` | The five match steps as `pending` / `running` / `done` / `failed` / `skipped`, read from the execution history, plus `approval_steps` (WaitForApproval / Claim / Evidence) and `approval`. `status` is `WAITING_FOR_APPROVAL` while the execution is paused for the human. It drives the card's live checklist and the case page's Claim → Evidence checklist. |
 | `GET /ingest/runs` | The last 10 IngestStateMachine runs (Step Functions `ListExecutions`, no table scan): month, method, rows in, notices out, new, started, duration. |
 | `GET /ingest/runs/{id}` | One run as `/ingest` replays it: the step timings in milliseconds from the execution history; the Textract poll cadence (exact since 2026-09-19, rebuilt from the backoff schedule and marked `estimated` for older runs); every extracted row with its bbox and the notice it became, from the same deterministic mapping Normalise uses. A continuation line merged into the row above carries `merged_into`. Rows come from the run's own copy, `cdsco/runs/<run_id>.rows.json`, so a later run of the same PDF cannot change an earlier run's replay. |
 

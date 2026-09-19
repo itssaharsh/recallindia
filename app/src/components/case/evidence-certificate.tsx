@@ -16,7 +16,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   return (
     <>
       <dt className="text-muted">{label}</dt>
-      <dd className="min-w-0 break-all text-text">{children}</dd>
+      <dd className="min-w-0 text-text [overflow-wrap:anywhere]">{children}</dd>
     </>
   );
 }

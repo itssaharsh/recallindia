@@ -165,3 +165,39 @@ Perf gate: Chrome with 4× CPU throttling, a 30 s recording that includes the wh
 dissolve averages 54.4–55.5 fps over two runs, and its worst second is 50–51 fps. The first 4 s
 of the recording (pdf.js rasterising the 6 pages before the run starts) is below that.
 
+
+## Update 2026-09-19 (5)
+
+**Case approval, claim letter and signed evidence (P08/P09) are live.** `make seed-live` then
+`make validate-live`: **PASS**. The result was 2 alerts, 1 dismiss and 12 clear, with both alerts
+waiting for approval.
+
+| Check | Result |
+|---|---|
+| Paused execution | `check-demo-alert-20260919203948-90d9` held at WaitForApproval. It was "In progress" with `Task: lambda:invoke`, timeout 86400 and no heartbeat. Console screenshot: [docs/media/sfn-wait.png](media/sfn-wait.png). |
+| Approve (UI) | https://main.d2jn22qjgettr5.amplifyapp.com/case/case-20260919203956-f2609d. Approve → Claim (PDF 2.9 KB) → Evidence → VERIFIED took 8.9 s. The checklist went ◐ → ● from check-status. The execution SUCCEEDED at 21:09:26Z. |
+| Claim letter | `claims/case-20260919203956-f2609d.pdf`, opened from the page as a presigned S3 link (200, `application/pdf`). It is addressed to the Pharmacist-in-charge and reads: batch FT5427, failed CDSCO quality test (July 2026 alert, row 12), DTL Bikaner, "I bought it on 12 July 2026, 11 days after the notice was published on 1 July 2026 … under the Consumer Protection Act, 2019." |
+| Evidence | Snapshot `evidence/case-20260919203956-f2609d/7860c169e932f79b.json` (portal row, 671 B), version `VrMBdNxagMGs1yyIxxNqqJwD1Qc_7kUE`. SHA-256 `7860c169…98325c87`, signed by KMS key `e0712497-03c9-4f41-af7d-eaf3c4b3ab7f`, retained until 2026-10-19T21:09:26Z. |
+| Verify / tamper | VERIFIED. With `?tamper=1` the copy hashes to `0a84c215a704…` while the signature covers `7860c169e932…`: SIGNATURE INVALID. Clicking again: VERIFIED. |
+| Reject (UI) | `case-20260919204002-5cb31b` (Jeep Compass, NHTSA 24V436000): Reject → Reject case. The case became `rejected`, and execution `check-demo-vehicle-20260919203959-f7cc` FAILED with error `Rejected`. |
+
+Object Lock, on the live snapshot (run as the account's admin IAM user, without the bypass header):
+
+```
+$ aws s3api get-object-retention --bucket recallindia-evidencebucket-hag3vmz07ecy --key evidence/case-20260919203956-f2609d/7860c169e932f79b.json --version-id VrMBdNxagMGs1yyIxxNqqJwD1Qc_7kUE --profile firstcommit
+{ "Retention": { "Mode": "GOVERNANCE", "RetainUntilDate": "2026-10-19T21:09:26+00:00" } }
+
+$ aws s3api delete-object --bucket recallindia-evidencebucket-hag3vmz07ecy --key evidence/case-20260919203956-f2609d/7860c169e932f79b.json --version-id VrMBdNxagMGs1yyIxxNqqJwD1Qc_7kUE --profile firstcommit
+An error occurred (AccessDenied) when calling the DeleteObject operation: Access Denied because object protected by object lock.
+```
+
+Notes:
+- The brief asked for the decision record as ADR-006, which is already the Decide / "clear"
+  record, so it is [ADR-007](adr/ADR-007-object-lock-kms-evidence.md).
+- The evidence proves what the source served when the case was sealed, after approval. It does
+  not prove what the source showed on the purchase date.
+- In `DEMO_MODE=1` the signature is an HMAC under the key id `demo-local-hmac`, never a KMS one.
+- The SES identity is still unverified, so the alert email is logged as `email.skipped`.
+- After the screenshots, demo-alert was checked again. Its new case
+  `case-20260919211528-1caab2` is waiting for approval, ready for the 1:25 shot; the window
+  closes at 21:15Z on 20 September. `make seed-live` makes fresh ones.

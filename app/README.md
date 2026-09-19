@@ -13,7 +13,8 @@ Live: https://main.d2jn22qjgettr5.amplifyapp.com. Demo data: add `?demo=1`.
 | `/` | Feed: header counter (`N notices · S sources · last poll hh:mm:ss`), source chips with poller health, 40px ledger rows, "Load 50 more" (cursor), page 1 re-polled every 15 s. Clicking a row opens the notice sheet with the full notice, the source's own words on paper, and links to the source and the PDF. `?source=cdsco_nsq` deep-links a filter. |
 | `/mine/` | Item wall: an outcome line, filters, and item cards. The alert face shows the decision's first clause, a range bar and the quoted source row. The dismissed face (amber edge) shows the exact reason. The clear face shows "No match in N sources as of hh:mm". While a check runs, the card flips to a live checklist. The add sheet has three tabs: Scan strip, Paste lines, Vehicle. |
 | `/ingest/` | The PDF-to-feed dissolve (below). `?run=<id>` follows a live run, `?replay=<id>[&speed=2]` replays a stored one. |
-| `/case/`, `/api/` | Designed stubs for later prompts. `/case/?id=<case>`; on Amplify, `/case/<case>` is rewritten to the same page. |
+| `/case/` | One finding, start to finish: `/case/?id=<case>`, and on Amplify `/case/<case>` is rewritten to the same page. Sections below. |
+| `/api/` | A designed stub for a later prompt. |
 | anything else | The designed 404 page, served with a real 404 status. |
 
 ## Run it
@@ -49,6 +50,8 @@ src/components/shell/      app state (demo flag, stats poll), rail, top bar
 src/components/feed/       feed view, rows, source filters, notice sheet
 src/components/mine/       wall, item card (flip), checklist, add sheet
 src/components/ingest/     /ingest: view, PDF stage, dissolve engine + column, checklist, recent runs
+src/components/case/       /case: view, approval panel, evidence certificate (stamp), show work
+src/lib/case.ts            case wording, approval steps from the case, the demo replay
 src/components/common/     empty state, status tag, source chip, source excerpt, range bar, stubs
 src/components/ui/         shadcn (radix-nova) with the DESIGN.md radius scale and surfaces
 ```
@@ -60,7 +63,7 @@ src/components/ui/         shadcn (radix-nova) with the DESIGN.md radius scale a
   0 / 4 / 10 / 18 (rows / inputs / cards / sheets). Dark only. Headings are Bricolage Grotesque,
   body text IBM Plex Sans, and identifiers IBM Plex Mono. Body numerals are tabular.
 - Four animations and no more: feed rows snapping in (only rows that arrived by poll), the card
-  flip (only when a check starts or ends), the range bar drawing, and the evidence stamp (later).
+  flip (only when a check starts or ends), the range bar drawing, and the evidence stamp pressing down (scale 1.15 → 1 at a 6° tilt, 300 ms).
   `prefers-reduced-motion` swaps each one for a 150 ms crossfade.
 - Wording follows CLAUDE.md. A CDSCO hit reads "failed CDSCO quality test, JUL-2026 alert, row 12",
   never "recalled". A clean item reads "no match in N sources as of <time>".
@@ -113,3 +116,38 @@ two only know when a run starts and when it ends. The API adds `GET /items/{id}/
 which reads the Step Functions execution history and returns each of the five steps as `pending`,
 `running`, `done`, `failed` or `skipped`, with a summary. The card polls it every 2 s while a
 check runs, then re-reads the item.
+
+## /case: approval, claim letter, evidence
+
+- **Top.** The outcome in display type: "You were sold this 11 days after the notice" when the
+  item was sold after the notice, else "Your batch FT5427 is listed on CDSCO's July 2026 alert"
+  (a recall: "Your 2022 Jeep Compass is on NHTSA recall 24V436000"). Under it, the dates line
+  ("Purchased 12 Jul 2026 · CDSCO alert 01 Jul 2026 → **sold after notice**"), the source chip
+  and the decision tag.
+- **The notice.** The citation, the source's own words on paper with the matched sentence
+  highlighted, the failed test or hazard, the lab, the remedy, and the range bar.
+- **Your answer.** While the task token is open: "Waiting for you" in hold amber, when the 24 h
+  window closes, **Approve** (the only primary button in the app) and **Reject** (a text button,
+  confirmed inline). After Approve, a checklist advances Claim → Evidence from real state:
+  `GET /items/{id}/check-status` every 1.5 s, merged with the case as it fills. Once the letter is
+  drafted: "Open claim letter" (a fresh presigned link, opened in a tab created inside the click
+  so it is not a blocked pop-up) and the letter's text on paper. Rejected and expired cases say
+  what happened and that nothing was drafted.
+- **Evidence certificate.** Radius 0, mono: SHA-256, KMS key, algorithm, retain-until with the
+  Object Lock mode, signed-at, snapshot key and version. On load it calls
+  `GET /cases/{id}/verify-evidence`, and the stamp presses VERIFIED in clear green. "Tamper test"
+  asks again with `?tamper=1`, and the stamp turns to SIGNATURE INVALID in alert red, with the two
+  hashes and the demo-control note. Clicking again re-verifies the original.
+- **Show work** (closed by default). The verification chain from the execution's own step
+  results (candidates → verified against the row → batch inside the list → decision → recorded),
+  the verifier's reasoning string, the execution ARN, and the audit trail (`ts · step · detail`,
+  UTC, mono).
+
+Every card on `/mine/` that has a case links to it, including dismissed and hold cards.
+
+**Demo replay.** `?demo=1` holds a recording of a live case after it was approved and sealed
+(`make app-fixtures` records each case, its check-status, both verify answers and the claim PDF).
+The page opens it as it stood while it waited. Approve replays Claim → Evidence with the recorded
+gaps (each step shown for at least 0.9 s), then shows the recorded case. The stamp and the tamper
+test use the recorded verify answers, and the letter opens the recorded PDF. Reject is disabled
+in demo mode, because demo data is read-only.
