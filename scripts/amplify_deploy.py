@@ -34,8 +34,9 @@ RULES = [
     # /case/<id> is served by the one exported /case/ page, which reads the id from the path
     # (dots excluded so /case/index.txt, the page's RSC payload, is served as itself)
     {"source": r"</^\/case\/[^\/.]+\/?$/>", "target": "/case/index.html", "status": "200"},
-    # anything else that is not a file: the designed 404 page, with a real 404 status
-    {"source": "/<*>", "target": "/404.html", "status": "404"},
+    # anything else that is not a file: the designed 404 page at the requested URL with a real
+    # 404 status ("404-200" is Amplify's in-place 404; plain "404" answers with a 302 to it)
+    {"source": "/<*>", "target": "/404.html", "status": "404-200"},
 ]
 
 

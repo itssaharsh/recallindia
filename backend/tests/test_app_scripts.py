@@ -144,7 +144,7 @@ def test_write_replaces_stale_files_and_indexes_every_response(tmp_path: Path) -
 def test_case_rewrite_comes_first_and_serves_only_ids() -> None:
     case_rule, not_found = amplify.RULES
     assert (case_rule["status"], case_rule["target"]) == ("200", "/case/index.html")
-    assert (not_found["source"], not_found["status"]) == ("/<*>", "404")
+    assert (not_found["source"], not_found["status"]) == ("/<*>", "404-200")
     pattern = re.compile(case_rule["source"][2:-2])  # Amplify writes a regex as </.../>
     assert pattern.match("/case/case-20260919161649-501606")
     assert pattern.match("/case/case-20260919161649-501606/")
