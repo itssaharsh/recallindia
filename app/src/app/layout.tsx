@@ -1,10 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { preconnect } from "react-dom";
 
 import { AppStateProvider } from "@/components/shell/app-state";
 import { Rail } from "@/components/shell/rail";
 import { TopBar } from "@/components/shell/top-bar";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { API_URL } from "@/lib/api";
 
 import "./globals.css";
 
@@ -23,6 +25,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = { themeColor: "#0d1117", colorScheme: "dark" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  // every page's first data waits on the API (client-side fetch): open that connection with the
+  // HTML instead of after hydration (anonymous = the credential-less CORS fetches reuse it)
+  if (API_URL) preconnect(API_URL, { crossOrigin: "anonymous" });
   return (
     <html lang="en" className={`dark ${bricolage.variable} ${plexSans.variable} ${plexMono.variable}`}>
       <body>
