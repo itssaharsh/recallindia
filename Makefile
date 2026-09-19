@@ -152,6 +152,29 @@ events: ## GET /events?limit=20 (newest first)
 	curl -sS "$$(make -s api-url)/events?limit=20"
 	@echo ""
 
+# --- app/ (Next.js static export on Amplify Hosting) --------------------------------------
+# NEXT_PUBLIC_API_URL defaults to the stack's ApiUrl; set it in .env or the shell to override.
+# One build at a time (WSL memory): the heap cap makes a runaway build fail instead of OOM.
+.PHONY: app-dev app-fixtures app-build app-origin app-deploy
+APP_API = api="$${NEXT_PUBLIC_API_URL:-$$(make -s --no-print-directory api-url)}"
+
+app-dev: ## next dev on :3000 against the deployed API (?demo=1 reads app/public/fixtures)
+	@$(APP_API); cd app && NEXT_PUBLIC_API_URL="$$api" NEXT_TELEMETRY_DISABLED=1 npm run dev
+
+app-fixtures: ## Record the live API into app/public/fixtures + manifest.json for ?demo=1
+	$(PY) scripts/gen_ui_fixtures.py --stack $(STACK_NAME) --profile $(AWS_PROFILE) --region $(AWS_REGION)
+
+app-build: ## Static export of app/ into app/out (NEXT_PUBLIC_API_URL = the stack's ApiUrl)
+	@$(APP_API); echo "NEXT_PUBLIC_API_URL=$$api"; cd app && NEXT_PUBLIC_API_URL="$$api" \
+		NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS=--max-old-space-size=1536 npm run build
+
+app-origin: ## Ensure the Amplify app + main branch exist and print the origin (for AppOrigins)
+	$(PY) scripts/amplify_deploy.py --origin --profile $(AWS_PROFILE) --region $(AWS_REGION)
+
+app-deploy: app-build ## app-build, then zip app/out into an Amplify manual deployment; prints the URL
+	@$(APP_API); $(PY) scripts/amplify_deploy.py --api-url "$$api" \
+		--profile $(AWS_PROFILE) --region $(AWS_REGION)
+
 clean: ## Remove venv, SAM build output, caches and the local demo store
 	rm -rf $(VENV) .aws-sam .demo_store .pytest_cache .ruff_cache
 	find . -name __pycache__ -type d -prune -exec rm -rf {} +
