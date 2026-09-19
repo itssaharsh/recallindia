@@ -142,7 +142,7 @@ export function FeedView() {
           tone="error"
           what="The feed could not load"
           why={`Couldn't reach ${apiHost()}: ${error}. Every notice is stored; the page just needs the API.`}
-          action={<Button onClick={reload}>Retry</Button>}
+          action={<Button variant="outline" onClick={reload}>Retry</Button>}
         />
       )}
 
@@ -158,7 +158,7 @@ export function FeedView() {
           icon={Inbox}
           what="Every recall and quality failure from 4 sources lands here"
           why="No poller has run against this stack yet, so there is nothing to list."
-          action={<Button onClick={reload}>Check again</Button>}
+          action={<Button variant="outline" onClick={reload}>Check again</Button>}
         />
       ))}
 

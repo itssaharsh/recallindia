@@ -174,7 +174,7 @@ function ScanTab({ demo, onDone }: { demo: boolean; onDone: (items: Item[]) => v
           disabled={busy || demo}
           onChange={(e) => onFile(e.target.files?.[0])}
         />
-        <span className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-sm bg-primary px-3 text-sm font-medium text-primary-foreground">
+        <span className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-sm border border-line px-3 text-sm font-medium text-text hover:bg-surface-2">
           <Camera aria-hidden className="size-4" /> {ocr ? "Scan another photo" : "Take or choose a photo"}
         </span>
       </label>
@@ -225,7 +225,7 @@ function ScanTab({ demo, onDone }: { demo: boolean; onDone: (items: Item[]) => v
               ))}
             </ul>
           </details>
-          <Button onClick={save} disabled={busy || !form.name.trim() || demo}>
+          <Button variant="outline" onClick={save} disabled={busy || !form.name.trim() || demo}>
             {step === "saving" ? "Adding…" : "Add and check"}
           </Button>
         </div>
@@ -312,7 +312,7 @@ function PasteTab({ demo, onDone }: { demo: boolean; onDone: (items: Item[]) => 
           className="font-mono text-[13px]"
         />
       </div>
-      <Button onClick={read} disabled={busy || !text.trim() || demo}>
+      <Button variant="outline" onClick={read} disabled={busy || !text.trim() || demo}>
         {busy && !rows ? "Reading…" : "Read lines"}
       </Button>
       {error && (
@@ -361,7 +361,7 @@ function PasteTab({ demo, onDone }: { demo: boolean; onDone: (items: Item[]) => 
               </li>
             ))}
           </ul>
-          <Button onClick={add} disabled={busy || ready === 0 || demo}>
+          <Button variant="outline" onClick={add} disabled={busy || ready === 0 || demo}>
             {busy ? "Adding…" : `Add ${ready} and check`}
           </Button>
         </div>
@@ -440,7 +440,7 @@ function VehicleTab({ demo, onDone }: { demo: boolean; onDone: (items: Item[]) =
           {error}
         </p>
       )}
-      <Button onClick={add} disabled={busy || !valid || demo}>
+      <Button variant="outline" onClick={add} disabled={busy || !valid || demo}>
         {busy ? "Adding…" : "Add and check"}
       </Button>
     </div>

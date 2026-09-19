@@ -79,6 +79,41 @@ export interface RangeCheck {
   kind?: "batch" | "serial" | "vehicle_year" | "none";
 }
 
+export type ApprovalStatus = "waiting" | "approved" | "rejected" | "expired";
+
+/** The human gate (the task token itself never leaves the API). */
+export interface Approval {
+  status: ApprovalStatus;
+  token_issued_at: string;
+  approved_at?: string | null;
+  rejected_at?: string | null;
+  expired_at?: string | null;
+  approver?: string | null;
+  reason?: string | null;
+}
+
+export interface Evidence {
+  sha256: string;
+  kms_key_id: string;
+  signature_b64: string;
+  signing_algorithm?: string;
+  object_lock_mode?: string;
+  object_lock_retain_until: string;
+  snapshot_s3_key: string;
+  snapshot_version_id?: string | null;
+  snapshot_bytes?: number | null;
+  content_type?: string | null;
+  snapshot_kind?: "pdf" | "portal_row" | "source_json" | "stored_notice" | null;
+  source_url?: string | null;
+  signed_at?: string | null;
+}
+
+export interface AuditEvent {
+  ts: string;
+  event: string;
+  detail?: Record<string, unknown> | null;
+}
+
 export interface Case {
   case_id: string;
   item_id: string;
@@ -92,6 +127,38 @@ export interface Case {
   confidence?: number | null;
   reasoning?: string | null;
   covers_item?: boolean | null;
+  created_at?: string | null;
+  execution_arn?: string | null;
+  approval?: Approval | null;
+  claim_pdf_s3_key?: string | null;
+  claim_text?: string | null;
+  claim_addressee?: "pharmacy" | "dealer" | "retailer" | null;
+  claim_created_at?: string | null;
+  evidence?: Evidence | null;
+  audit?: AuditEvent[];
+}
+
+/** GET /cases/{id}/verify-evidence[?tamper=1] */
+export interface VerifyResult {
+  case_id: string;
+  valid: boolean;
+  sha256: string;
+  recorded_sha256: string;
+  signed_at: string | null;
+  key_id: string;
+  algorithm?: string | null;
+  retain_until?: string | null;
+  tampered: boolean;
+  demo_control: string | null;
+  checked_at: string;
+}
+
+/** GET /cases/{id}/claim */
+export interface ClaimLink {
+  case_id: string;
+  key: string;
+  url: string;
+  expires_in: number;
   created_at?: string | null;
 }
 
@@ -121,6 +188,7 @@ export interface Item {
 }
 
 export type StepName = "Candidates" | "Verify" | "RangeCheck" | "Decide" | "Notify";
+export type ApprovalStepName = "WaitForApproval" | "Claim" | "Evidence";
 export type StepState = "pending" | "running" | "done" | "failed" | "skipped";
 
 export interface CheckStep {
@@ -131,11 +199,22 @@ export interface CheckStep {
   summary?: Record<string, unknown>;
 }
 
+export interface ApprovalStep {
+  name: ApprovalStepName;
+  state: StepState;
+  started_at?: string | null;
+  ended_at?: string | null;
+  summary?: Record<string, unknown>;
+}
+
 export interface CheckStatus {
   item_id: string;
   execution_arn: string;
-  status: "RUNNING" | "SUCCEEDED" | "FAILED" | "TIMED_OUT" | "ABORTED" | string;
+  /** WAITING_FOR_APPROVAL: the check is over and an alert waits for the human */
+  status: "RUNNING" | "WAITING_FOR_APPROVAL" | "SUCCEEDED" | "FAILED" | "TIMED_OUT" | "ABORTED" | string;
   steps: CheckStep[];
+  approval_steps?: ApprovalStep[];
+  approval?: Approval | null;
   decision?: string | null;
   case_id?: string | null;
 }

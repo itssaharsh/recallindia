@@ -1,15 +1,15 @@
 import type { CheckStep, Item, StepName, StepState } from "@/lib/types";
 
 // ○ pending · ◐ running · ● done (R25: every planned step visible, with its real state).
-const GLYPH: Record<StepState, string> = { pending: "○", running: "◐", done: "●", failed: "●", skipped: "○" };
-const TONE: Record<StepState, string> = {
+export const GLYPH: Record<StepState, string> = { pending: "○", running: "◐", done: "●", failed: "●", skipped: "○" };
+export const TONE: Record<StepState, string> = {
   pending: "text-muted",
   running: "text-primary-strong",
   done: "text-text",
   failed: "text-alert",
   skipped: "text-muted line-through decoration-line",
 };
-const STATE_WORD: Record<StepState, string> = {
+export const STATE_WORD: Record<StepState, string> = {
   pending: "to do",
   running: "in progress",
   done: "done",

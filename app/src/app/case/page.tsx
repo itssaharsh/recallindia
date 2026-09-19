@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 
-import { CaseStub } from "./stub";
+import { CaseView } from "@/components/case/case-view";
 
 export const metadata: Metadata = { title: "Case" };
 
 export default function CasePage() {
-  return <CaseStub />;
+  return <CaseView />;
 }

@@ -35,7 +35,7 @@ export function StubPage({
         action={
           <Link
             href={href(action.path)}
-            className="inline-flex h-8 items-center rounded-sm bg-primary px-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/80"
+            className="inline-flex h-8 items-center rounded-sm border border-line px-2.5 text-sm font-medium text-text hover:bg-surface-2"
           >
             {action.label}
           </Link>

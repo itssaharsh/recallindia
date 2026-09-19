@@ -115,7 +115,7 @@ export function MineView() {
             </p>
           )}
         </div>
-        <Button onClick={() => setAdding(true)} disabled={demo} title={demo ? "Demo data is read-only" : undefined}>
+        <Button variant="outline" onClick={() => setAdding(true)} disabled={demo} title={demo ? "Demo data is read-only" : undefined}>
           <Plus aria-hidden /> Add a thing
         </Button>
       </div>
@@ -148,7 +148,7 @@ export function MineView() {
           tone="error"
           what="Your things could not load"
           why={`Couldn't reach ${apiHost()}: ${error}. Nothing is lost; the page needs the API to show them.`}
-          action={<Button onClick={load}>Retry</Button>}
+          action={<Button variant="outline" onClick={load}>Retry</Button>}
         />
       )}
 
@@ -166,7 +166,7 @@ export function MineView() {
           what="The medicines, vehicle and appliances you own go here"
           why="Nothing is added yet, so there is nothing to check against the notices."
           action={
-            <Button onClick={() => setAdding(true)} disabled={demo}>
+            <Button variant="outline" onClick={() => setAdding(true)} disabled={demo}>
               <Plus aria-hidden /> Add your first thing
             </Button>
           }

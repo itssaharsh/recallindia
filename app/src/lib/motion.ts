@@ -5,4 +5,6 @@ import type { Transition } from "motion/react";
 export const SNAP_IN: Transition = { type: "spring", duration: 0.22, bounce: 0 };
 export const FLIP: Transition = { type: "spring", duration: 0.4, bounce: 0 };
 export const DRAW: Transition = { type: "spring", duration: 0.32, bounce: 0 };
+/** The evidence stamp presses down: scale 1.15 -> 1 at a 6° tilt, 300 ms. */
+export const STAMP: Transition = { type: "spring", duration: 0.3, bounce: 0 };
 export const CROSSFADE: Transition = { duration: 0.15, ease: "linear" };

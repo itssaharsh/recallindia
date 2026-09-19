@@ -259,7 +259,7 @@ function Front({
           {c?.verifier ? `verifier ${c.verifier}${c.confidence ? ` · ${c.confidence}` : ""}` : ""}
         </span>
         <div className="flex shrink-0 items-center gap-1.5">
-          {face === "alert" && c && (
+          {c?.case_id && (
             <Link
               href={href(`/case/?id=${encodeURIComponent(c.case_id)}`)}
               className="inline-flex h-7 items-center gap-1 rounded-sm px-2 text-[13px] whitespace-nowrap text-primary-strong hover:bg-surface-3"

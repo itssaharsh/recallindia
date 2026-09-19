@@ -267,7 +267,7 @@ export function IngestView() {
               {mode === "replay" && speed !== 1 ? ` · ×${speed}` : ""}
             </span>
           )}
-          <Button onClick={start} disabled={busy} title={demo ? "Demo data: plays the recorded run" : undefined}>
+          <Button variant="outline" onClick={start} disabled={busy} title={demo ? "Demo data: plays the recorded run" : undefined}>
             <Play aria-hidden /> {starting ? "Starting…" : busy && mode === "live" ? "Running…" : "Run ingest"}
           </Button>
         </div>
