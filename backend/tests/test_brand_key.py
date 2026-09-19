@@ -40,7 +40,15 @@ FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "cdsco"
         ("Ningbo Lanchez E-Commerce Co., Ltd.", "ningbo lanchez e-commerce"),
         ("Tam–Bran Pharmaceuticals", "tam-bran pharmaceuticals"),  # en dash -> hyphen
         ("  Jeep  ", "jeep"),
-        ("Char-Broil LLC", "char-broil llc"),  # llc is not in the brief's list: left alone
+        # US legal forms: LLC is a legal suffix exactly like Ltd / LLP (333 live CPSC/openFDA rows)
+        ("Char-Broil LLC", "char-broil"),
+        ("VidaXL LLC", "vidaxl"),
+        ("AlEn USA L.L.C.", "alen usa"),  # dotted form
+        ("Acme L. L. P.", "acme"),
+        # "(P) Ltd." written without the parentheses
+        ("Danish Healthcare P Ltd.", "danish healthcare"),
+        ("Premier P. LTD", "premier"),
+        ("Danish Healthcare (P) Ltd.", "danish healthcare"),
         ("Micro Labs Limited", "micro labs"),
     ],
 )
@@ -59,6 +67,8 @@ def test_single_letters_are_identity_not_noise() -> None:
     assert brand_key("P&G Health Ltd") == "p and g health"  # a bare "p" must never be dropped
     assert brand_key("P & G Health Limited") == "p and g health"
     assert brand_key("XYZ Pharma (P) Ltd.") == "xyz pharma"  # the parenthetical form still goes
+    assert brand_key("P Square Pharma Ltd") == "p square pharma"  # P not followed by Ltd stays
+    assert brand_key("Whele LLC d/b/a Perch") == "whele dba perch"  # d/b/a: see docs/EVAL.md
 
 
 def test_is_idempotent_and_deterministic() -> None:
@@ -99,10 +109,12 @@ def test_on_real_cdsco_data_merged_names_are_the_same_company() -> None:
     # brand_key ever merged two real companies -- say by dropping an identity word such as
     # "pharmaceuticals" -- their residues would differ here and this fails.
     def residue(name: str) -> str:
-        text = re.sub(r"\([^)]*\)", "", name.lower()).replace("&", "and")
-        text = re.sub(r"^m\s*/\s*s\.?", "", text.strip())
+        text = name.lower().strip()
+        text = re.sub(r"\([^)]*\)", "", text).replace("&", "and")
+        text = re.sub(r"^m\s*/\s*s\.?", "", text)
+        text = re.sub(r"\bp\.?\s+(?=(?:ltd|limited)\b)", "", text)  # "P Ltd" = "(P) Ltd"
         text = "".join(ch for ch in text if ch.isalnum())
-        for legal in ("privatelimited", "pvtltd", "limited", "private", "pvt", "ltd", "llp"):
+        for legal in ("privatelimited", "pvtltd", "limited", "private", "pvt", "ltd", "llp", "llc"):
             text = text.removesuffix(legal)
         return text
 

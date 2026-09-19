@@ -21,12 +21,15 @@ import unicodedata
 # / "healthcare" are deliberately NOT here: they distinguish real companies.
 NOISE_TOKENS: frozenset[str] = frozenset(
     {
-        "m/s", "ms", "ltd", "limited", "pvt", "private", "llp", "inc", "co", "company", "corp",
-        "corporation", "industries", "plc", "gmbh",
+        "m/s", "ms", "ltd", "limited", "pvt", "private", "llp", "llc", "inc", "co", "company",
+        "corp", "corporation", "industries", "plc", "gmbh",
     }
 )  # fmt: skip
 
 _MS_PREFIX = re.compile(r"\bm\s*/\s*s\b\.?")  # "M/s." / "M / S" -- before "/" is stripped
+_DOTTED_LL = re.compile(r"\bl\.\s*l\.\s*([cp])\b\.?")  # "L.L.C." / "L. L. P." -> "llc" / "llp"
+# "P Ltd" / "P. Limited" is "(P) Ltd." written without the parentheses: the P means Private.
+_PRIVATE_P = re.compile(r"\bp\.?\s+(?=(?:ltd|limited)\b)")
 _PARENTHETICAL = re.compile(
     r"\([^)]*\)"
 )  # "(P)" = Private, "(India)", "(Unit-II)" -- so no bare "p" token is needed
@@ -55,6 +58,8 @@ def _join_initials(tokens: list[str]) -> list[str]:
 def _tokens(text: str) -> list[str]:
     text = unicodedata.normalize("NFKC", text).lower()
     text = _MS_PREFIX.sub(" ", text)
+    text = _DOTTED_LL.sub(lambda m: " ll" + m.group(1) + " ", text)
+    text = _PRIVATE_P.sub(" ", text)
     text = _PARENTHETICAL.sub(" ", text)
     text = _APOSTROPHES.sub("", text)
     text = _DASHES.sub("-", text).replace("&", " and ")
