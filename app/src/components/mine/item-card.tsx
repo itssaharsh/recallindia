@@ -70,11 +70,16 @@ export function ItemCard({
   const { demo, stats } = useAppState();
   const reduce = useReducedMotion();
   const [steps, setSteps] = useState<CheckStep[]>(PLANNED_STEPS);
+  // the back face stays mounted until the flip home has finished, so the card never changes
+  // height while it is turned towards the viewer
+  const [backMounted, setBackMounted] = useState(checking);
   const sources = stats?.sources_count ?? 4;
   const face = faceOf(item);
 
   useEffect(() => {
-    if (checking) setSteps(PLANNED_STEPS);
+    if (!checking) return;
+    setSteps(PLANNED_STEPS);
+    setBackMounted(true);
   }, [checking]);
 
   // while a check runs: the real step states every 2s, then the finished item (with its case)
@@ -128,20 +133,23 @@ export function ItemCard({
           </motion.div>
         </AnimatePresence>
       ) : (
+        // both faces share one grid cell: the card is as tall as the taller face, so the
+        // five-step checklist is never clipped on a one-column card
         <motion.div
-          className="relative grid min-h-44 grid-cols-1 [transform-style:preserve-3d]"
+          className="grid min-h-44 grid-cols-1 [transform-style:preserve-3d]"
           initial={false}
           animate={{ rotateY: checking ? 180 : 0 }}
           transition={FLIP}
+          onAnimationComplete={() => !checking && setBackMounted(false)}
         >
           <div className={`[grid-area:1/1] [backface-visibility:hidden] ${frame}`} aria-hidden={checking}>
             {front}
           </div>
           <div
-            className="absolute inset-0 overflow-hidden rounded-md border border-line bg-surface-2 [backface-visibility:hidden] [transform:rotateY(180deg)]"
+            className="[grid-area:1/1] rounded-md border border-line bg-surface-2 [backface-visibility:hidden] [transform:rotateY(180deg)]"
             aria-hidden={!checking}
           >
-            {checking && back}
+            {(checking || backMounted) && back}
           </div>
         </motion.div>
       )}

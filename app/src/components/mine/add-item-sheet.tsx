@@ -340,7 +340,7 @@ function PasteTab({ demo, onDone }: { demo: boolean; onDone: (items: Item[]) => 
                     {Math.round(r.confidence * 100)}%
                   </span>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-2">
                   <Input aria-label={`Brand for line ${i + 1}`} value={r.brand ?? ""} placeholder="Brand" onChange={(e) => update(i, { brand: e.target.value })} className="h-8 text-[13px]" />
                   <Input
                     aria-label={`${r.kind === "vehicle" ? "Year" : "Batch"} for line ${i + 1}`}

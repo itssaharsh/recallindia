@@ -20,6 +20,21 @@ const STATE_WORD: Record<StepState, string> = {
 const identifierOf = (item: Item) =>
   item.batch ? `batch ${item.batch}` : item.serial ? `serial ${item.serial}` : item.year ? `model year ${item.year}` : null;
 
+const clip = (s: string, n = 48) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+
+/** "Batch PEP5001 is on the notice's list (PEP5001)" / "Model year 2022 is within 2022–2023". */
+function rangeCopy(s: Record<string, unknown>, item: Item, ident: string | null): string {
+  const yours = String(s.yours || "");
+  const listed = clip(String(s.listed || ""));
+  const inside = s.inside === true ? true : s.inside === false ? false : null;
+  if (item.kind === "vehicle" || s.kind === "vehicle_year") {
+    return inside === null ? `No model years listed to compare ${yours || "yours"} with` : `Model year ${yours} is ${inside ? "within" : "outside"} ${listed}`;
+  }
+  const what = item.batch ? "Batch" : item.serial ? "Serial" : "Your unit";
+  if (inside === null) return `${ident || "Your unit"}: the notice lists nothing to compare with`;
+  return `${what} ${yours} is ${inside ? "on" : "not on"} the notice's list (${listed})`;
+}
+
 /** Microcopy = action + the specific thing + the rule (R25), filled in from real step results. */
 function copy(step: CheckStep, item: Item, sources: number): string {
   const s = (step.summary ?? {}) as Record<string, unknown>;
@@ -38,8 +53,7 @@ function copy(step: CheckStep, item: Item, sources: number): string {
         : `Reading each notice's text for ${item.name}`;
     case "RangeCheck":
       if (step.state === "skipped") return "No listed identifier to compare";
-      if (done && s.listed !== undefined)
-        return `${s.yours || ident || "Your unit"} ${s.inside === true ? "is in" : s.inside === false ? "is not in" : "cannot be compared with"} the listed ${s.listed || "values"}`;
+      if (done && s.listed !== undefined) return rangeCopy(s, item, ident);
       return ident ? `Comparing ${ident} with what each notice lists` : "Looking for a batch, serial or year to compare";
     case "Decide":
       return done && s.decision
