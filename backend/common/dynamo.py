@@ -21,6 +21,10 @@ BRAND_INDEX = "brand_lc-index"
 # GSI (HASH source, RANGE published_at): the public API's newest-first, paginated per-source
 # query. Meta / ingest-run rows have no published_at, so the index never contains them.
 SOURCE_INDEX = "source-published_at-index"
+# Cases-table GSI (HASH rk, RANGE ts): one newest-first listing per row kind -- ``rk = "case"``
+# (Case rows, pk = case_id) and ``rk = "event"`` (Event rows, pk = events#<event_id>) -- for
+# GET /events and the /mine timeline (``query_rk``).
+RK_INDEX = "rk-ts-index"
 
 
 def table_name(kind: TableKind) -> str:
@@ -249,6 +253,74 @@ def count_source(source: str, *, since: str | None = None, max_items: int = 5000
             break
         kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
     return min(total, max_items)
+
+
+def _rk_sort_key(item: dict) -> tuple[str, str]:
+    return (str(item.get("ts", "")), str(item.get("pk", "")))
+
+
+def _rk_items(rk: str, since: str | None) -> list[dict]:
+    """Demo: rows of the cases store the GSI would hold (that ``rk``, a string ``ts``)."""
+    out = []
+    for item in _load("cases").values():
+        ts = item.get("ts")
+        if item.get("rk") != rk or not isinstance(ts, str) or not ts:
+            continue
+        if since and ts < since:
+            continue
+        out.append(item)
+    return out
+
+
+def query_rk(
+    rk: str,
+    *,
+    since: str | None = None,
+    limit: int = 100,
+    exclusive_start_key: dict | None = None,
+    ascending: bool = False,
+) -> tuple[list[dict], dict | None]:
+    """One page of the cases table's ``rk`` rows (``"case"`` | ``"event"``) from ``rk-ts-index``.
+
+    Newest first by default (``ts`` desc), optionally only ``ts >= since``; ``limit`` rows per
+    page. Returns ``(items, last_evaluated_key)`` where the key (``{pk, rk, ts}``) is passed
+    back as ``exclusive_start_key`` to continue and is None once the last page is reached.
+    As on DynamoDB the key is present whenever the page is full, so the last page may be
+    empty (``[]``, None) -- the same rule as ``query_source``.
+
+    Demo mode orders by ``(ts, pk)`` -- a total order, so a page boundary is deterministic --
+    and positions strictly after the ``exclusive_start_key`` row.
+    """
+    limit = max(1, int(limit))
+    if is_demo():
+        items = sorted(_rk_items(rk, since), key=_rk_sort_key, reverse=not ascending)
+        if exclusive_start_key:
+            start = _rk_sort_key(exclusive_start_key)
+            if ascending:
+                items = [n for n in items if _rk_sort_key(n) > start]
+            else:
+                items = [n for n in items if _rk_sort_key(n) < start]
+        page = items[:limit]
+        last = None
+        if len(page) == limit:
+            tail = page[-1]
+            last = {"pk": tail["pk"], "rk": tail["rk"], "ts": tail["ts"]}
+        return page, last
+    from boto3.dynamodb.conditions import Key
+
+    condition = Key("rk").eq(rk)
+    if since:
+        condition = condition & Key("ts").gte(since)
+    kwargs: dict[str, Any] = {
+        "IndexName": RK_INDEX,
+        "KeyConditionExpression": condition,
+        "ScanIndexForward": ascending,
+        "Limit": limit,
+    }
+    if exclusive_start_key:
+        kwargs["ExclusiveStartKey"] = exclusive_start_key
+    resp = _table("cases").query(**kwargs)
+    return list(resp.get("Items", [])), resp.get("LastEvaluatedKey") or None
 
 
 def scan_all(kind: TableKind, limit: int = 500) -> list[dict]:

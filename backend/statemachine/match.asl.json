@@ -1,12 +1,24 @@
 {
-  "Comment": "RecallIndia MatchStateMachine (SPEC section Match pipeline). P04 builds Candidates->Verify->RangeCheck->Decide->Notify; WaitForApproval (P08, waitForTaskToken) and Claim/Evidence (P09) are Pass placeholders. Rules decide, the model explains.",
-  "StartAt": "Candidates",
+  "Comment": "RecallIndia MatchStateMachine (SPEC section Match pipeline). Input {item_id}. Init -> Candidates -> [HasCandidates] -> VerifyEach (Map over <=5 candidates, MaxConcurrency 2: Verify -> RangeCheck -> PerCandidate) -> Decide -> Notify -> [IsAlert] -> WaitForApproval (P08) -> Claim (P09) -> Evidence (P09) -> Done. Rules decide, the model explains: Verify (Bedrock, Claude Haiku 4.5) only says whether the notice text covers the item and quotes it; RangeCheck and Decide are deterministic Python and are the only things that set alert/hold/dismiss/clear. Every task stores its result under its own key ($.candidates, $.verified[], $.decide, $.notify) and the whole state is the input of Candidates, Decide and Notify; the Map iterator receives {candidate, item, run}. A Candidates or Decide failure after retries never fails the execution: HoldUnavailable writes {decision: hold, reason: 'verification unavailable'} and Notify still records it. Wording (CLAUDE.md): a CDSCO NSQ hit is 'failed CDSCO quality test, <month> alert, row N', a clear item is 'no match in N sources as of <time>'.",
+  "StartAt": "Init",
   "States": {
+    "Init": {
+      "Type": "Pass",
+      "Comment": "Stamp the execution identity onto the state: $.run = {execution_arn, execution_name, started_at}. Notify stores execution_arn on the case (Case.execution_arn) and the API's POST /items/{id}/check stored the same ARN on the item (Item.last_check_arn) when it started this execution; GET /items/{id} correlates the two.",
+      "Parameters": {
+        "execution_arn.$": "$$.Execution.Id",
+        "execution_name.$": "$$.Execution.Name",
+        "started_at.$": "$$.Execution.StartTime"
+      },
+      "ResultPath": "$.run",
+      "Next": "Candidates"
+    },
     "Candidates": {
       "Type": "Task",
       "Resource": "${CandidatesFunctionArn}",
-      "Comment": "Query notices by brand_lc + fuzzy product/model. Output <=5 candidates.",
+      "Comment": "Input: the whole state {item_id, run}. Loads the item (pk user#<item_id>), queries notices on the brand_lc GSI for every common.matching.brand_variants(item.brand) (falls back to a product contains-scan of <=500 notices when the item has no brand), keeps rows where matcher.textmatch.product_score >= 80 or textmatch.vehicle_matches, and returns the top 5 by score. Output {item, item_id, candidates: [{notice_pk, score, matched_on}], count, sources_searched, searched_at, degraded}. count is the length of candidates and is what HasCandidates reads; sources_searched (the distinct sources with a meta#<source> row) feeds the 'no match in N sources as of <time>' wording. Never raises on a missing item: {item: null, candidates: [], count: 0, degraded: true} so Decide answers hold.",
       "ResultPath": "$.candidates",
+      "TimeoutSeconds": 90,
       "Retry": [
         {
           "ErrorEquals": ["States.ALL"],
@@ -19,151 +31,179 @@
         {
           "ErrorEquals": ["States.ALL"],
           "ResultPath": "$.error",
-          "Next": "Hold"
+          "Next": "HoldUnavailable"
         }
       ],
-      "Next": "Verify"
+      "Next": "HasCandidates"
     },
-    "Verify": {
-      "Type": "Task",
-      "Resource": "${VerifyFunctionArn}",
-      "Comment": "Bedrock (Claude Haiku 4.5, temperature 0): {covers_item, quoted_sentence, confidence, reasoning}. Bedrock error -> covers_item null.",
-      "ResultPath": "$.verify",
-      "Retry": [
-        {
-          "ErrorEquals": ["States.ALL"],
-          "IntervalSeconds": 2,
-          "MaxAttempts": 2,
-          "BackoffRate": 2
-        }
-      ],
-      "Catch": [
-        {
-          "ErrorEquals": ["States.ALL"],
-          "ResultPath": "$.error",
-          "Next": "Hold"
-        }
-      ],
-      "Next": "RangeCheck"
-    },
-    "RangeCheck": {
-      "Type": "Task",
-      "Resource": "${RangeCheckFunctionArn}",
-      "Comment": "Deterministic batch/serial/vehicle-year check: {inside: bool|null, listed, yours}. Sets $.decision and $.reason.",
-      "ResultPath": "$.range_check",
-      "Retry": [
-        {
-          "ErrorEquals": ["States.ALL"],
-          "IntervalSeconds": 2,
-          "MaxAttempts": 2,
-          "BackoffRate": 2
-        }
-      ],
-      "Catch": [
-        {
-          "ErrorEquals": ["States.ALL"],
-          "ResultPath": "$.error",
-          "Next": "Hold"
-        }
-      ],
-      "Next": "Decide"
-    },
-    "Decide": {
+    "HasCandidates": {
       "Type": "Choice",
-      "Comment": "alert if covers_item && inside; hold if covers_item && inside==null or covers_item==null; dismiss otherwise.",
+      "Comment": "$.candidates.count > 0 -> VerifyEach (the Map); otherwise straight to Decide, which answers clear ('no match in N sources as of <time>') when nothing was degraded and hold when Candidates reported degraded. IsPresent guards the NumericGreaterThan so a malformed Candidates output cannot raise States.Runtime.",
       "Choices": [
         {
           "And": [
-            {"Variable": "$.range_check.decision", "IsPresent": true},
-            {"Variable": "$.range_check.decision", "StringEquals": "alert"}
+            {
+              "Variable": "$.candidates.count",
+              "IsPresent": true
+            },
+            {
+              "Variable": "$.candidates.count",
+              "NumericGreaterThan": 0
+            }
           ],
-          "Next": "MarkAlert"
-        },
-        {
-          "And": [
-            {"Variable": "$.range_check.decision", "IsPresent": true},
-            {"Variable": "$.range_check.decision", "StringEquals": "hold"}
-          ],
-          "Next": "MarkHold"
-        },
-        {
-          "And": [
-            {"Variable": "$.range_check.decision", "IsPresent": true},
-            {"Variable": "$.range_check.decision", "StringEquals": "dismiss"}
-          ],
-          "Next": "MarkDismiss"
-        },
-        {
-          "And": [
-            {"Variable": "$.verify.covers_item", "IsPresent": true},
-            {"Variable": "$.verify.covers_item", "BooleanEquals": true},
-            {"Variable": "$.range_check.inside", "IsPresent": true},
-            {"Variable": "$.range_check.inside", "BooleanEquals": true}
-          ],
-          "Next": "MarkAlert"
-        },
-        {
-          "And": [
-            {"Variable": "$.verify.covers_item", "IsPresent": true},
-            {"Variable": "$.verify.covers_item", "BooleanEquals": true},
-            {"Variable": "$.range_check.inside", "IsPresent": true},
-            {"Variable": "$.range_check.inside", "IsNull": true}
-          ],
-          "Next": "MarkHold"
-        },
-        {
-          "And": [
-            {"Variable": "$.verify.covers_item", "IsPresent": true},
-            {"Variable": "$.verify.covers_item", "IsNull": true}
-          ],
-          "Next": "MarkHold"
-        },
-        {
-          "And": [
-            {"Variable": "$.verify.covers_item", "IsPresent": true},
-            {"Variable": "$.verify.covers_item", "BooleanEquals": false}
-          ],
-          "Next": "MarkDismiss"
+          "Next": "VerifyEach"
         }
       ],
-      "Default": "MarkHold"
+      "Default": "Decide"
     },
-    "MarkAlert": {
-      "Type": "Pass",
-      "Result": "alert",
-      "ResultPath": "$.decision",
+    "VerifyEach": {
+      "Type": "Map",
+      "Comment": "One iteration per candidate (<=5), at most 2 in flight so Bedrock is never asked more than twice at once. Each iteration gets {candidate: <the candidates[] element>, item: $.candidates.item, run: $.run} and produces {candidate, verify, range_check} (PerCandidate); the array of those lands in $.verified in candidate order. An iteration can never fail: Verify and RangeCheck each catch into a degraded placeholder, so a Bedrock outage turns into covers_item null (-> hold), not a failed execution.",
+      "ItemsPath": "$.candidates.candidates",
+      "MaxConcurrency": 2,
+      "Parameters": {
+        "candidate.$": "$$.Map.Item.Value",
+        "item.$": "$.candidates.item",
+        "run.$": "$.run"
+      },
+      "ResultPath": "$.verified",
+      "Iterator": {
+        "StartAt": "Verify",
+        "States": {
+          "Verify": {
+            "Type": "Task",
+            "Resource": "${VerifyFunctionArn}",
+            "Comment": "Input {candidate, item, run}. Loads the notice by candidate.notice_pk and asks Bedrock (MODEL_VERIFY, Claude Haiku 4.5, temperature 0, strict JSON) whether the notice's raw_excerpt + structured fields cover the item. Output {notice_pk, covers_item: bool|null, quoted_sentence, confidence: 0-1, reasoning, verifier: 'bedrock'|'deterministic'|'none', degraded}. quoted_sentence must be a verbatim substring of raw_excerpt (matcher.verify.quote_is_verbatim), otherwise covers_item is null with reasoning 'quote not found in source'. Bedrock error / BedrockUnavailable / timeout -> the deterministic fallback (brand + product match on the stored fields, verifier 'deterministic') or covers_item null with verifier 'none'. DEMO_MODE reads fixtures/bedrock/verify/<key>.json. One retry only (MaxAttempts 1): a second Bedrock round trip already fits the 120 s budget, a third would not.",
+            "ResultPath": "$.verify",
+            "TimeoutSeconds": 120,
+            "Retry": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "IntervalSeconds": 2,
+                "MaxAttempts": 1,
+                "BackoffRate": 2
+              }
+            ],
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "ResultPath": "$.verify_error",
+                "Next": "VerifyUnavailable"
+              }
+            ],
+            "Next": "RangeCheck"
+          },
+          "VerifyUnavailable": {
+            "Type": "Pass",
+            "Comment": "Verify threw after its retry (Lambda error, timeout): stand in the null verdict so RangeCheck still runs and Decide answers hold for this candidate ('verification unavailable'), never alert or dismiss. The thrown error stays in $.verify_error.",
+            "Result": {
+              "covers_item": null,
+              "quoted_sentence": "",
+              "confidence": 0,
+              "reasoning": "verification unavailable",
+              "verifier": "none",
+              "degraded": true
+            },
+            "ResultPath": "$.verify",
+            "Next": "RangeCheck"
+          },
+          "RangeCheck": {
+            "Type": "Task",
+            "Resource": "${RangeCheckFunctionArn}",
+            "Comment": "Input {candidate, item, run, verify}. Deterministic, no model: loads the notice by candidate.notice_pk and compares the item's identifier with what the notice lists -- batch exact / case- and space-insensitive against batches[]; serial against serial_ranges[] (A12-A99, 4000-5200, 'starting with 24'; unknown format -> null); vehicle year within any vehicles[] {year_from, year_to} for the item's make/model. Output {notice_pk, inside: bool|null, listed: str, yours: str, kind: 'batch'|'serial'|'vehicle_year'|'none', detail}. inside is null when the item has no identifier or the notice lists none; listed is the human list ('[DL-4471, DL-4468]') Decide quotes in the dismiss reason 'batch DL-4472 not in listed batches [DL-4471, DL-4468]'.",
+            "ResultPath": "$.range_check",
+            "TimeoutSeconds": 60,
+            "Retry": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "IntervalSeconds": 2,
+                "MaxAttempts": 2,
+                "BackoffRate": 2
+              }
+            ],
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "ResultPath": "$.range_error",
+                "Next": "RangeUnavailable"
+              }
+            ],
+            "Next": "PerCandidate"
+          },
+          "RangeUnavailable": {
+            "Type": "Pass",
+            "Comment": "RangeCheck threw after two retries: stand in inside null (kind 'none') so Decide can only answer hold for this candidate. The thrown error stays in $.range_error.",
+            "Result": {
+              "inside": null,
+              "listed": "",
+              "yours": "",
+              "kind": "none",
+              "degraded": true
+            },
+            "ResultPath": "$.range_check",
+            "Next": "PerCandidate"
+          },
+          "PerCandidate": {
+            "Type": "Pass",
+            "Comment": "The iteration's output: {candidate, verify, range_check}. item and run are dropped here so $.verified stays small (Step Functions caps the state at 256 KB; the item is still at $.candidates.item).",
+            "Parameters": {
+              "candidate.$": "$.candidate",
+              "verify.$": "$.verify",
+              "range_check.$": "$.range_check"
+            },
+            "End": true
+          }
+        }
+      },
+      "Next": "Decide"
+    },
+    "Decide": {
+      "Type": "Task",
+      "Resource": "${DecideFunctionArn}",
+      "Comment": "Input: the whole state; reads $.candidates (item, count, sources_searched, searched_at, degraded), $.verified[] (absent when HasCandidates skipped the Map) and $.run. Deterministic (SPEC step 4), per candidate: alert if covers_item is true and inside is true; hold if covers_item is true and inside is null, or covers_item is null; dismiss otherwise. Picks the best candidate: any alert (highest confidence) beats any hold beats any dismiss; no candidates -> clear when $.candidates.degraded is false, hold ('verification unavailable') when it is true. Output {decision: 'alert'|'hold'|'dismiss'|'clear', reason, notice_pk, quoted_sentence, confidence, verifier, covers_item, range_check, candidates_considered, degraded}. reason is built from the failing check ('batch DL-4472 not in listed batches [DL-4471, DL-4468]', 'model DUO-PLUS not covered; notice lists DUO60', 'year 2021 outside 2017-2019', 'no match in 5 sources as of 2026-09-19T10:00:00Z'); for a CDSCO NSQ hit it says 'failed CDSCO quality test, <month> alert, row N'.",
+      "ResultPath": "$.decide",
+      "TimeoutSeconds": 60,
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HoldUnavailable"
+        }
+      ],
       "Next": "Notify"
     },
-    "MarkHold": {
+    "HoldUnavailable": {
       "Type": "Pass",
-      "Result": "hold",
-      "ResultPath": "$.decision",
-      "Next": "Notify"
-    },
-    "MarkDismiss": {
-      "Type": "Pass",
-      "Result": "dismiss",
-      "ResultPath": "$.decision",
-      "Next": "Notify"
-    },
-    "Hold": {
-      "Type": "Pass",
-      "Comment": "Catch target: a task failed after retries. Decision hold, reason 'verification unavailable'.",
-      "Result": {"decision": "hold", "reason": "verification unavailable"},
-      "ResultPath": "$.fallback",
-      "Next": "MarkHoldAfterError"
-    },
-    "MarkHoldAfterError": {
-      "Type": "Pass",
-      "Result": "hold",
-      "ResultPath": "$.decision",
+      "Comment": "Catch target for Candidates and Decide: a task failed after its retries (the error is in $.error). The decision is hold with reason 'verification unavailable' -- never alert, never dismiss, never clear -- and Notify still records it so the item shows amber, not nothing. When Candidates is the one that failed there is no $.candidates: Notify must load the item by $.item_id itself.",
+      "Result": {
+        "decision": "hold",
+        "reason": "verification unavailable",
+        "notice_pk": null,
+        "quoted_sentence": "",
+        "confidence": 0,
+        "verifier": "none",
+        "covers_item": null,
+        "range_check": null,
+        "candidates_considered": 0,
+        "degraded": true
+      },
+      "ResultPath": "$.decide",
       "Next": "Notify"
     },
     "Notify": {
       "Type": "Task",
       "Resource": "${NotifyFunctionArn}",
-      "Comment": "Write case, set item.status, append audit, SES email for alert only, in-app event.",
+      "Comment": "Input: the whole state; reads $.candidates.item (falls back to loading user#<$.item_id> when Candidates failed), $.decide and $.run. For alert/hold/dismiss: writes the Case row (pk = case_id, rk 'case', ts, decision, reason, quoted_sentence, range_check, verifier, confidence, reasoning, covers_item, execution_arn, sold_after_notice = purchase_date > published_at when both are known, audit[]), sets item.status (alert|hold -> that status; dismiss and clear -> 'clear'), item.case_id and item.last_checked_at; sends the SES email to NOTIFY_EMAIL for alert only (subject '[RecallIndia] <product> - <source> <notice id>'; a sandbox/SES error is recorded, never raised); writes one Event row (pk events#<event_id>, rk 'event', type case.alert|case.hold|case.dismiss|item.clear, plus email.sent|email.skipped). Output {case_id|null, item_id, decision, status, email: {sent, error}, event_id}. Retried twice; if it still fails the execution ends Failed because nothing was recorded.",
       "ResultPath": "$.notify",
+      "TimeoutSeconds": 60,
       "Retry": [
         {
           "ErrorEquals": ["States.ALL"],
@@ -183,39 +223,60 @@
     },
     "IsAlert": {
       "Type": "Choice",
+      "Comment": "$.decide.decision == 'alert' -> WaitForApproval (the claim path); hold, dismiss and clear end here in Done. IsPresent guards the StringEquals so a malformed Decide output cannot raise States.Runtime.",
       "Choices": [
-        {"Variable": "$.decision", "StringEquals": "alert", "Next": "WaitForApproval"}
+        {
+          "And": [
+            {
+              "Variable": "$.decide.decision",
+              "IsPresent": true
+            },
+            {
+              "Variable": "$.decide.decision",
+              "StringEquals": "alert"
+            }
+          ],
+          "Next": "WaitForApproval"
+        }
       ],
       "Default": "Done"
     },
     "WaitForApproval": {
       "Type": "Pass",
-      "Comment": "P08: Task with arn:aws:states:::lambda:invoke.waitForTaskToken; token stored on the case; UI Approve/Reject calls SendTaskSuccess/SendTaskFailure.",
+      "Comment": "P08 placeholder. Becomes a Task with Resource arn:aws:states:::lambda:invoke.waitForTaskToken that stores $$.Task.Token on the case (Case.approval.token_issued_at); the UI's POST /cases/{id}/approve|reject calls SendTaskSuccess / SendTaskFailure. Until then a Pass so an alert execution runs through to Done.",
+      "Result": {
+        "placeholder": "P08"
+      },
       "ResultPath": "$.approval",
-      "Result": {"placeholder": "P08"},
       "Next": "Claim"
     },
     "Claim": {
       "Type": "Pass",
-      "Comment": "P09: Task ${ClaimFunctionArn} - Bedrock (Claude Haiku 4.5) drafts the claim letter, PDF to claims bucket.",
+      "Comment": "P09 placeholder. Becomes Task ${ClaimFunctionArn}: Bedrock (Claude Haiku 4.5 via MODEL_VERIFY) drafts the letter to the seller/pharmacy/dealer citing notice id, batch and remedy, adds the Consumer Protection Act paragraph when sold_after_notice, renders a PDF (reportlab) to the claims bucket and stores claim_pdf_s3_key on the case.",
+      "Result": {
+        "placeholder": "P09"
+      },
       "ResultPath": "$.claim",
-      "Result": {"placeholder": "P09"},
       "Next": "Evidence"
     },
     "Evidence": {
       "Type": "Pass",
-      "Comment": "P09: Task ${EvidenceFunctionArn} - snapshot notice to Object Lock bucket, SHA-256, KMS Sign.",
+      "Comment": "P09 placeholder. Becomes Task ${EvidenceFunctionArn}: snapshot the notice URL/PDF into the Object Lock bucket (GOVERNANCE, 30 days), SHA-256, KMS Sign (RSA_2048, RSASSA_PKCS1_V1_5_SHA_256), store Case.evidence; GET /cases/{id}/verify-evidence re-hashes and calls KMS Verify.",
+      "Result": {
+        "placeholder": "P09"
+      },
       "ResultPath": "$.evidence",
-      "Result": {"placeholder": "P09"},
       "Next": "Done"
     },
     "Done": {
-      "Type": "Succeed"
+      "Type": "Succeed",
+      "Comment": "The check is recorded: item.status, the case (unless clear) and the event row exist; GET /items/{id}, GET /cases/{id} and GET /events reflect it."
     },
     "Failed": {
       "Type": "Fail",
+      "Comment": "Only Notify can end the execution here (Candidates and Decide failures become a hold). The item keeps its previous status and last_check_arn points at this execution, so GET /items/{id} can surface the failure; POST /items/{id}/check again to retry.",
       "Error": "MatchPipelineFailed",
-      "Cause": "Notify failed after retries; see $.error"
+      "Cause": "Notify failed after retries, so nothing was recorded for this check; see $.error"
     }
   }
 }

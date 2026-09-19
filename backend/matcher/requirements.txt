@@ -1,1 +1,3 @@
-# rapidfuzz, reportlab added in P04/P09
+# Matcher Lambdas (CodeUri backend/matcher/). rapidfuzz is used only by textmatch.py (P04);
+# never import it from backend/common. reportlab is added in P09 (claim letter PDF).
+rapidfuzz>=3,<4

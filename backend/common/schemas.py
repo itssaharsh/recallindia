@@ -5,7 +5,9 @@ Every model forbids unknown fields so a mis-mapped column fails loudly at write 
 
 from __future__ import annotations
 
+import datetime as dt
 import re
+import secrets
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -17,7 +19,19 @@ UNKNOWN_BRAND = "unknown"
 Adapter = Literal["cdsco_portal", "cdsco_pdf"]
 ItemKind = Literal["medicine", "vehicle", "appliance", "other"]
 ItemStatus = Literal["clear", "hold", "alert"]
+# A case is only ever written for a candidate notice: alert / hold / dismiss.
 Decision = Literal["alert", "hold", "dismiss"]
+# What one check of an item ended in (Decide output, events): the three case decisions plus
+# "clear" -- no candidate at all, "no match in N sources as of <time>".
+Outcome = Literal["alert", "hold", "dismiss", "clear"]
+# Who produced covers_item: the model, the deterministic fallback, or nobody (unavailable).
+Verifier = Literal["bedrock", "deterministic", "none"]
+
+
+def _now_iso() -> str:
+    return dt.datetime.now(dt.UTC).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 # Where a notice's facts come from: the regulator's own publication ("primary-official"),
 # a secondary republication, or a saved fixture (DEMO_MODE seeds).
 SourceConfidence = Literal["primary-official", "secondary", "fixture"]
@@ -119,6 +133,12 @@ class Item(_Strict):
     purchase_date: str | None = None
     photo_s3_key: str | None = None
     status: ItemStatus = "clear"
+    # Set by POST /items (UTC ISO seconds, "Z"); GET /items sorts newest-first on it.
+    created_at: str | None = None
+    # Set by POST /items/{id}/check when the MatchStateMachine execution starts ...
+    last_check_arn: str | None = None
+    last_check_at: str | None = None
+    # ... and by Notify when it completes (the time the status/case_id below were decided).
     last_checked_at: str | None = None
     case_id: str | None = None
 
@@ -163,7 +183,13 @@ class AuditEvent(_Strict):
 
 
 class Case(_Strict):
-    """Outcome of matching one item against one notice (``cases`` table)."""
+    """Outcome of matching one item against one notice (``cases`` table); pk ``case_id``.
+
+    ``rk``/``ts`` are the ``rk-ts-index`` GSI keys shared with ``Event`` rows in the same
+    table (``common.dynamo.query_rk``): a newest-first listing of cases is
+    ``query_rk("case")``. DynamoDB rejects an empty string for an index key, so a blank ``ts``
+    is filled from ``created_at`` (or now) at validation time.
+    """
 
     case_id: str
     pk: str
@@ -178,3 +204,56 @@ class Case(_Strict):
     evidence: Evidence | None = None
     approval: Approval | None = None
     audit: list[AuditEvent] = Field(default_factory=list)
+    # P04 verify/decide detail (SPEC §Match pipeline steps 2 and 4)
+    verifier: Verifier | None = None
+    confidence: float | None = None
+    reasoning: str | None = None
+    covers_item: bool | None = None
+    execution_arn: str | None = None
+    created_at: str | None = None
+    rk: Literal["case"] = "case"
+    ts: str = ""
+
+    @staticmethod
+    def make_pk(case_id: str) -> str:
+        """Partition key: the ``case_id`` itself (SPEC: ``cases`` pk ``case_id``)."""
+        return case_id
+
+    @model_validator(mode="after")
+    def _fill_ts(self) -> Case:
+        if not self.ts.strip():
+            self.ts = self.created_at or _now_iso()
+        return self
+
+
+class Event(_Strict):
+    """In-app activity row (``cases`` table, pk ``events#<event_id>``, ``rk = "event"``).
+
+    Written by Notify / the API for the ``/mine`` timeline and ``GET /events``: one row per
+    thing that happened (``check.started``, ``case.alert``, ``case.hold``, ``case.dismiss``,
+    ``item.clear``, ``email.sent``, ``email.skipped``). ``message`` is the human line and
+    follows the wording rules (never "recalled" for a CDSCO NSQ hit, never "safe": a clear
+    item is "no match in N sources as of <time>"). Listed newest-first through
+    ``common.dynamo.query_rk("event")`` on the ``rk-ts-index`` GSI.
+    """
+
+    pk: str
+    event_id: str
+    rk: Literal["event"] = "event"
+    ts: str
+    type: str
+    item_id: str | None = None
+    case_id: str | None = None
+    decision: Outcome | None = None
+    message: str
+    detail: dict | None = None
+
+    @staticmethod
+    def make_pk(event_id: str) -> str:
+        """Partition key: ``events#<event_id>`` (SPEC: ``pk=events#<ts>``)."""
+        return f"events#{event_id}"
+
+    @staticmethod
+    def new_event_id(ts: str | None = None) -> str:
+        """``<ts>-<6 hex>``: sortable by time, unique when two events share a second."""
+        return f"{ts or _now_iso()}-{secrets.token_hex(3)}"
