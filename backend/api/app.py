@@ -5,8 +5,10 @@ Parses an API Gateway HTTP API v2 payload (``requestContext.http.method`` +
 Implemented: ``GET /health``; the public API ``GET /v1/notices`` (source-index query,
 newest-first, opaque cursor -- ``notices_query``), ``GET /v1/notices/{id}``,
 ``GET /v1/diff``; the ingest API ``POST /ingest/run``, ``GET /ingest/status/{arn}``,
-``GET /ingest/rows``, ``GET /ingest/pdf`` (``ingest_api``). Everything else answers 501
-with the prompt that completes it (P04/P08/P09). Always JSON, always CORS.
+``GET /ingest/rows``, ``GET /ingest/pdf`` (``ingest_api``); the item wall ``POST /items``,
+``GET /items``, ``GET /items/{id}``, ``POST /items/{id}/check``, ``GET /cases/{id}``,
+``GET /events`` (``match_api``). Everything else answers 501 with the prompt that completes
+it (P08/P09). Always JSON, always CORS.
 """
 
 from __future__ import annotations
@@ -23,9 +25,10 @@ from common.demo_mode import is_demo
 from common.notices import is_meta
 
 try:
-    from api import ingest_api, notices_query
+    from api import ingest_api, match_api, notices_query
 except ModuleNotFoundError:  # Lambda layout: CodeUri backend/api/ -> siblings at /var/task
     import ingest_api  # type: ignore[no-redef]
+    import match_api  # type: ignore[no-redef]
     import notices_query  # type: ignore[no-redef]
 
 CORS_HEADERS = {
@@ -194,10 +197,13 @@ ROUTES: list[tuple[str, re.Pattern[str], Route]] = [
     ("GET", re.compile(r"^/v1/notices/?$"), list_notices),
     ("GET", re.compile(r"^/v1/notices/(?P<id>[^/]+(?:/[^/]+)?)/?$"), get_notice),
     ("GET", re.compile(r"^/v1/diff/?$"), diff),
-    ("GET", re.compile(r"^/items/?$"), _not_implemented("P04")),
-    ("POST", re.compile(r"^/items/?$"), _not_implemented("P04")),
-    ("POST", re.compile(r"^/items/(?P<id>[^/]+)/check/?$"), _not_implemented("P04")),
-    ("GET", re.compile(r"^/cases/(?P<id>[^/]+)/?$"), _not_implemented("P04")),
+    ("GET", re.compile(r"^/items/?$"), _wrap(match_api.list_items)),
+    ("POST", re.compile(r"^/items/?$"), _wrap(match_api.create_items)),
+    # /items/{id}/check before /items/{id}: first match wins
+    ("POST", re.compile(r"^/items/(?P<id>[^/]+)/check/?$"), _wrap(match_api.check_item)),
+    ("GET", re.compile(r"^/items/(?P<id>[^/]+)/?$"), _wrap(match_api.get_item)),
+    ("GET", re.compile(r"^/cases/(?P<id>[^/]+)/?$"), _wrap(match_api.get_case)),
+    ("GET", re.compile(r"^/events/?$"), _wrap(match_api.list_events)),
     ("POST", re.compile(r"^/cases/(?P<id>[^/]+)/approve/?$"), _not_implemented("P08")),
     ("POST", re.compile(r"^/cases/(?P<id>[^/]+)/reject/?$"), _not_implemented("P08")),
     ("GET", re.compile(r"^/cases/(?P<id>[^/]+)/verify-evidence/?$"), _not_implemented("P09")),
