@@ -10,4 +10,5 @@ repos:
     hooks:
       - id: detect-secrets
         args: ['--baseline', '.secrets.baseline']
-        exclude: ^fixtures/
+        # recorded public API responses (base64 page cursors read as high-entropy strings)
+        exclude: ^(fixtures/|app/public/fixtures/)

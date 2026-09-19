@@ -1,0 +1,18 @@
+{
+ "_recorded_at": "2026-09-19T17:19:14Z",
+ "_api": "https://ilbmeuwrt7.execute-api.ap-south-1.amazonaws.com",
+ "GET /items": "items-9e3cea91.json",
+ "GET /items/demo-alert": "items-demo-alert-d7cb6d22.json",
+ "GET /items/demo-nearmiss": "items-demo-nearmiss-b16770e8.json",
+ "GET /items/demo-vehicle": "items-demo-vehicle-cbbb07e4.json",
+ "GET /v1/notices/cdsco_nsq%23JUL-2026-cdsco_portal-b75cfffe3713": "v1-notices-cdsco-nsq-23jul-2026-cdsco-portal-b75cfffe3713-a7cf863e.json",
+ "GET /v1/notices/nhtsa%2324V436000": "v1-notices-nhtsa-2324v436000-b2ab5727.json",
+ "GET /v1/notices?limit=50": "v1-notices-limit-50-533ef93a.json",
+ "GET /v1/notices?limit=50&cursor=eyJsaW1pdCI6NTAsInNpbmNlIjpudWxsLCJzcmMiOnsiY2RzY29fbnNxIjp7ImRvbmUiOmZhbHNlLCJlc2siOm51bGwsInNraXAiOjB9LCJjcHNjIjp7ImRvbmUiOmZhbHNlLCJlc2siOm51bGwsInNraXAiOjI2fSwibmh0c2EiOnsiZG9uZSI6ZmFsc2UsImVzayI6bnVsbCwic2tpcCI6MX0sIm9wZW5mZGEiOnsiZG9uZSI6ZmFsc2UsImVzayI6bnVsbCwic2tpcCI6MjN9LCJzaWFtIjp7ImRvbmUiOnRydWUsImVzayI6bnVsbCwic2tpcCI6MH19LCJ2IjoxfQ": "v1-notices-limit-50-cursor-eyjsaw1pdci6ntasinnpbmnlijpudwxsl-f20e8dd7.json",
+ "GET /v1/notices?limit=50&cursor=eyJsaW1pdCI6NTAsInNpbmNlIjpudWxsLCJzcmMiOnsiY2RzY29fbnNxIjp7ImRvbmUiOmZhbHNlLCJlc2siOm51bGwsInNraXAiOjB9LCJjcHNjIjp7ImRvbmUiOmZhbHNlLCJlc2siOm51bGwsInNraXAiOjI2fSwibmh0c2EiOnsiZG9uZSI6ZmFsc2UsImVzayI6bnVsbCwic2tpcCI6MX0sIm9wZW5mZGEiOnsiZG9uZSI6ZmFsc2UsImVzayI6eyJwayI6Im9wZW5mZGEjWi0zMDQ5LTIwMjYiLCJwdWJsaXNoZWRfYXQiOiIyMDI2LTA5LTA5Iiwic291cmNlIjoib3BlbmZkYSJ9LCJza2lwIjoyM30sInNpYW0iOnsiZG9uZSI6dHJ1ZSwiZXNrIjpudWxsLCJza2lwIjowfX0sInYiOjF9": "v1-notices-limit-50-cursor-eyjsaw1pdci6ntasinnpbmnlijpudwxsl-cef615c2.json",
+ "GET /v1/notices?source=cdsco_nsq&limit=50": "v1-notices-source-cdsco-nsq-limit-50-0ca7051f.json",
+ "GET /v1/notices?source=cpsc&limit=50": "v1-notices-source-cpsc-limit-50-ab2c6eb7.json",
+ "GET /v1/notices?source=nhtsa&limit=50": "v1-notices-source-nhtsa-limit-50-461452b5.json",
+ "GET /v1/notices?source=openfda&limit=50": "v1-notices-source-openfda-limit-50-3e8898b6.json",
+ "GET /v1/stats": "v1-stats-d902ca77.json"
+}
