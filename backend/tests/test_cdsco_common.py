@@ -131,3 +131,105 @@ def test_common_never_imports_ingest_or_pollers() -> None:
     for path in common_dir.glob("*.py"):
         src = path.read_text(encoding="utf-8")
         assert not re.search(r"^\s*(from|import)\s+(ingest|pollers)\b", src, re.M), path.name
+
+
+# --- P03 foundation: archive titles and source_confidence -------------------------
+
+
+@pytest.mark.parametrize(
+    ("title", "month", "scope"),
+    [
+        ("CDSCO NSQ ALERT FOR THE MONTH OF June 2025", "JUN-2025", "cdsco"),
+        ("STATE NSQ ALERT FOR THE MONTH OF June 2025", "JUN-2025", "state"),
+        ("NSQ ALERT FOR THE MONTH OF MAY-2025", "MAY-2025", "cdsco"),
+        ("Not Of Standard of Quality (NSQ) ALERT FOR THE MONTH OF April-2025", "APR-2025", "cdsco"),
+        ("State NSQ Alert For The Month April-2025", "APR-2025", "state"),
+        ("NOT OF STANDARD QUALITY (NSQ) ALERT FOR THE MONTH OF MARCH-2025", "MAR-2025", "cdsco"),
+        ("NSQ May 2024 State Labs", "MAY-2024", "state"),
+        ("NSQ May 2024 CDSCO Labs", "MAY-2024", "cdsco"),
+        ("NOT OF STANDARD QUALITY ALERT FOR THE MONTH OF APRIL 2024", "APR-2024", "cdsco"),
+        ("NSQ ALERT FOR THE MONTH OF JUlY-2024", "JUL-2024", "cdsco"),
+        ("NSQ Alert for the month of  September, 2023", "SEP-2023", "cdsco"),
+        ("Samples declared NSQ 2017-2023", None, "cdsco"),
+        ("NSQ of Typhoid Polysaccharide Vaccine TYPBAR", None, "cdsco"),
+        ("Availability of NSQ alerts on the new portal - New Link", None, "cdsco"),
+        ("List of Drugs, Medical Devices and Cosmetics declared NSQ", None, "cdsco"),
+        ("", None, "cdsco"),
+        (None, None, "cdsco"),
+    ],
+)
+def test_month_and_lab_scope_from_archive_titles(title, month, scope) -> None:
+    assert cdsco.month_from_title(title) == month
+    assert cdsco.lab_scope_from_title(title) == scope
+    if month:
+        assert (
+            cdsco.month_to_iso(month)
+            == f"{month[-4:]}-{cdsco.MONTH_NAMES.index(month[:3]) + 1:02d}-01"
+        )
+
+
+def test_month_from_title_does_not_read_not_as_november() -> None:
+    assert cdsco.month_from_title("NOT OF STANDARD 2025") is None
+    assert cdsco.month_from_title("Mayor's notice 2025") is None
+    assert cdsco.month_from_title("Nov 2024 State Labs") == "NOV-2024"
+
+
+def test_rows_to_notices_sets_source_confidence_on_both_adapters() -> None:
+    rows = cdsco.fetch_portal_rows("MAR-2026")[:3]
+    portal = cdsco.rows_to_notices(rows, adapter="portal", month="MAR-2026")
+    assert {n["source_confidence"] for n in portal} == {"primary-official"}
+    pdf_rows = [
+        ["S.No", "Product/Drug Name", "Batch No.", "Mfg", "Exp", "Manufactured By", "NSQ", "Lab"],
+        [
+            "1.",
+            "Paracetamol Tablets IP 650mg",
+            "FT5427",
+            "03/25",
+            "02/27",
+            "Forgo Pharma",
+            "Dissolution",
+            "CDL",
+        ],
+    ]
+    pdf = cdsco.rows_to_notices(pdf_rows, adapter="pdf", month="JUN-2025")
+    assert pdf[0]["source_confidence"] == "primary-official"
+    fixture = cdsco.rows_to_notices(
+        pdf_rows, adapter="pdf", month="JUN-2025", source_confidence="fixture"
+    )
+    assert fixture[0]["source_confidence"] == "fixture"
+    unset = cdsco.rows_to_notices(pdf_rows, adapter="pdf", month="JUN-2025", source_confidence=None)
+    assert unset[0]["source_confidence"] is None
+    with pytest.raises(ValueError):
+        cdsco.rows_to_notices(pdf_rows, adapter="pdf", month="JUN-2025", source_confidence="guess")
+
+
+def test_canonical_month_accepts_every_spelling_and_rejects_noise() -> None:
+    from common.cdsco import canonical_month
+
+    for text in ("June 2025", "JUN-2025", "jun-2025", "2025-06", "2025/6", "MONTH OF June 2025"):
+        assert canonical_month(text) == "JUN-2025", text
+    assert canonical_month("NSQ May 2024 State Labs") == "MAY-2024"
+    for text in (None, "", "  ", "sometime", "2025", "13/2025"):
+        assert canonical_month(text) is None, text
+
+
+def test_rows_to_notices_uses_row_ids_for_the_pdf_row_ref() -> None:
+    from common.cdsco import rows_to_notices
+
+    header = ["S.No", "Product", "Batch No.", "Mfg", "Exp", "Manufactured By", "NSQ", "Lab"]
+    rows = [
+        header,
+        ["1", "Drug A", "B1", "", "", "M/s. Alpha Pharma, Baddi", "Assay", "CDL"],
+        ["", "", "", "", "", "Plot 7 (continuation)", "", ""],
+        ["2", "Drug B", "B2", "", "", "M/s. Beta Pharma, Baddi", "Assay", "CDL"],
+    ]
+    ids = [None, 1, 2, 3]
+    notices = rows_to_notices(
+        rows, adapter="pdf", month="JUN-2025", row_pages=[None, 1, 1, 2], row_ids=ids
+    )
+    assert [(n["row_ref"]["page"], n["row_ref"]["row"]) for n in notices] == [(1, 1), (2, 3)]
+    assert [n["notice_id"] for n in notices] == ["JUN-2025-cdsco_pdf-1", "JUN-2025-cdsco_pdf-3"]
+    assert notices[1]["title"].endswith("row 3")
+    # without ids the record counter is used (portal rows never take ids)
+    plain = rows_to_notices(rows, adapter="pdf", month="JUN-2025")
+    assert [n["row_ref"]["row"] for n in plain] == [1, 2]

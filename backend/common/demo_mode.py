@@ -65,7 +65,12 @@ FIXTURE_ROUTES: list[tuple[str, str | list | dict]] = [
         _PORTAL + r"/reportingYears",
         ["2019", "2020", "2021", "2022", "2023", "2024", "2025", "2026"],
     ),
-    (r"cdsco\.gov\.in.*(\.pdf|download_file_division\.jsp)", "cdsco/nsq_latest.pdf"),
+    # CDSCO archive (cdsco.gov.in): the Alerts listing page (one HTML page, 301 rows), the
+    # download_file_division.jsp wrapper (a one-line iframe whose src is the real PDF path,
+    # any num_id -> the June 2025 wrapper) and any .pdf under the site -> the June 2025 PDF.
+    (r"cdsco\.gov\.in/opencms/opencms/en/Notifications/Alerts", "cdsco/alerts_listing.html"),
+    (r"cdsco\.gov\.in.*download_file_division\.jsp", "cdsco/download_file_division_MTI5Mjc.html"),
+    (r"cdsco\.gov\.in.*\.pdf(?:[?#].*)?$", "cdsco/nsq_latest.pdf"),
 ]
 
 # Monkeypatchable in tests so retry paths do not actually wait.

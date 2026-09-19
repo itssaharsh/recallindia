@@ -34,6 +34,15 @@ JUNE_2025_PDF_URL = (
 )
 MONTH_NAMES = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
 _MONTHS = {m: i for i, m in enumerate(MONTH_NAMES, start=1)}
+# A month name (full or 3-letter, any case: "JUlY") followed by a 4-digit year, with any of
+# the separators the archive titles use ("June 2025", "MAY-2025", "April-2025", "May, 2024").
+# Word boundaries keep "Not Of Standard" from reading as November.
+_MONTH_YEAR = re.compile(
+    r"\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?"
+    r"|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?[\s\-/,]*((?:19|20)\d{2})\b",
+    re.IGNORECASE,
+)
+_STATE_WORD = re.compile(r"\bstate\b", re.IGNORECASE)
 
 # field -> header keywords (lower-case substring match, first hit wins)
 HEADER_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
@@ -123,6 +132,47 @@ def month_to_iso(month: str) -> str:
     raise ValueError(f"unrecognised month: {month!r}")
 
 
+def month_from_title(text: str | None) -> str | None:
+    """Archive alert title -> ``MON-YYYY`` (3-letter upper), or None when it names no month.
+
+    Handles every shape the cdsco.gov.in Alerts listing uses: ``"... MONTH OF June 2025"``,
+    ``"... MONTH OF MAY-2025"``, ``"... The Month April-2025"``, ``"NSQ May 2024 State
+    Labs"``, ``"JUlY-2024"``, ``"MARCH 2025"``. Titles without a month+year ("Samples
+    declared NSQ 2017-2023", a vaccine notice) give None.
+    """
+    m = _MONTH_YEAR.search(_clean(text))
+    if not m:
+        return None
+    return f"{m.group(1)[:3].upper()}-{m.group(2)}"
+
+
+def canonical_month(text: str | None) -> str | None:
+    """Any month spelling -> ``MON-YYYY`` (3-letter upper), or None when unrecognisable.
+
+    Accepts what :func:`month_from_title` does ("June 2025", "MAY-2025", "NSQ May 2024
+    State Labs") plus the portal/ISO shapes ``JUN-2025`` and ``2025-06``. This is the only
+    form a notice pk / ``row_ref`` / ``published_at`` is ever derived from, so every entry
+    point (``POST /ingest/run``, Fetch, Normalise) canonicalises through it: "June 2025" and
+    "JUN-2025" must name the same notices, never two sets.
+    """
+    if text is None or not str(text).strip():
+        return None
+    found = month_from_title(str(text))
+    if found:
+        return found
+    try:
+        iso = month_to_iso(str(text))
+    except ValueError:
+        return None
+    year, month, _day = iso.split("-")
+    return f"{MONTH_NAMES[int(month) - 1]}-{year}"
+
+
+def lab_scope_from_title(text: str | None) -> str:
+    """``"state"`` when the title says State (labs / alert), else ``"cdsco"`` (central labs)."""
+    return "state" if _STATE_WORD.search(_clean(text)) else "cdsco"
+
+
 def _clean(value: Any) -> str:
     return " ".join(str(value).split()) if value is not None else ""
 
@@ -169,19 +219,24 @@ def _fields_from_dict(row: dict) -> dict[str, str]:
 
 
 def _records(
-    rows: list[list[str]] | list[dict], row_pages: list[int | None] | None = None
-) -> list[tuple[dict[str, str], list[str], int | None]]:
-    """Header detection + continuation merge -> ``[(fields, cells, page), ...]`` in row order.
+    rows: list[list[str]] | list[dict],
+    row_pages: list[int | None] | None = None,
+    row_ids: list[int | None] | None = None,
+) -> list[tuple[dict[str, str], list[str], int | None, int | None]]:
+    """Header detection + continuation merge -> ``[(fields, cells, page, row_id), ...]``.
 
     A PDF row with neither product nor batch is a wrapped continuation of the
     previous row (typically the manufacturer address); its non-empty cells are
     appended to the previous record instead of becoming a notice of their own.
-    ``page`` is the page of the record's first row (None when unknown).
+    ``page`` is the page of the record's first row (None when unknown) and ``row_id`` that
+    row's entry in ``row_ids`` (the extractor's 1-based data-row index, so a notice can be
+    joined back to its ``GET /ingest/rows`` row and bbox; None when not given).
     """
     mapping: dict[str, int] = {f: i for i, f in enumerate(PDF_DEFAULT_ORDER)}
-    records: list[tuple[dict[str, str], list[str], int | None]] = []
+    records: list[tuple[dict[str, str], list[str], int | None, int | None]] = []
     for index, raw in enumerate(rows):
         page = row_pages[index] if row_pages and index < len(row_pages) else None
+        row_id = row_ids[index] if row_ids and index < len(row_ids) else None
         if isinstance(raw, dict):
             fields = _fields_from_dict(raw)
             cells = [_clean(v) for v in raw.values()]
@@ -193,7 +248,7 @@ def _records(
             fields = _fields_from_list(cells, mapping)
         if not fields.get("product") and not fields.get("batch"):
             if records and any(cells):
-                prev_fields, prev_cells, prev_page = records[-1]
+                prev_fields, prev_cells, prev_page, prev_id = records[-1]
                 for key, value in fields.items():
                     if value:
                         prev_fields[key] = f"{prev_fields.get(key, '')} {value}".strip()
@@ -206,9 +261,9 @@ def _records(
                         strict=True,
                     )
                 ]
-                records[-1] = (prev_fields, merged, prev_page)
+                records[-1] = (prev_fields, merged, prev_page, prev_id)
             continue
-        records.append((fields, cells, page))
+        records.append((fields, cells, page, row_id))
     return records
 
 
@@ -220,15 +275,23 @@ def rows_to_notices(
     pdf_s3_key: str | None = None,
     url: str = "",
     row_pages: list[int | None] | None = None,
+    source_confidence: str | None = "primary-official",
+    row_ids: list[int | None] | None = None,
 ) -> list[dict]:
     """Deterministic mapping of PDF (8-column) or portal (9-key) rows to Notice dicts.
 
     ``row_ref`` is ``{page, row}`` for the PDF adapter and ``{month, row}`` for the
-    portal (SPEC §Data model); ``row`` counts records per PDF/month. ``notice_id`` is
+    portal (SPEC §Data model). For a PDF ``row`` is the extractor's data-row index of the
+    record's first row when ``row_ids`` (parallel to ``rows``) is given -- the same number
+    ``GET /ingest/rows`` reports, so a wrapped continuation row merged into its predecessor
+    leaves a gap instead of shifting every later notice off its bbox -- else the record
+    counter; the portal counts records per month. ``notice_id`` is
     ``<MONTH>-cdsco_pdf-<row>`` for a PDF (a published file never changes) and
     ``<MONTH>-cdsco_portal-<portal_row_key>`` for the portal, so the daily re-pull of the
     current month keeps ``pk`` stable per drug row whatever the row order; an exact duplicate
-    row within one month gets a ``-2``, ``-3`` ... suffix in row order.
+    row within one month gets a ``-2``, ``-3`` ... suffix in row order. Every notice carries
+    ``source_confidence`` (default ``"primary-official"``: both adapters read the regulator's
+    own publication; pass ``"fixture"`` for demo seeds, None to leave it unset).
     """
     adapter = adapter if adapter.startswith("cdsco_") else f"cdsco_{adapter}"
     month = str(month).strip().upper()
@@ -236,13 +299,14 @@ def rows_to_notices(
     if not url:
         url = PORTAL_URL if adapter == "cdsco_portal" else JUNE_2025_PDF_URL
 
-    records = _records(rows, row_pages)
+    records = _records(rows, row_pages, row_ids)
     notices: list[dict] = []
     seen: dict[str, int] = {}
-    for n, (fields, cells, page) in enumerate(records, start=1):
+    for n, (fields, cells, page, row_id) in enumerate(records, start=1):
         row_month = fields.get("month") or month
         batch = fields.get("batch", "")
         if adapter == "cdsco_pdf":
+            n = row_id if row_id is not None else n
             row_ref = RowRef(page=page, row=n)
             notice_id = f"{month}-{adapter}-{n}"
         else:
@@ -268,6 +332,7 @@ def rows_to_notices(
             mfg_date=fields.get("mfg_date") or None,
             exp_date=fields.get("exp_date") or None,
             lab=fields.get("lab") or None,
+            source_confidence=source_confidence,
         )
         notices.append(notice.model_dump())
     return notices

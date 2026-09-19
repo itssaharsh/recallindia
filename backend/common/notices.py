@@ -22,6 +22,10 @@ UpsertResult = Literal["created", "updated", "unchanged"]
 Counts = dict[str, int]
 
 META_PREFIX = "meta#"
+# pk prefixes of the bookkeeping rows that share the notices table and must never reach the
+# feed / public API: per-source meta rows and per-execution ingest run records
+# (``common.ingest_runs``). Neither carries ``published_at``, so the source GSI skips them too.
+INTERNAL_PREFIXES = (META_PREFIX, "ingest#")
 _BOOKKEEPING = frozenset({"first_seen_at", "updated_at"})
 _COUNT_KEYS = ("fetched", "created", "updated", "unchanged", "upserted")
 
@@ -118,8 +122,8 @@ def meta_pk(source: str) -> str:
 
 
 def is_meta(item: dict) -> bool:
-    """True for the per-source bookkeeping rows that share the notices table."""
-    return str(item.get("pk", "")).startswith(META_PREFIX)
+    """True for the bookkeeping rows that share the notices table (``meta#``, ``ingest#``)."""
+    return str(item.get("pk", "")).startswith(INTERNAL_PREFIXES)
 
 
 def read_meta(source: str) -> dict | None:

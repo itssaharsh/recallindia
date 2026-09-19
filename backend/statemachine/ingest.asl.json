@@ -1,15 +1,29 @@
 {
-  "Comment": "RecallIndia IngestStateMachine (SPEC section Ingest pipeline). Fetch -> Extract -> Normalise -> Diff -> Publish. Two CDSCO adapters, one Notice shape: cdsco_portal (live JSON, skips Extract) and cdsco_pdf (archive PDF: Textract TABLES primary, pdfplumber fallback). Diff/Publish are P03 placeholders.",
-  "StartAt": "Fetch",
+  "Comment": "RecallIndia IngestStateMachine (SPEC section Ingest pipeline). Init -> Fetch -> [FetchOk] -> Extract -> [ExtractOk] -> Normalise -> [NormaliseOk] -> Diff -> [DiffOk] -> Publish -> [Published] -> Done. Two CDSCO adapters, one Notice shape: cdsco_portal (live JSON, skips Extract) and cdsco_pdf (archive PDF: Textract TABLES primary, pdfplumber fallback). Every task stores its result under its own key ($.fetch, $.extract, $.normalise, $.diff, $.publish) and reads the earlier ones through cdsco_extract.pipeline_event (nested first, top-level input wins). No Task carries Parameters: the whole state is the input, so nothing ever references a missing path. Handlers never raise on an upstream failure: they return {degraded: true, error}, so after every task a Choice routes $.<step>.degraded == true to RecordFailure (the same short-circuit the DEMO runner applies); a thrown error lands there through the Catch with $.error. RecordFailure (Publish with $.error or a degraded step) writes meta#cdsco_pdf ok=false and the ingest#<run_id> record, then Failed.",
+  "StartAt": "Init",
   "States": {
+    "Init": {
+      "Type": "Pass",
+      "Comment": "Stamp the execution identity onto the state: $.run = {execution_arn, execution_name, started_at}. Handlers derive the run id (common.ingest_runs.run_from_event -> last ':' segment of execution_arn) and write ingest#<run_id> progress rows that GET /ingest/status/{arn} reads.",
+      "Parameters": {
+        "execution_arn.$": "$$.Execution.Id",
+        "execution_name.$": "$$.Execution.Name",
+        "started_at.$": "$$.Execution.StartTime"
+      },
+      "ResultPath": "$.run",
+      "Next": "Fetch"
+    },
     "Fetch": {
       "Type": "Task",
       "Resource": "${CdscoFetchFunctionArn}",
-      "Comment": "cdsco_portal: publicReportingMonths -> newest month -> filteredNsqDrugTable rows; output {adapter, month, rows_in}. cdsco_pdf: download the archive PDF to the raw bucket; output {adapter, pdf_url, pdf_s3_key}. Later tasks read these from $.fetch (handlers merge $.fetch/$.extract under top-level keys).",
+      "Comment": "Input keys (all optional): adapter ('pdf' default | 'portal'), pdf_url, num_id, month, lab_scope ('cdsco' default | 'state'), force. cdsco_pdf: scrape the cdsco.gov.in Alerts listing, resolve download_file_division.jsp -> iframe src -> PDF, download to the raw bucket, write meta#cdsco_pdf (listing, last_fetch, ingested); output {source, adapter: 'cdsco_pdf', title, month, lab_scope, pdf_url, pdf_s3_key, num_id, is_new, bytes, listing_count, monthly_count, degraded, took_ms}. cdsco_portal: newest month -> {adapter: 'cdsco_portal', month, rows_in}. Never raises: upstream failure -> {degraded: true, error}.",
       "ResultPath": "$.fetch",
+      "TimeoutSeconds": 300,
       "Retry": [
         {
-          "ErrorEquals": ["States.ALL"],
+          "ErrorEquals": [
+            "States.ALL"
+          ],
           "IntervalSeconds": 2,
           "MaxAttempts": 2,
           "BackoffRate": 2
@@ -17,21 +31,42 @@
       ],
       "Catch": [
         {
-          "ErrorEquals": ["States.ALL"],
+          "ErrorEquals": [
+            "States.ALL"
+          ],
           "ResultPath": "$.error",
-          "Next": "Failed"
+          "Next": "RecordFailure"
         }
       ],
-      "Next": "NeedsExtract"
+      "Next": "FetchOk"
     },
-    "NeedsExtract": {
+    "FetchOk": {
       "Type": "Choice",
-      "Comment": "Portal rows are already tabular; only the PDF adapter goes through Extract.",
+      "Comment": "Fetch never raises: $.fetch.degraded == true (listing unreachable, no monthly NSQ alert for the requested month, download failed) goes to RecordFailure so Extract cannot fall back to a default PDF and the execution ends FAILED. Portal rows are already tabular, so $.fetch.adapter == 'cdsco_portal' goes straight to Normalise; everything else (the PDF adapter) goes through Extract.",
       "Choices": [
         {
           "And": [
-            {"Variable": "$.fetch.adapter", "IsPresent": true},
-            {"Variable": "$.fetch.adapter", "StringEquals": "cdsco_portal"}
+            {
+              "Variable": "$.fetch.degraded",
+              "IsPresent": true
+            },
+            {
+              "Variable": "$.fetch.degraded",
+              "BooleanEquals": true
+            }
+          ],
+          "Next": "RecordFailure"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.fetch.adapter",
+              "IsPresent": true
+            },
+            {
+              "Variable": "$.fetch.adapter",
+              "StringEquals": "cdsco_portal"
+            }
           ],
           "Next": "Normalise"
         }
@@ -41,35 +76,108 @@
     "Extract": {
       "Type": "Task",
       "Resource": "${CdscoExtractFunctionArn}",
-      "Comment": "Reads pdf_s3_key from $.fetch. Textract StartDocumentAnalysis TABLES (poll GetDocumentAnalysis) in try/except; on any error or <5 rows, pdfplumber extract_tables fallback. Output {rows, row_pages, rows_s3_key, engine, fallback_used}; rows are inlined under 200 KB and always mirrored to rows_s3_key.",
+      "Comment": "Reads pdf_s3_key / pdf_url / month from $.fetch and the run id from $.run. Textract StartDocumentAnalysis TABLES on RAW_BUCKET/pdf_s3_key, polled with backoff (3 s x1.5, cap 15 s, up to 240 s) and heartbeated to ingest#<run_id> every poll; rows rebuilt from CELL blocks with page + bbox. On any Textract exception (incl. SubscriptionRequiredException) or < 5 rows: pdfplumber find_tables fallback with per-row bboxes. Persists {method, header, rows, pages, pdf_s3_key} to <pdf_s3_key>.rows.json. Output {adapter, pdf_s3_key, pdf_url, month, pages, method: 'textract'|'pdfplumber', fallback_used, error, textract, header, rows_in, rows_s3_key, run_id, degraded, took_ms} plus rows inline when <= 200 KB. Single attempt (Retry MaxAttempts 0 = no retry; the Catch still records the failure): a Textract/pdfplumber run is long and a retry doubles the cost. Never raises on an upstream failure: {degraded: true, error} -> ExtractOk -> RecordFailure.",
       "ResultPath": "$.extract",
-      "TimeoutSeconds": 300,
+      "TimeoutSeconds": 330,
       "Retry": [
         {
-          "ErrorEquals": ["States.ALL"],
+          "ErrorEquals": [
+            "States.ALL"
+          ],
           "IntervalSeconds": 2,
-          "MaxAttempts": 2,
+          "MaxAttempts": 0,
           "BackoffRate": 2
         }
       ],
       "Catch": [
         {
-          "ErrorEquals": ["States.ALL"],
+          "ErrorEquals": [
+            "States.ALL"
+          ],
           "ResultPath": "$.error",
-          "Next": "Failed"
+          "Next": "RecordFailure"
         }
       ],
-      "Next": "Normalise"
+      "Next": "ExtractOk"
+    },
+    "ExtractOk": {
+      "Type": "Choice",
+      "Comment": "$.extract.degraded == true (PDF missing from the raw bucket, both engines failed) goes to RecordFailure; otherwise Normalise.",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.extract.degraded",
+              "IsPresent": true
+            },
+            {
+              "Variable": "$.extract.degraded",
+              "BooleanEquals": true
+            }
+          ],
+          "Next": "RecordFailure"
+        }
+      ],
+      "Default": "Normalise"
     },
     "Normalise": {
       "Type": "Task",
       "Resource": "${CdscoNormaliseFunctionArn}",
-      "Comment": "Reads adapter/month/pdf_s3_key/pdf_url from $.fetch and rows/row_pages/rows_s3_key from $.extract (portal: fetches rows itself). Bedrock (Nova Lite, temperature 0, strict JSON, batches of 25 rows) maps rows to Notice; header-keyword fallback. Upsert notices with source cdsco_nsq, adapter, row_ref ({page,row} PDF / {month,row} portal), pdf_s3_key. Output {adapter, month, pdf_s3_key, rows_in, notices_out, fallback_used}.",
+      "Comment": "Reads adapter/month/pdf_s3_key/pdf_url from $.fetch and header/rows/rows_s3_key from $.extract (portal: fetches its rows itself). Bedrock (Nova Lite, temperature 0, strict JSON, batches of 25) only when BEDROCK_ENABLED and access works; header-keyword mapping (common.cdsco.rows_to_notices) is the fallback and the default today. Upserts notices (source cdsco_nsq, adapter, row_ref {page,row} PDF / {month,row} portal, pdf_s3_key, source_confidence primary-official) via common.notices.upsert_notice. Output {adapter, month, pdf_s3_key, pdf_url, rows_in, notices_out, counts: {created, updated, unchanged, upserted}, fallback_used: {extract, normalise}, bedrock: {enabled, attempted, used, error}, source_confidence, run_id, degraded, took_ms}. Single attempt (Retry MaxAttempts 0 = no retry; the Catch still records the failure): re-running re-reads every row and re-invokes Bedrock. Never raises on an upstream failure: {degraded: true, error} -> NormaliseOk -> RecordFailure.",
       "ResultPath": "$.normalise",
-      "TimeoutSeconds": 300,
+      "TimeoutSeconds": 330,
       "Retry": [
         {
-          "ErrorEquals": ["States.ALL"],
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 0,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "RecordFailure"
+        }
+      ],
+      "Next": "NormaliseOk"
+    },
+    "NormaliseOk": {
+      "Type": "Choice",
+      "Comment": "$.normalise.degraded == true (no rows to map, an unrecognised month, the table unreachable) goes to RecordFailure; otherwise Diff.",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.normalise.degraded",
+              "IsPresent": true
+            },
+            {
+              "Variable": "$.normalise.degraded",
+              "BooleanEquals": true
+            }
+          ],
+          "Next": "RecordFailure"
+        }
+      ],
+      "Default": "Diff"
+    },
+    "Diff": {
+      "Type": "Task",
+      "Resource": "${CdscoDiffFunctionArn}",
+      "Comment": "cdsco_publish.diff_handler: new vs existing for this run from $.normalise.counts -> {new: created, updated, existing: unchanged, total: notices_out, month, previous: meta#cdsco_pdf.last_counts | null, degraded}.",
+      "ResultPath": "$.diff",
+      "TimeoutSeconds": 120,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
           "IntervalSeconds": 2,
           "MaxAttempts": 2,
           "BackoffRate": 2
@@ -77,34 +185,117 @@
       ],
       "Catch": [
         {
-          "ErrorEquals": ["States.ALL"],
+          "ErrorEquals": [
+            "States.ALL"
+          ],
           "ResultPath": "$.error",
+          "Next": "RecordFailure"
+        }
+      ],
+      "Next": "DiffOk"
+    },
+    "DiffOk": {
+      "Type": "Choice",
+      "Comment": "$.diff.degraded == true (meta row unreadable) goes to RecordFailure; otherwise Publish.",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.diff.degraded",
+              "IsPresent": true
+            },
+            {
+              "Variable": "$.diff.degraded",
+              "BooleanEquals": true
+            }
+          ],
+          "Next": "RecordFailure"
+        }
+      ],
+      "Default": "Publish"
+    },
+    "Publish": {
+      "Type": "Task",
+      "Resource": "${CdscoPublishFunctionArn}",
+      "Comment": "cdsco_publish.handler (success path, no $.error): write meta#cdsco_pdf ok=true with counts (normalise counts + rows_in/notices_out), last_run {run_id, month, pdf_url, pdf_s3_key, method, fallback_used, diff}, ingested (+ this PDF, deduped by pdf_url) and the kept listing; write ingest#<run_id> step publish/done. Output {published: true, meta_pk: 'meta#cdsco_pdf', counts, diff}. {published: false} (its own bookkeeping failed, degraded: true) -> Failed via the Published choice, never Done.",
+      "ResultPath": "$.publish",
+      "TimeoutSeconds": 120,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "RecordFailure"
+        }
+      ],
+      "Next": "Published"
+    },
+    "Published": {
+      "Type": "Choice",
+      "Comment": "The run counts as published only when Publish says so: $.publish.published == true -> Done; anything else (published: false, a degraded bookkeeping step) -> Failed, so a SUCCEEDED execution always means meta#cdsco_pdf ok=true.",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.publish.published",
+              "IsPresent": true
+            },
+            {
+              "Variable": "$.publish.published",
+              "BooleanEquals": true
+            }
+          ],
+          "Next": "Done"
+        }
+      ],
+      "Default": "Failed"
+    },
+    "RecordFailure": {
+      "Type": "Task",
+      "Resource": "${CdscoPublishFunctionArn}",
+      "Comment": "Failure path: the same Publish Lambda sees either $.error ({Error, Cause} from a Catch) or a step result with degraded: true (cdsco_publish._degraded_step scans $.fetch/$.extract/$.normalise/$.diff) and writes meta#cdsco_pdf ok=false (error, listing/ingested kept) plus ingest#<run_id> step publish/failed, returning {published: false, error}. Then Failed. If even this fails, go to Failed directly.",
+      "ResultPath": "$.publish",
+      "TimeoutSeconds": 120,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.publish_error",
           "Next": "Failed"
         }
       ],
-      "Next": "Diff"
-    },
-    "Diff": {
-      "Type": "Pass",
-      "Comment": "P03: count new vs existing notices for this run.",
-      "ResultPath": "$.diff",
-      "Result": {"placeholder": "P03", "new": 0, "existing": 0},
-      "Next": "Publish"
-    },
-    "Publish": {
-      "Type": "Pass",
-      "Comment": "P03: write meta#cdsco.last_run + counts so the /ingest UI checklist and feed can read them.",
-      "ResultPath": "$.publish",
-      "Result": {"placeholder": "P03"},
-      "Next": "Done"
+      "Next": "Failed"
     },
     "Done": {
-      "Type": "Succeed"
+      "Type": "Succeed",
+      "Comment": "The run is published: the feed, GET /v1/notices?source=cdsco_nsq and GET /ingest/status/{arn} reflect it."
     },
     "Failed": {
       "Type": "Fail",
       "Error": "IngestPipelineFailed",
-      "Cause": "A task failed after retries; see $.error"
+      "Cause": "A task failed or came back degraded; see $.error / $.<step>.error (recorded on meta#cdsco_pdf and ingest#<run_id> by RecordFailure)"
     }
   }
 }

@@ -18,6 +18,9 @@ Adapter = Literal["cdsco_portal", "cdsco_pdf"]
 ItemKind = Literal["medicine", "vehicle", "appliance", "other"]
 ItemStatus = Literal["clear", "hold", "alert"]
 Decision = Literal["alert", "hold", "dismiss"]
+# Where a notice's facts come from: the regulator's own publication ("primary-official"),
+# a secondary republication, or a saved fixture (DEMO_MODE seeds).
+SourceConfidence = Literal["primary-official", "secondary", "fixture"]
 
 
 class _Strict(BaseModel):
@@ -66,6 +69,7 @@ class Notice(_Strict):
     mfg_date: str | None = None
     exp_date: str | None = None
     lab: str | None = None
+    source_confidence: SourceConfidence | None = None
     # bookkeeping set by common.notices.upsert_notice (UTC ISO seconds, "Z")
     first_seen_at: str | None = None
     updated_at: str | None = None

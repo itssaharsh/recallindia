@@ -115,6 +115,10 @@ Resources:
           AttributeType: S
         - AttributeName: brand_lc
           AttributeType: S
+        - AttributeName: source
+          AttributeType: S
+        - AttributeName: published_at
+          AttributeType: S
       KeySchema:
         - AttributeName: pk
           KeyType: HASH
@@ -123,6 +127,16 @@ Resources:
           KeySchema:
             - AttributeName: brand_lc
               KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        # Public API: GET /v1/notices?source=&since= newest-first with an opaque cursor
+        # (common.dynamo.query_source). meta#/ingest# rows carry no published_at -> not indexed.
+        - IndexName: source-published_at-index
+          KeySchema:
+            - AttributeName: source
+              KeyType: HASH
+            - AttributeName: published_at
+              KeyType: RANGE
           Projection:
             ProjectionType: ALL
 
@@ -172,6 +186,18 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
+      # The /ingest page (P07) loads the archive PDF in the browser straight from the
+      # presigned URL GET /ingest/pdf hands out; without CORS on the bucket S3 answers a
+      # cross-origin fetch with no Access-Control-Allow-Origin and pdf.js gets nothing.
+      # Read-only, and the presigned URL is still the only credential. pdf.js streams with
+      # Range requests, so the range/length headers are exposed too.
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins: ["*"]
+            AllowedMethods: [GET, HEAD]
+            AllowedHeaders: ["*"]
+            ExposedHeaders: [Content-Length, Content-Range, Accept-Ranges, ETag]
+            MaxAge: 3600
 
   # Object Lock (GOVERNANCE, 30 days). Retain on delete: CloudFormation cannot
   # empty an Object Lock bucket, so a Delete policy would only fail the stack delete.
@@ -293,6 +319,8 @@ Resources:
                 - states:SendTaskSuccess
                 - states:SendTaskFailure
                 - states:DescribeExecution
+                - states:GetExecutionHistory
+                - states:ListExecutions
               Resource: "*"
             - Sid: VerifyEvidenceSignature
               Effect: Allow
@@ -385,6 +413,18 @@ Resources:
             ApiId: !Ref HttpApi
             Method: GET
             Path: "/ingest/status/{arn}"
+        IngestRows:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: "/ingest/rows"
+        IngestPdf:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: "/ingest/pdf"
 
   # -------------------------------------------------------------------------
   # Pollers (cpsc / nhtsa / openfda / cdsco_portal) - EventBridge Scheduler targets
@@ -460,6 +500,8 @@ Resources:
       Timeout: 300
       MemorySize: 1024
       Policies:
+        - DynamoDBCrudPolicy: # ingest#<run_id> progress records (Textract poll heartbeats)
+            TableName: !Ref NoticesTable
         - S3CrudPolicy:
             BucketName: !Ref RawBucket
         - Statement:
@@ -490,6 +532,26 @@ Resources:
                 - bedrock:InvokeModel
                 - bedrock:InvokeModelWithResponseStream
               Resource: "*"
+
+  CdscoDiffFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub recallindia-cdsco-diff-${AWS::AccountId}
+      CodeUri: backend/ingest/
+      Handler: cdsco_publish.diff_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref NoticesTable
+
+  CdscoPublishFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub recallindia-cdsco-publish-${AWS::AccountId}
+      CodeUri: backend/ingest/
+      Handler: cdsco_publish.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref NoticesTable
 
   # -------------------------------------------------------------------------
   # Matcher (Step Functions tasks)
@@ -648,6 +710,8 @@ Resources:
         CdscoFetchFunctionArn: !GetAtt CdscoFetchFunction.Arn
         CdscoExtractFunctionArn: !GetAtt CdscoExtractFunction.Arn
         CdscoNormaliseFunctionArn: !GetAtt CdscoNormaliseFunction.Arn
+        CdscoDiffFunctionArn: !GetAtt CdscoDiffFunction.Arn
+        CdscoPublishFunctionArn: !GetAtt CdscoPublishFunction.Arn
       Policies:
         - LambdaInvokePolicy:
             FunctionName: !Ref CdscoFetchFunction
@@ -655,6 +719,10 @@ Resources:
             FunctionName: !Ref CdscoExtractFunction
         - LambdaInvokePolicy:
             FunctionName: !Ref CdscoNormaliseFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref CdscoDiffFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref CdscoPublishFunction
 
   # -------------------------------------------------------------------------
   # EventBridge Scheduler (DISABLED unless EnableSchedules=true)

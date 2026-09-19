@@ -18,6 +18,9 @@ from common.demo_mode import demo_store_dir, is_demo
 
 TableKind = Literal["notices", "items", "cases"]
 BRAND_INDEX = "brand_lc-index"
+# GSI (HASH source, RANGE published_at): the public API's newest-first, paginated per-source
+# query. Meta / ingest-run rows have no published_at, so the index never contains them.
+SOURCE_INDEX = "source-published_at-index"
 
 
 def table_name(kind: TableKind) -> str:
@@ -140,6 +143,112 @@ def query_brand(brand_lc: str, limit: int = 50) -> list[dict]:
         IndexName=BRAND_INDEX, KeyConditionExpression=Key("brand_lc").eq(brand_lc), Limit=limit
     )
     return list(resp.get("Items", []))
+
+
+def _source_sort_key(item: dict) -> tuple[str, str]:
+    return (str(item.get("published_at", "")), str(item.get("pk", "")))
+
+
+def _source_items(source: str, since: str | None) -> list[dict]:
+    """Demo: rows of ``source`` that the GSI would hold (a string published_at), filtered."""
+    out = []
+    for item in _load("notices").values():
+        published = item.get("published_at")
+        if item.get("source") != source or not isinstance(published, str) or not published:
+            continue
+        if since and published < since:
+            continue
+        out.append(item)
+    return out
+
+
+def query_source(
+    source: str,
+    *,
+    since: str | None = None,
+    limit: int = 100,
+    exclusive_start_key: dict | None = None,
+    ascending: bool = False,
+) -> tuple[list[dict], dict | None]:
+    """One page of ``source``'s notices from the ``source-published_at-index`` GSI.
+
+    Newest first by default (``published_at`` desc), optionally only those with
+    ``published_at >= since``; ``limit`` items per page. Returns ``(items, last_evaluated_key)``
+    where the key (``{pk, source, published_at}``) is passed back as ``exclusive_start_key`` to
+    continue, and is None once the last page is reached. As on DynamoDB the key is present
+    whenever the page is full, so the last page may be empty (``[]``, None).
+
+    Demo mode orders by ``(published_at, pk)`` -- a total order, so a page boundary is
+    deterministic -- and positions strictly after the ``exclusive_start_key`` item.
+    """
+    limit = max(1, int(limit))
+    if is_demo():
+        items = sorted(_source_items(source, since), key=_source_sort_key, reverse=not ascending)
+        if exclusive_start_key:
+            start = _source_sort_key(exclusive_start_key)
+            if ascending:
+                items = [n for n in items if _source_sort_key(n) > start]
+            else:
+                items = [n for n in items if _source_sort_key(n) < start]
+        page = items[:limit]
+        last = None
+        # DynamoDB returns a LastEvaluatedKey whenever Limit is reached, even when nothing
+        # follows -- so a source with k*limit rows answers a trailing empty page. Mirror that
+        # (no look-ahead) so live and demo paginate identically.
+        if len(page) == limit:
+            tail = page[-1]
+            last = {
+                "pk": tail["pk"],
+                "source": tail["source"],
+                "published_at": tail["published_at"],
+            }
+        return page, last
+    from boto3.dynamodb.conditions import Key
+
+    condition = Key("source").eq(source)
+    if since:
+        condition = condition & Key("published_at").gte(since)
+    kwargs: dict[str, Any] = {
+        "IndexName": SOURCE_INDEX,
+        "KeyConditionExpression": condition,
+        "ScanIndexForward": ascending,
+        "Limit": limit,
+    }
+    if exclusive_start_key:
+        kwargs["ExclusiveStartKey"] = exclusive_start_key
+    resp = _table("notices").query(**kwargs)
+    return list(resp.get("Items", [])), resp.get("LastEvaluatedKey") or None
+
+
+def count_source(source: str, *, since: str | None = None, max_items: int = 5000) -> int:
+    """Number of ``source`` notices (``published_at >= since``), capped at ``max_items``.
+
+    Live: paged ``Select=COUNT`` queries on the GSI (no items transferred) until the last
+    page or the cap; demo: a filter over the file store.
+    """
+    max_items = max(0, int(max_items))
+    if is_demo():
+        return min(len(_source_items(source, since)), max_items)
+    from boto3.dynamodb.conditions import Key
+
+    condition = Key("source").eq(source)
+    if since:
+        condition = condition & Key("published_at").gte(since)
+    table = _table("notices")
+    total = 0
+    kwargs: dict[str, Any] = {
+        "IndexName": SOURCE_INDEX,
+        "KeyConditionExpression": condition,
+        "Select": "COUNT",
+    }
+    while total < max_items:
+        kwargs["Limit"] = max_items - total
+        resp = table.query(**kwargs)
+        total += int(resp.get("Count", 0))
+        if "LastEvaluatedKey" not in resp:
+            break
+        kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
+    return min(total, max_items)
 
 
 def scan_all(kind: TableKind, limit: int = 500) -> list[dict]:

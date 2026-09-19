@@ -56,11 +56,50 @@ def test_fetch_json_routes_to_fixture(url: str, check) -> None:
     assert check(fetch_json(url))
 
 
+CDSCO = "https://cdsco.gov.in"
+ALERTS_LISTING = f"{CDSCO}/opencms/opencms/en/Notifications/Alerts/"
+JSP = f"{CDSCO}/opencms/opencms/system/modules/CDSCO.WEB/elements/download_file_division.jsp"
+JUNE_PDF = (
+    f"{CDSCO}/opencms/resources/UploadCDSCOWeb/2018/UploadAlertsFiles/CDSCO%20NSQ%20june25.pdf"
+)
+
+
 def test_fetch_bytes_pdf_fixture() -> None:
-    listing = "https://cdsco.gov.in/opencms/opencms/en/download_file_division.jsp?num_id=abc"
-    direct = "https://cdsco.gov.in/opencms/resources/UploadCDSCOWeb/2018/UploadAlertsFiles/x.pdf"
-    for url in (listing, direct):
-        assert fetch_bytes(url).startswith(b"%PDF")
+    """Any cdsco.gov.in URL ending in .pdf (case-insensitive, %20 allowed) -> the June 2025 PDF."""
+    direct = f"{CDSCO}/opencms/resources/UploadCDSCOWeb/2018/UploadAlertsFiles/x.pdf"
+    for url in (direct, JUNE_PDF, JUNE_PDF.replace(".pdf", ".PDF"), f"{JUNE_PDF}?dl=1"):
+        body = fetch_bytes(url)
+        assert body.startswith(b"%PDF") and len(body) == 188_795, url
+
+
+def test_archive_listing_route_is_the_alerts_page() -> None:
+    body = fetch_bytes(ALERTS_LISTING)
+    assert body.lstrip().startswith(b"<")
+    assert b"download_file_division.jsp" in body
+    assert b"NSQ" in body
+    # with or without the trailing slash, with a query string
+    assert fetch_bytes(ALERTS_LISTING.rstrip("/")) == body
+    assert fetch_bytes(f"{ALERTS_LISTING}?page=2") == body
+
+
+def test_jsp_wrapper_route_is_the_iframe_not_the_pdf() -> None:
+    """download_file_division.jsp (any num_id) -> the one-line iframe wrapper, never %PDF."""
+    for num_id in ("MTI5Mjc=", "abc", "MTI5Mjc%3D"):
+        body = fetch_bytes(f"{JSP}?num_id={num_id}")
+        assert body.startswith(b"<iframe"), body[:40]
+        assert b"UploadAlertsFiles/CDSCO NSQ june25.pdf" in body
+        assert not body.startswith(b"%PDF")
+    # the P01 shortcut (jsp -> PDF bytes) is gone: the fetch adapter must follow the iframe
+    old = f"{CDSCO}/opencms/opencms/en/download_file_division.jsp?num_id=abc"
+    assert fetch_bytes(old).startswith(b"<iframe")
+
+
+def test_archive_routes_are_ordered_before_the_generic_pdf_route() -> None:
+    routes = [pattern for pattern, _ in demo_mode.FIXTURE_ROUTES if "cdsco\\.gov" in pattern]
+    assert len(routes) == 3
+    assert "Notifications/Alerts" in routes[0]
+    assert "download_file_division" in routes[1]
+    assert routes[2].endswith("$") and "download_file_division" not in routes[2]
 
 
 def test_unknown_url_raises_fixture_missing() -> None:
