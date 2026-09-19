@@ -35,6 +35,8 @@ make             # lists every target
 
 ## Status (2026-09-19)
 
+- **Live app**: https://main.d2jn22qjgettr5.amplifyapp.com (Amplify Hosting, static export;
+  `?demo=1` for recorded data). **API**: https://ilbmeuwrt7.execute-api.ap-south-1.amazonaws.com.
 - **No LLM in the decision path (by design; Bedrock quotas held at 0 on this account, increase
   denied — model path implemented behind a flag).** `BEDROCK_ENABLED` defaults to `false`; the
   verifier, normaliser and (later) claim letter are deterministic Python / templates.
@@ -62,9 +64,10 @@ backend/ingest/      cdsco_fetch, cdsco_extract, cdsco_normalise, cdsco_publish 
 backend/matcher/     candidates, verify, range_check, notify, claim, evidence
 backend/api/         HTTP API handlers
 backend/tests/       pytest, DEMO_MODE=1
-app/                 Next.js 15 (P06)
+app/                 Next.js 15 static export on Amplify Hosting (P06) — see app/README.md
 fixtures/            saved raw responses + CDSCO PDFs and portal JSON (P00)
-scripts/             seed_demo.py, validate.py, backfill.py (resumable per-source backfill)
+scripts/             seed_demo.py, validate.py, backfill.py (resumable per-source backfill),
+                     gen_ui_fixtures.py (demo data for the app), amplify_deploy.py
 docs/adr/            architecture decisions
 ```
 
@@ -255,6 +258,34 @@ make item-check ID=item-xxxxxxxxxxxx     # prints the execution arn
 make items-list && make events
 make case-get ID=case-20260919...
 ```
+
+## App (P06)
+
+A static Next.js export on Amplify Hosting that calls the HTTP API from the browser. Routes,
+demo mode and the design rules are in [app/README.md](app/README.md); the screenshots are in
+[docs/media/](docs/media/) (`ui-*.png`). The app adds these endpoints to the API:
+
+| Endpoint | What it does |
+|---|---|
+| `GET /v1/stats` | Notices per source (index `COUNT`, no scan) plus each poller's health from its `meta#` row: `healthy` / `degraded` (last run failed, an earlier one worked) / `down`. `last_poll_at` feeds the header counter. Cached 30 s per warm Lambda. |
+| `POST /uploads` | A presigned PUT (5 min) for one strip photo to `raw/uploads/<uuid>.jpg`, so the photo goes from the phone to S3 without passing through the API. |
+| `POST /items/ocr` | Runs Textract `DetectDocumentText` on that upload. When the full image yields no batch, it crops the right, left, bottom and top edge bands and reads them too, because the batch stamp is often printed vertically along one edge. Deterministic rules then read batch / Mfg / Exp / maker / product into a form the user confirms. Nothing is saved. |
+| `POST /items/normalise` | One product per pasted line: Comprehend `BatchDetectEntities` spans plus rules give brand / product / batch / vehicle make-year-registration, with a confidence. A row under 0.8 needs a tap. Nothing is saved; the app posts the confirmed rows to `POST /items`. |
+| `GET /items/{id}/check-status` | The five match steps as `pending` / `running` / `done` / `failed` / `skipped`, read from the execution history. It drives the card's live checklist. |
+
+JSON responses of 1 KB or more are gzipped when the client accepts it; a feed page drops from
+116 KB to about 26 KB.
+
+```bash
+make app-build && make app-deploy     # static export, then an Amplify manual deployment
+make app-fixtures                     # re-record app/public/fixtures from the live API
+```
+
+## Credits
+
+The strip photo behind the Textract fixture (`fixtures/aws_ai/textract_detect_text.json`) is
+[Thiocolchicoside-Aceclofenac-Paracetamol Tablet - Howrah](https://commons.wikimedia.org/wiki/File:Thiocolchicoside-Aceclofenac-Paracetamol_Tablet_-_Howrah_20170920111151.jpg)
+by Biswarup Ganguly, CC BY 3.0. The fixture stores only the text Textract read from it.
 
 ## AI tools used
 

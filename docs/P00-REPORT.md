@@ -116,3 +116,19 @@ Bedrock is out for the whole hackathon: the quota increase was denied, quotas st
 Fixtures captured from these calls: `fixtures/aws_ai/comprehend_entities.json`, `translate_en_hi.json`, `polly_sample.mp3`. Use: paste-import normalisation in P06 (Comprehend + regex), Hindi voice note in P10 (Translate + Polly). The claim letter in P09 is a Jinja template.
 
 Still open in the console: one SES verified email for `NOTIFY_EMAIL` (alerts are logged as `email.skipped` until then).
+
+## Update 2026-09-19 (3)
+
+P06 (the app) is live on **Amplify Hosting**: app `recallindia` (`d2jn22qjgettr5`, platform `WEB`, manual zip deployments, branch `main`) at https://main.d2jn22qjgettr5.amplifyapp.com. Its origin is in the template's `AppOrigins` (HTTP API CORS + raw bucket CORS), persisted in `samconfig.toml`. Checked live in a fresh headless Chromium context:
+
+| Path | Works? | Evidence |
+|---|---|---|
+| Feed | **yes** | 4,868 notices · 4 sources; 50 rows, "Load 50 more" → 100; CDSCO filter; notice sheet with row ref + source excerpt |
+| Item wall | **yes** | 15 seeded items: FT5427 alert ("Failed CDSCO quality test, JUL-2026 alert, row 12", quoted row, range bar), FT5428 dismissed ("batch FT5428 not in listed batches [FT5427]"), Jeep alert ("On NHTSA recall 24V436000" + NHTSA summary sentence) |
+| Strip photo | **yes** | browser → `POST /uploads` → presigned PUT to S3 (CORS from the Amplify origin) → `POST /items/ocr`: Textract `DetectDocumentText` (whole image + the right edge band) → batch `446AG710`, maker `Acme Generics LLP`, Mfg `2017-06`, Exp `2020-05`, in 6.9 s |
+| Paste lines | **yes** | "Pantoprazole Tablets IP Finecure Pharmaceuticals PEP5001" → Comprehend `BatchDetectEntities` + rules → brand `Finecure Pharmaceuticals`, batch `PEP5001`, 0.85 → added → auto check → checklist ○ ◐ ● from the execution history → **alert** ("Failed CDSCO quality test, JUL-2026 alert, row 1") |
+| Lighthouse on `/` | a11y **100** | best practices 100, SEO 100, performance 71–75 (simulated mobile; LCP 3.6–3.8 s waits on the client-side stats fetch) |
+
+After the checks the wall was reset to the seeded 15 (`make seed-live && make validate-live` → PASS: 2 alert, 1 dismiss, 12 clear).
+
+Still open: an SES verified identity for `NOTIFY_EMAIL`. `EnableSchedules=false` is set in `samconfig.toml`, so the pollers run only when invoked (`make poll-live`); the header's "last poll" shows the last manual run.

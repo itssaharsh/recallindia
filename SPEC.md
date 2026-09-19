@@ -48,13 +48,14 @@ EventBridge daily → `cdsco_fetch` Lambda:
 → `cdsco_normalise` (shared): deterministic header-keyword mapping to the Notice schema (primary); a Bedrock column mapper (Nova Lite, temperature 0, strict JSON, batches of 25 rows) exists behind `BEDROCK_ENABLED` (default false) → upsert `notices` with `source: "cdsco_nsq"`, `adapter`, `row_ref` and (PDF only) `pdf_s3_key`. Returns `{adapter, rows_in, notices_out, fallback_used: {extract: bool, normalise: bool}}`.
 
 ## App (Next.js on Amplify Hosting; API Gateway HTTP API + Lambda)
-Routes: `/` feed · `/ingest` hero · `/mine` item wall · `/case/[id]` · `/api` docs (light theme) · 404.
+Routes: `/` feed · `/ingest` hero · `/mine` item wall · `/case/[id]` · `/api` docs (light theme) · 404. The app is a static export (`output: "export"`, client-side fetch), so `/case/[id]` is one `/case/` page that reads `?id=`; an Amplify rewrite serves `/case/<id>` from it.
 Public API: `GET /v1/notices?source=&since=&q=` · `GET /v1/notices/{id}` · `GET /v1/diff?date=`.
 App API: `POST /items` (paste lines | strip photo → Textract batch OCR | vehicle reg) · `POST /items/{id}/check` (starts state machine) · `GET /cases/{id}` · `POST /cases/{id}/approve|reject` · `GET /cases/{id}/verify-evidence` · `POST /ingest/run` (demo trigger).
+P06 additions: `GET /v1/stats` (per-source counts + poller health for the header and pills) · `POST /uploads` (presigned PUT, `raw/uploads/<uuid>.jpg`) · `POST /items/ocr {key}` (Textract → prefilled form, nothing saved) · `POST /items/normalise {lines|text}` (Comprehend + rules → rows with confidence, nothing saved) · `GET /items/{id}/check-status` (the five match steps from the execution history, for the card's live checklist).
 
 ### AWS AI services actually used (`backend/common/aws_ai.py`, all verified live 2026-09-19)
-- **Paste-import normalisation (P06)**: Amazon Comprehend `DetectEntities` (ORGANIZATION → brand, COMMERCIAL_ITEM / QUANTITY → product, batch-looking tokens) + regex. No LLM.
-- **Strip photo (P06)**: Textract `DetectDocumentText` + regex for batch / mfg / exp.
+- **Paste-import normalisation (P06)**: Amazon Comprehend `BatchDetectEntities` (the `DetectEntities` model, 25 lines per call; ORGANIZATION → brand, COMMERCIAL_ITEM / QUANTITY → product, batch-looking tokens) + regex. A company-word run in the line beats a differing ORGANIZATION span. No LLM.
+- **Strip photo (P06)**: Textract `DetectDocumentText` + regex for batch / mfg / exp. When the whole image yields no batch, the right / left / bottom / top 30% bands are cropped and read too (batch stamps are often printed vertically along one edge, which a whole-image read misses).
 - **Voice note (P10)**: Amazon Translate en→hi + Amazon Polly (`Kajal` neural, `Aditi` standard fallback) → MP3.
 - **Claim letter (P09)**: Jinja template, not a model.
 
