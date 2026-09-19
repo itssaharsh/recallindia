@@ -8,11 +8,14 @@ newest-first, opaque cursor -- ``notices_query``), ``GET /v1/notices/{id}``,
 ``GET /ingest/rows``, ``GET /ingest/pdf`` (``ingest_api``); the item wall ``POST /items``,
 ``GET /items``, ``GET /items/{id}``, ``POST /items/{id}/check``, ``GET /cases/{id}``,
 ``GET /events`` (``match_api``). Everything else answers 501 with the prompt that completes
-it (P08/P09). Always JSON, always CORS.
+it (P08/P09). Always JSON, always CORS; gzipped when the client accepts it (HTTP APIs do not
+compress Lambda responses, and a feed page is ~115 KB of JSON).
 """
 
 from __future__ import annotations
 
+import base64
+import gzip
 import json
 import re
 from collections.abc import Callable
@@ -39,6 +42,7 @@ CORS_HEADERS = {
     "access-control-allow-headers": "content-type",
 }
 Route = Callable[[dict, dict], dict]
+GZIP_MIN_BYTES = 1024  # below this the gzip header costs more than it saves
 
 
 def _json_default(value: Any) -> Any:
@@ -54,6 +58,26 @@ def respond(status: int, body: dict | list) -> dict:
         "headers": dict(CORS_HEADERS),
         "body": json.dumps(body, ensure_ascii=False, default=_json_default),
     }
+
+
+def _accepts_gzip(event: dict) -> bool:
+    headers = event.get("headers") or {}
+    value = next((v for k, v in headers.items() if str(k).lower() == "accept-encoding"), "")
+    return "gzip" in str(value or "").lower()
+
+
+def compress(response: dict, event: dict) -> dict:
+    """gzip a JSON body of ``GZIP_MIN_BYTES`` or more when the request accepts gzip (the HTTP
+    API decodes ``isBase64Encoded`` and passes the gzip bytes through with the header)."""
+    body = response.get("body")
+    if not isinstance(body, str) or response.get("isBase64Encoded") or not _accepts_gzip(event):
+        return response
+    raw = body.encode("utf-8")
+    if len(raw) < GZIP_MIN_BYTES:
+        return response
+    headers = {**response.get("headers", {}), "content-encoding": "gzip", "vary": "accept-encoding"}
+    packed = base64.b64encode(gzip.compress(raw, compresslevel=6, mtime=0)).decode("ascii")
+    return {**response, "headers": headers, "body": packed, "isBase64Encoded": True}
 
 
 def _not_implemented(prompt: str) -> Route:
@@ -233,6 +257,10 @@ def _method_and_path(event: dict) -> tuple[str, str]:
 
 def handler(event: dict | None, context: object) -> dict:
     event = event if isinstance(event, dict) else {}
+    return compress(_dispatch(event), event)
+
+
+def _dispatch(event: dict) -> dict:
     method, path = _method_and_path(event)
     if method == "OPTIONS":
         return respond(204, {})

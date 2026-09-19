@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import gzip
 import io
 import json
 
@@ -266,3 +268,39 @@ def test_check_status_live_path_reads_the_execution_history(monkeypatch, notices
     assert status == 200 and body["status"] == "RUNNING"
     states = {s["name"]: s["state"] for s in body["steps"]}
     assert states["Candidates"] == "running" and states["Notify"] == "pending"
+
+
+# --- gzip on the way out -------------------------------------------------------------------------
+
+
+def _get(path: str, accept: str | None, qs: dict | None = None) -> dict:
+    event: dict = {"requestContext": {"http": {"method": "GET"}}, "rawPath": path}
+    if accept is not None:
+        event["headers"] = {"accept-encoding": accept}
+    if qs:
+        event["queryStringParameters"] = qs
+    return event
+
+
+def test_a_feed_page_is_gzipped_when_the_client_accepts_it() -> None:
+    cdsco_portal.handler({}, None)  # 239 rows: a 50-row page is far above GZIP_MIN_BYTES
+    zipped = app.handler(_get("/v1/notices", "gzip, deflate, br", {"limit": "50"}), None)
+    plain = app.handler(_get("/v1/notices", None, {"limit": "50"}), None)
+    assert zipped["isBase64Encoded"] is True
+    assert zipped["headers"]["content-encoding"] == "gzip"
+    assert zipped["headers"]["vary"] == "accept-encoding"
+    body = json.loads(gzip.decompress(base64.b64decode(zipped["body"])))
+    assert len(body["notices"]) == 50 and body == json.loads(plain["body"])
+    assert "isBase64Encoded" not in plain and "content-encoding" not in plain["headers"]
+    assert len(zipped["body"]) < len(plain["body"]) / 3
+
+
+def test_small_bodies_and_other_encodings_stay_plain() -> None:
+    small = app.handler(_get("/health", "gzip"), None)
+    assert "content-encoding" not in small["headers"] and json.loads(small["body"])["ok"]
+    big = {"statusCode": 200, "headers": {}, "body": "x" * 5000}
+    assert app.compress(big, {"headers": {"accept-encoding": "br, identity"}}) is big
+    assert app.compress(big, {}) is big
+    # header names and values are matched case-insensitively (a direct invoke may keep case)
+    upper = app.compress(big, {"headers": {"Accept-Encoding": "GZIP"}})
+    assert gzip.decompress(base64.b64decode(upper["body"])) == b"x" * 5000
