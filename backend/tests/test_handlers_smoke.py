@@ -22,6 +22,7 @@ HANDLER_MODULES = [
     "matcher.candidates",
     "matcher.verify",
     "matcher.range_check",
+    "matcher.decide",
     "matcher.notify",
     "matcher.claim",
     "matcher.evidence",
@@ -56,13 +57,24 @@ def _import_or_skip(module_name: str):
         raise
 
 
+# Handlers that cannot do anything useful without input. Keep this list minimal and explicit: a
+# poller or ingest step that degrades on an empty event is a real failure and must stay one.
+REQUIRES_INPUT = {"matcher.candidates", "matcher.decide", "matcher.notify"}
+
+
 @pytest.mark.parametrize("module_name", HANDLER_MODULES)
 def test_every_handler_returns_dict(module_name):
     module = _import_or_skip(module_name)
     assert callable(module.handler)
     out = module.handler({}, None)
-    assert isinstance(out, dict), module_name
-    assert not out.get("degraded"), f"{module_name} degraded: {out.get('error')}"
+    assert isinstance(out, dict), module_name  # the never-raise contract, for every handler
+    if module_name in REQUIRES_INPUT:
+        # real P04 handlers: an empty event has no item / candidates / decision to work on, so the
+        # contract is a degraded result that names the problem -- not an exception, not a guess
+        assert out.get("degraded") is True, module_name
+        assert isinstance(out.get("error"), str) and out["error"], module_name
+    else:
+        assert not out.get("degraded"), f"{module_name} degraded: {out.get('error')}"
 
 
 def test_cdsco_fetch_portal():
@@ -226,9 +238,15 @@ def test_api_health_and_notices():
     missing = app.handler(_api_event("GET", "/v1/notices/cdsco_nsq%23nope"), None)
     assert missing["statusCode"] == 404
 
-    later = app.handler(_api_event("POST", "/items"), None)
+    # POST /items is real since P04: an empty body is a client error, not "not implemented"
+    empty = app.handler(_api_event("POST", "/items"), None)
+    assert empty["statusCode"] == 400
+    assert "error" in json.loads(empty["body"])
+
+    # routes that are still placeholders keep answering 501 with the prompt that completes them
+    later = app.handler(_api_event("POST", "/cases/case-x/approve"), None)
     assert later["statusCode"] == 501
-    assert json.loads(later["body"])["prompt"] == "P04"
+    assert json.loads(later["body"])["prompt"] == "P08"
 
     assert app.handler(_api_event("GET", "/nope"), None)["statusCode"] == 404
     assert app.handler({}, None)["statusCode"] == 400
@@ -288,10 +306,11 @@ def test_verify_quote_guard():
     assert not quote_is_verbatim("", excerpt)
 
 
-def test_matcher_placeholders_passthrough():
-    from matcher import candidates, claim, evidence, notify
+def test_remaining_matcher_placeholders_passthrough():
+    """candidates/notify became real in P04; claim and evidence stay placeholders until P09."""
+    from matcher import claim, evidence
 
-    for mod, prompt in ((candidates, "P04"), (notify, "P04"), (claim, "P09"), (evidence, "P09")):
+    for mod, prompt in ((claim, "P09"), (evidence, "P09")):
         out = mod.handler({"item_id": "i1"}, None)
         assert out["status"] == "placeholder" and out["prompt"] == prompt and out["item_id"] == "i1"
 

@@ -260,7 +260,9 @@ def test_bedrock_disabled_is_one_warning_and_no_attempt(monkeypatch, caplog, liv
 
 
 def test_demo_mode_never_calls_bedrock(monkeypatch):
-    monkeypatch.delenv("BEDROCK_ENABLED", raising=False)
+    # Bedrock is off by default (no LLM in the decision path); this test is about the model
+    # path, so it opts in explicitly rather than relying on a default.
+    monkeypatch.setenv("BEDROCK_ENABLED", "true")
     monkeypatch.setattr(
         bedrock, "converse_json", lambda *a, **k: pytest.fail("must not call Bedrock")
     )
@@ -270,7 +272,9 @@ def test_demo_mode_never_calls_bedrock(monkeypatch):
 
 
 def test_bedrock_valid_mapping_gives_identical_notices(monkeypatch, live_bedrock):
-    monkeypatch.delenv("BEDROCK_ENABLED", raising=False)
+    # Bedrock is off by default (no LLM in the decision path); this test is about the model
+    # path, so it opts in explicitly rather than relying on a default.
+    monkeypatch.setenv("BEDROCK_ENABLED", "true")
     deterministic = cdsco_normalise.rows_to_notices(
         [HEADER, *ROWS],
         adapter="pdf",
@@ -291,7 +295,9 @@ def test_bedrock_valid_mapping_gives_identical_notices(monkeypatch, live_bedrock
 
 
 def test_bedrock_invalid_batch_falls_back_and_stops(monkeypatch, live_bedrock):
-    monkeypatch.delenv("BEDROCK_ENABLED", raising=False)
+    # Bedrock is off by default (no LLM in the decision path); this test is about the model
+    # path, so it opts in explicitly rather than relying on a default.
+    monkeypatch.setenv("BEDROCK_ENABLED", "true")
     rows = _synthetic_rows(60)
     pages = [1 + i // 20 for i in range(60)]
     calls: list[str] = []
@@ -307,7 +313,9 @@ def test_bedrock_invalid_batch_falls_back_and_stops(monkeypatch, live_bedrock):
 
 def test_bedrock_partial_success_maps_the_rest_deterministically(monkeypatch, live_bedrock):
     """Batch 1 valid, batch 2 unusable: rows 26+ still map through the header keywords."""
-    monkeypatch.delenv("BEDROCK_ENABLED", raising=False)
+    # Bedrock is off by default (no LLM in the decision path); this test is about the model
+    # path, so it opts in explicitly rather than relying on a default.
+    monkeypatch.setenv("BEDROCK_ENABLED", "true")
     rows = _synthetic_rows(40)
     pages = [1] * 40
     valid = _fake_converse_json([])
@@ -327,7 +335,9 @@ def test_bedrock_partial_success_maps_the_rest_deterministically(monkeypatch, li
 
 
 def test_bedrock_error_from_converse_is_contained(monkeypatch, live_bedrock):
-    monkeypatch.delenv("BEDROCK_ENABLED", raising=False)
+    # Bedrock is off by default (no LLM in the decision path); this test is about the model
+    # path, so it opts in explicitly rather than relying on a default.
+    monkeypatch.setenv("BEDROCK_ENABLED", "true")
 
     def boom(*a, **k):
         raise bedrock.BedrockError("ap-south-1: Operation not allowed")
