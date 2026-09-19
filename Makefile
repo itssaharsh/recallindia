@@ -73,6 +73,13 @@ seed: ## Seed the 15-item demo world into the local store (DEMO_MODE)
 validate: ## Check all seeded items in mock mode and print PASS/FAIL
 	DEMO_MODE=1 $(PY) scripts/validate.py --mock
 
+.PHONY: seed-live validate-live
+seed-live: ## Reset + seed the 15 demo items in the DEPLOYED tables (deletes items/cases/events, never notices)
+	DEMO_MODE=0 $(PY) scripts/seed_demo.py --live --reset --profile $(AWS_PROFILE)
+
+validate-live: ## Check the 15 demo items through the deployed API + Step Functions, PASS/FAIL
+	DEMO_MODE=0 $(PY) scripts/validate.py --live --profile $(AWS_PROFILE)
+
 SOURCE ?= cpsc
 YEARS ?= 5
 ACCOUNT_ID = $(shell aws sts get-caller-identity --query Account --output text --profile $(AWS_PROFILE))

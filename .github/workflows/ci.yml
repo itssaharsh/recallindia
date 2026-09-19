@@ -34,6 +34,9 @@ jobs:
         env:
           DEMO_MODE: "1"
 
+      - name: Demo world (seed + validate, mock, no AWS credentials)
+        run: make seed && make validate
+
       - name: cfn-lint template.yaml
         run: .venv/bin/cfn-lint template.yaml
 
