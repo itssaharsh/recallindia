@@ -14,7 +14,7 @@ resolve_s3 = true
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = false
 fail_on_empty_changeset = false
-parameter_overrides = "EnableSchedules=false DemoMode=0"
+parameter_overrides = "EnableSchedules=false DemoMode=0 BedrockEnabled=false"
 
 [default.validate.parameters]
 lint = true
