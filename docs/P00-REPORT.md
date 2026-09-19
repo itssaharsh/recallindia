@@ -102,3 +102,17 @@ CPSC data quirk: in record[0], Title/Hazards describe a Char-Broil grill recall 
 | SES identities (ap-south-1) | still **none** | `ses list-identities` → `[]` |
 
 Console actions still open: Bedrock model access (use-case form, then Nova Lite + Claude Haiku 4.5), one SES verified email for `NOTIFY_EMAIL`.
+
+## Update 2026-09-19 (2)
+
+Bedrock is out for the whole hackathon: the quota increase was denied, quotas stay at 0. Decision: **no LLM in the decision path**; the model path stays implemented behind `BEDROCK_ENABLED` (default false). The other AWS AI services were checked live with one call each (`scripts/aws_ai_check.py`, profile `firstcommit`, region `ap-south-1`, input "Paracetamol Tablets IP 650mg, batch FT5427, Forgo Pharmaceuticals, failed CDSCO quality test, July 2026 alert"):
+
+| Service | Works? | Result |
+|---|---|---|
+| Amazon Comprehend `DetectEntities` (en) | **yes** | 6 entities: `Forgo Pharmaceuticals` ORGANIZATION 0.96, `July 2026` DATE 1.00, `650mg` QUANTITY 0.63, `FT5427` COMMERCIAL_ITEM 0.50, `CDSCO` OTHER 0.41, `IP` OTHER 0.35. Good enough to pull brand / quantity / date out of pasted order lines; batch tokens still need the regex. |
+| Amazon Translate en→hi | **yes** | "पेरासिटामोल टैबलेट IP 650mg, बैच FT5427, फोर्गो फार्मास्यूटिकल्स, असफल CDSCO गुणवत्ता परीक्षण, जुलाई 2026 अलर्ट" |
+| Amazon Polly | **yes** | `Kajal` (neural, hi-IN) is available in ap-south-1; 56,924-byte MP3. `Aditi` (standard) is the coded fallback. |
+
+Fixtures captured from these calls: `fixtures/aws_ai/comprehend_entities.json`, `translate_en_hi.json`, `polly_sample.mp3`. Use: paste-import normalisation in P06 (Comprehend + regex), Hindi voice note in P10 (Translate + Polly). The claim letter in P09 is a Jinja template.
+
+Still open in the console: one SES verified email for `NOTIFY_EMAIL` (alerts are logged as `email.skipped` until then).

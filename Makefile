@@ -110,6 +110,41 @@ notices-page: ## GET one page of /v1/notices: make notices-page SOURCE=cdsco_nsq
 	curl -sS "$$(make -s api-url)/v1/notices?source=$(SOURCE)&since=$(SINCE)&limit=$(LIMIT)&cursor=$(CURSOR)"
 	@echo ""
 
+.PHONY: items-add items-list item-check case-get events
+NAME ?=
+BRAND ?=
+BATCH ?=
+KIND ?= medicine
+MODEL ?=
+VMAKE ?=
+YEAR ?=
+PURCHASED ?=
+ID ?=
+items-add: ## POST /items: make items-add NAME="Paracetamol Tablets IP 650mg" BRAND="Forgo Pharmaceuticals" BATCH=FT5427 [KIND= MODEL= VMAKE=<vehicle make> YEAR= PURCHASED=YYYY-MM-DD]
+	@test -n "$(NAME)" || { echo 'usage: make items-add NAME="..." [BRAND= BATCH= KIND= MODEL= VMAKE= YEAR= PURCHASED=]'; exit 2; }
+	@python3 -c 'import json,sys; k=["kind","name","brand","batch","model","make","year","purchase_date"]; d={a:b for a,b in zip(k,sys.argv[1:]) if b}; d.update(year=int(d["year"])) if d.get("year") else None; print(json.dumps({"items":[d]}))' \
+		"$(KIND)" "$(NAME)" "$(BRAND)" "$(BATCH)" "$(MODEL)" "$(VMAKE)" "$(YEAR)" "$(PURCHASED)" \
+		| curl -sS -X POST "$$(make -s api-url)/items" -H 'content-type: application/json' -d @-
+	@echo ""
+
+items-list: ## GET /items on the deployed API
+	curl -sS "$$(make -s api-url)/items"
+	@echo ""
+
+item-check: ## POST /items/{id}/check (starts the MatchStateMachine): make item-check ID=item-...
+	@test -n "$(ID)" || { echo "usage: make item-check ID=<item id>"; exit 2; }
+	curl -sS -X POST "$$(make -s api-url)/items/$(ID)/check"
+	@echo ""
+
+case-get: ## GET /cases/{id}: make case-get ID=case-...
+	@test -n "$(ID)" || { echo "usage: make case-get ID=<case id>"; exit 2; }
+	curl -sS "$$(make -s api-url)/cases/$(ID)"
+	@echo ""
+
+events: ## GET /events?limit=20 (newest first)
+	curl -sS "$$(make -s api-url)/events?limit=20"
+	@echo ""
+
 clean: ## Remove venv, SAM build output, caches and the local demo store
 	rm -rf $(VENV) .aws-sam .demo_store .pytest_cache .ruff_cache
 	find . -name __pycache__ -type d -prune -exec rm -rf {} +

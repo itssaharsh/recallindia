@@ -33,19 +33,19 @@ make             # lists every target
   code default, so set only what you change (`KEY=value`, no quotes, comments on their own lines).
 - Deploy: `make validate-template`, then `make deploy-guided` once, `make deploy` afterwards.
 
-## Status after P00/P01
+## Status (2026-09-19)
 
-- **Textract is blocked**: the account is on the AWS Free plan, which excludes Textract
-  (`SubscriptionRequiredException` in both regions). The `cdsco_pdf` adapter keeps Textract TABLES
-  as primary behind a try/except and falls back to `pdfplumber` `page.find_tables()`, which P00
-  proved yields a clean 8-column table per page on `fixtures/cdsco/nsq_latest.pdf`: 57 data rows
-  (55 with an S.No plus 2 wrapped-manufacturer continuation rows that merge into their
-  predecessor), so a demo run publishes 55 notices.
-- **Bedrock model access is pending**: every `converse` returns `Operation not allowed` until the
-  use-case form is submitted and Claude Haiku 4.5 + Nova Lite are enabled in `ap-south-1` and
-  `us-east-1`. `backend/common/bedrock.py` has the fixture path and a deterministic fallback.
-- **SES identity is pending**: no verified identity in `ap-south-1` yet (account in sandbox); set
-  `NOTIFY_EMAIL` once one is verified.
+- **No LLM in the decision path (by design; Bedrock quotas held at 0 on this account, increase
+  denied — model path implemented behind a flag).** `BEDROCK_ENABLED` defaults to `false`; the
+  verifier, normaliser and (later) claim letter are deterministic Python / templates.
+- **Textract works** (account on the Paid plan since 2026-09-19): the live `/ingest` run on the
+  June 2025 archive PDF used Textract TABLES (57 data rows → 55 notices). `pdfplumber`
+  `page.find_tables()` stays the first-class fallback; older archive layouts return fewer than 5
+  Textract rows and take it.
+- **Comprehend, Translate and Polly work** in `ap-south-1` (`Kajal` neural voice available);
+  wrappers with DEMO_MODE fixtures live in `backend/common/aws_ai.py`.
+- **SES identity is pending**: no verified identity in `ap-south-1` yet (sandbox). Alert emails are
+  logged as `email.skipped` and never fail an execution; set `NOTIFY_EMAIL` once one is verified.
 
 Details, the exact endpoints, and the re-run commands: [docs/P00-REPORT.md](docs/P00-REPORT.md).
 
@@ -54,7 +54,7 @@ Details, the exact endpoints, and the re-run commands: [docs/P00-REPORT.md](docs
 ```
 template.yaml        AWS SAM: DynamoDB, S3 (Object Lock on evidence), KMS, Lambdas, HTTP API,
                      Step Functions, EventBridge schedules
-backend/common/      demo_mode, schemas (pydantic), bedrock, dynamo, s3, notices, cdsco,
+backend/common/      demo_mode, schemas (pydantic), bedrock, aws_ai, matching, dynamo, s3, notices, cdsco,
                      ingest_runs — shipped as CommonLayer
 backend/pollers/     cpsc, nhtsa (+ watchlist), openfda, cdsco_portal
 backend/ingest/      cdsco_fetch, cdsco_extract, cdsco_normalise, cdsco_publish (Diff + Publish /
@@ -104,8 +104,8 @@ Four pollers write the notices table; each one is a Lambda on an EventBridge Sch
   keeps its previous value so the UI can say "CPSC: degraded, last success 09:15". The API
   excludes meta rows from the feed. Pollers never raise on upstream failure — the handler
   returns `{"degraded": true, "error": ...}`.
-- **`BEDROCK_ENABLED`** (env, default `true`; template parameter `BedrockEnabled`). When
-  `false`, every Bedrock call raises `BedrockUnavailable` immediately and callers use their
+- **`BEDROCK_ENABLED`** (env, default `false`; template parameter `BedrockEnabled`; only
+  `true`/`1`/`yes`/`on` enable it). When off, every Bedrock call raises `BedrockUnavailable` immediately and callers use their
   deterministic/template fallback; one warning is logged per Lambda invocation. The pollers
   and the backfill never call Bedrock at all. See [ADR-004](docs/adr/ADR-004-pollers-idempotent-upsert-and-meta.md).
 
@@ -228,6 +228,33 @@ Reading `GET /ingest/status/{arn}`:
 
 See [ADR-005](docs/adr/ADR-005-source-index-and-cursor-pagination.md) for why the listing is
 index-only with a per-source cursor and why `q` is a post-filter.
+
+## Items, checks and cases
+
+**No LLM in the decision path (by design; Bedrock quotas held at 0 on this account, increase denied — model path implemented behind a flag).**
+
+| Endpoint | What it does |
+|---|---|
+| `POST /items` | JSON bulk create (`{"items": [{kind, name, brand, model, batch, serial, make, year, purchase_date}]}` or one object). `name` is required. |
+| `GET /items`, `GET /items/{id}` | The item wall; an item carries `status` (`clear` / `hold` / `alert`), `case_id`, `last_check_arn`. The items table holds one demo user's wall, so a bounded scan is acceptable here (notices never are scanned). |
+| `POST /items/{id}/check` | Starts the `MatchStateMachine` (202 + execution ARN). In `DEMO_MODE=1` the same five steps run in-process and the response already carries the decision. |
+| `GET /cases/{id}` | The case: decision, reason, quoted sentence, range check, `verifier`, `reasoning`, `sold_after_notice`, audit. |
+| `GET /events?since=&limit=&cursor=` | In-app events, newest first (`case.alert`, `case.hold`, `case.dismiss`, `item.clear`, `email.sent`, `email.skipped`). |
+
+The pipeline is Candidates → (Map, max 2 at a time) Verify → RangeCheck → Decide → Notify, all deterministic Python:
+
+- **Candidates**: `brand_lc-index` lookups for the brand as typed, without legal suffixes, and its first token; `rapidfuzz.token_set_ratio ≥ 80` on product/model; vehicles by make/model; at most 5. An item without a brand searches each source through `source-published_at-index`, capped at 500 rows. No table scans.
+- **Verify** (`verifier: "deterministic"`): brand matches and (product/model fuzzy ≥ 90 or a listed batch/serial/model token is on the item). The quoted sentence is the notice's own row text, verbatim from `raw_excerpt` (enforced in code). `reasoning` reads like `brand 'Forgo Pharmaceuticals' matches; product 'Paracetamol Tablets IP 650mg' fuzzy 100; batch FT5427 in listed [FT5427]; quoted: '…'`. A Bedrock verifier with the same quote guard exists behind `BEDROCK_ENABLED=true`; it is off by default and not used.
+- **RangeCheck**: batches exact or case/space-insensitive; serial ranges (`A12–A99`, `4000-5200`, `starting with 24`); vehicle model year; no identifier → `inside: null`.
+- **Decide**: `alert` = covers and inside; `hold` = covers but no identifier, or verification unavailable; `dismiss` with the exact reason (`batch FT5428 not in listed batches [FT5427]`, `model X not covered; notice lists Y`, `year 2021 outside 2017–2019`); no candidates → the item is `clear` with `no match in 4 sources as of <time>` and no case is written.
+- **Notify**: writes the case, sets the item status (a dismissed near-miss stays `clear` but keeps its `case_id` so the wall can show the amber reason), appends audit, writes an event, and emails `NOTIFY_EMAIL` on `alert` only. Until an SES identity is verified the send is logged as `email.skipped` and the execution still succeeds.
+
+```bash
+make items-add NAME="Paracetamol Tablets IP 650mg" BRAND="Forgo Pharmaceuticals" BATCH=FT5427 PURCHASED=2026-08-01
+make item-check ID=item-xxxxxxxxxxxx     # prints the execution arn
+make items-list && make events
+make case-get ID=case-20260919...
+```
 
 ## AI tools used
 

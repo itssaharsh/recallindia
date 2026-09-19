@@ -10,7 +10,7 @@
 | 1:55 | Sibling strip, same drug, different batch → card goes amber → "Dismissed: batch DL-4472 not in listed batches [DL-4471, DL-4468]". | `/mine` | near-miss branch with reason |
 | 2:10 | Type a vehicle registration → SIAM/NHTSA hit → Hindi voice note plays (waveform). | `/mine` | stretch: SIAM poller, Polly |
 | 2:25 | Terminal: `curl https://<url>/v1/notices?source=cdsco_nsq&since=2026-07-01` → JSON (rows carry `adapter`). | `/api` | public API + docs page |
-| 2:40 | Architecture card: EventBridge · Lambda · Textract · Bedrock · Step Functions · DynamoDB · S3 Object Lock · KMS · SES · Amplify. Caption: "First time using Textract tables, Step Functions task tokens, Object Lock." | slide | — |
+| 2:40 | Architecture card: EventBridge · Lambda · Textract · Comprehend · Translate · Polly · Step Functions · DynamoDB · S3 Object Lock · KMS · SES · Amplify. Footnote: "No LLM in the decision path." Caption: "First time using Textract tables, Step Functions task tokens, Object Lock." | slide | — |
 | 2:55 | Live URL + repo. | — | — |
 
 Rules: 80% product on screen, captions on, 1080p, no talking-head. Record each shot separately; the seed script resets state between takes. Every AWS service must be visible (console or UI), not just named.
