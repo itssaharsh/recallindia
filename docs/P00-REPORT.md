@@ -91,3 +91,14 @@ CPSC data quirk: in record[0], Title/Hazards describe a Char-Broil grill recall 
 - `pip install` into system Python is blocked (PEP 668). Use a venv: `python3 -m venv .venv && .venv/bin/pip install pdfplumber pypdf boto3 requests`. During P00 the venv lived in the session scratchpad.
 - `AWS_PROFILE=firstcommit` for all AWS CLI/boto3 calls until `default` is fixed.
 - Temporary bucket `recallindia-p00-277025716889` no longer exists (`head-bucket` → 404; `list-buckets` filtered → empty).
+
+## Update 2026-09-19
+
+| Dependency | Now | Evidence |
+|---|---|---|
+| Account plan | **Paid** (`freetier get-account-plan-state` → `PAID / ACTIVE`) | upgraded in the console after P00 |
+| Amazon Textract TABLES (async) | **works** | live `IngestStateMachine` run `ingest-20260919084944-ab53`: `StartDocumentAnalysis` on `raw/cdsco/CDSCO_NSQ_june25.pdf`, job SUCCEEDED after 5 polls / 24.8 s, 6 pages, 57 rows reconstructed from CELL blocks with bounding boxes; pdfplumber fallback not needed |
+| Bedrock invoke | still **blocked** | `get-use-case-for-model-access` → form not submitted; `converse` on `apac.amazon.nova-lite-v1:0` → `Operation not allowed`; Nova Lite and Haiku 4.5 `authorizationStatus: NOT_AUTHORIZED` |
+| SES identities (ap-south-1) | still **none** | `ses list-identities` → `[]` |
+
+Console actions still open: Bedrock model access (use-case form, then Nova Lite + Claude Haiku 4.5), one SES verified email for `NOTIFY_EMAIL`.
