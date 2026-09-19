@@ -5,6 +5,9 @@ What each is for:
 * ``comprehend_entities`` -- paste-import normalisation (P06): entity spans (ORGANIZATION,
   QUANTITY, DATE, OTHER ...) in a pasted free-text line, so the deterministic identifier rules
   know which tokens are the manufacturer, the strength and the date. It never decides a match.
+* ``comprehend_entities_batch`` -- the same for up to 50 pasted lines in 25-line batches.
+* ``textract_detect_text`` / ``textract_lines`` -- the "Scan strip" tab (P06): the printed
+  lines of a medicine-strip photo, so deterministic regexes can read B.No / Mfg / Exp.
 * ``translate`` -- English -> Hindi for the alert text and the voice-note script.
 * ``polly_voice`` / ``polly_mp3`` -- the Hindi voice note played on ``/mine`` (P10): Kajal
   (neural, hi-IN) preferred, Aditi (standard) as the fallback.
@@ -17,6 +20,7 @@ module-level so tests monkeypatch them with fakes.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from typing import Any
@@ -32,6 +36,10 @@ _VOICE_LANGUAGES = ("hi-IN", "en-IN")
 _FIXTURE_DIR = "aws_ai"
 # Per-request text limits (chars): Comprehend 5000, Translate 10000 bytes, Polly 3000 billed.
 _COMPREHEND_MAX_CHARS = 5000
+_COMPREHEND_BATCH = 25  # BatchDetectEntities accepts at most 25 documents per call
+_COMPREHEND_FIXTURE = "comprehend_entities.json"  # recorded for aws_ai_check's input
+_COMPREHEND_FIXTURE_DIR = "comprehend"  # one recorded response per demo line
+_TEXTRACT_FIXTURE = "textract_detect_text.json"  # recorded DetectDocumentText response
 _TRANSLATE_MAX_CHARS = 10000
 _POLLY_MAX_CHARS = 3000
 
@@ -47,6 +55,12 @@ def _comprehend_client() -> Any:
     import boto3  # lazy: demo mode must not need boto3 credentials
 
     return boto3.client("comprehend", region_name=REGION)
+
+
+def _textract_client() -> Any:
+    import boto3  # lazy
+
+    return boto3.client("textract", region_name=REGION)
 
 
 def _translate_client() -> Any:
@@ -90,19 +104,43 @@ def _blank(text: str | None) -> bool:
 # --- Comprehend ------------------------------------------------------------------------------
 
 
+def fixture_key(text: str) -> str:
+    """File stem of the recorded Comprehend response for ``text`` (whitespace-trimmed)."""
+    return hashlib.sha256(text.strip().encode("utf-8")).hexdigest()[:16]
+
+
+def _demo_entities(text: str) -> list[dict]:
+    """The entities recorded live for exactly this text, else ``[]``.
+
+    A single canned response for every input would hand every pasted line the same brand
+    ("Forgo Pharmaceuticals"), so demo mode answers only what was actually recorded: the
+    ``aws_ai_check`` input (``comprehend_entities.json``) or a per-line recording under
+    ``fixtures/aws_ai/comprehend/<fixture_key>.json``. Anything else gets no entities and the
+    caller's regex rules decide alone -- the same as a live call that finds nothing.
+    """
+    base = _json_fixture(_COMPREHEND_FIXTURE)  # FixtureMissing when the fixtures are absent
+    if text.strip() == str(base.get("input", "")).strip():
+        return [dict(e) for e in base["Entities"]]
+    recorded = fixture_path(_FIXTURE_DIR, _COMPREHEND_FIXTURE_DIR, f"{fixture_key(text)}.json")
+    if recorded.is_file():
+        with recorded.open(encoding="utf-8") as fh:
+            return [dict(e) for e in json.load(fh)["Entities"]]
+    return []
+
+
 def comprehend_entities(text: str, *, language_code: str = "en") -> list[dict]:
     """Entity spans in ``text``: ``[{Text, Type, Score, BeginOffset, EndOffset}, ...]``.
 
     Paste-import normalisation (P06): tells the deterministic rules which tokens of a pasted
     line are the manufacturer (ORGANIZATION), strength (QUANTITY), month (DATE) or product
-    (OTHER). Live: Comprehend ``DetectEntities`` on the first 5000 chars. Demo: the
-    ``Entities`` of ``fixtures/aws_ai/comprehend_entities.json``. Blank text -> ``[]`` with
-    no call. Raises ``AwsAiError`` on a live failure.
+    (COMMERCIAL_ITEM / OTHER). Live: Comprehend ``DetectEntities`` on the first 5000 chars.
+    Demo: the response recorded for exactly this text (``_demo_entities``), else ``[]``.
+    Blank text -> ``[]`` with no call. Raises ``AwsAiError`` on a live failure.
     """
     if _blank(text):
         return []
     if is_demo():
-        return [dict(e) for e in _json_fixture("comprehend_entities.json")["Entities"]]
+        return _demo_entities(text)
     resp = _call(
         "comprehend",
         _comprehend_client().detect_entities,
@@ -110,6 +148,92 @@ def comprehend_entities(text: str, *, language_code: str = "en") -> list[dict]:
         LanguageCode=language_code,
     )
     return [dict(e) for e in resp.get("Entities", [])]
+
+
+def comprehend_entities_batch(texts: list[str], *, language_code: str = "en") -> list[list[dict]]:
+    """``comprehend_entities`` for many lines at once, in input order.
+
+    Live: ``BatchDetectEntities`` in chunks of 25 (the API limit); blank lines are answered
+    ``[]`` without being sent. A per-document error inside a batch (``ErrorList``) raises
+    ``AwsAiError`` naming the line, like any other live failure. Demo: ``_demo_entities`` per
+    line.
+    """
+    out: list[list[dict]] = [[] for _ in texts]
+    todo = [(i, t[:_COMPREHEND_MAX_CHARS]) for i, t in enumerate(texts) if not _blank(t)]
+    if not todo:
+        return out
+    if is_demo():
+        for i, text in todo:
+            out[i] = _demo_entities(text)
+        return out
+    client = _comprehend_client()
+    for start in range(0, len(todo), _COMPREHEND_BATCH):
+        chunk = todo[start : start + _COMPREHEND_BATCH]
+        resp = _call(
+            "comprehend",
+            client.batch_detect_entities,
+            TextList=[text for _, text in chunk],
+            LanguageCode=language_code,
+        )
+        errors = resp.get("ErrorList") or []
+        if errors:
+            first = errors[0]
+            line = chunk[int(first.get("Index", 0))][0]
+            raise AwsAiError(
+                f"comprehend: line {line + 1}: {first.get('ErrorCode')} {first.get('ErrorMessage')}"
+            )
+        for result in resp.get("ResultList", []):
+            index = chunk[int(result["Index"])][0]
+            out[index] = [dict(e) for e in result.get("Entities", [])]
+    return out
+
+
+# --- Textract --------------------------------------------------------------------------------
+
+
+def textract_detect_text(bucket: str, key: str) -> dict:
+    """Raw ``DetectDocumentText`` response for the image at ``s3://bucket/key``.
+
+    The "Scan strip" tab (P06): a phone photo of a medicine strip, uploaded straight to the raw
+    bucket through a presigned PUT. Live: synchronous ``DetectDocumentText`` with an
+    ``S3Object`` (JPEG / PNG, <= 10 MB). Demo: the recorded response in
+    ``fixtures/aws_ai/textract_detect_text.json`` whatever the key (a demo run has no real
+    upload). Read the printed lines with ``textract_lines``. Raises ``AwsAiError`` on a live
+    failure.
+    """
+    if is_demo():
+        return _json_fixture(_TEXTRACT_FIXTURE)["Response"]
+    return _call(
+        "textract",
+        _textract_client().detect_document_text,
+        Document={"S3Object": {"Bucket": bucket, "Name": key}},
+    )
+
+
+def textract_lines(response: dict) -> list[dict]:
+    """The LINE blocks of a ``DetectDocumentText`` response, top to bottom.
+
+    ``[{text, confidence (0-1), top, left, height, width}]`` -- ``height`` is the fraction of
+    the image the line's text occupies, which is how the strip's product name (printed
+    largest) is told apart from the small print.
+    """
+    lines: list[dict] = []
+    for block in response.get("Blocks") or []:
+        if block.get("BlockType") != "LINE" or not str(block.get("Text") or "").strip():
+            continue
+        box = (block.get("Geometry") or {}).get("BoundingBox") or {}
+        lines.append(
+            {
+                "text": " ".join(str(block["Text"]).split()),
+                "confidence": round(float(block.get("Confidence") or 0.0) / 100.0, 4),
+                "top": round(float(box.get("Top") or 0.0), 4),
+                "left": round(float(box.get("Left") or 0.0), 4),
+                "height": round(float(box.get("Height") or 0.0), 4),
+                "width": round(float(box.get("Width") or 0.0), 4),
+            }
+        )
+    lines.sort(key=lambda line: (round(line["top"], 2), line["left"]))
+    return lines
 
 
 # --- Translate -------------------------------------------------------------------------------

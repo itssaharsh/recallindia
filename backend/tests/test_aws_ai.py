@@ -70,9 +70,14 @@ def test_demo_comprehend_entities_from_fixture() -> None:
 
 
 def test_demo_comprehend_returns_copies() -> None:
-    first = comprehend_entities("x")
+    first = comprehend_entities(FIXED_INPUT)
     first[0]["Text"] = "mutated"
-    assert comprehend_entities("x")[0]["Text"] != "mutated"
+    assert comprehend_entities(FIXED_INPUT)[0]["Text"] != "mutated"
+
+
+def test_demo_comprehend_answers_only_recorded_text() -> None:
+    """One canned response for every line would give every pasted line the same brand."""
+    assert comprehend_entities("Havells Efficiencia Neo Ceiling Fan") == []
 
 
 def test_demo_translate_returns_devanagari() -> None:
