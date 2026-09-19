@@ -1,0 +1,42 @@
+"use client";
+
+import { fmtCount, fmtTime } from "@/lib/format";
+
+import { useAppState } from "./app-state";
+
+/** The live counter: "N notices · S sources · last poll hh:mm:ss", tabular numerals throughout. */
+export function TopBar() {
+  const { stats, statsError, demo } = useAppState();
+
+  return (
+    <header className="flex min-h-14 flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-line bg-surface-0 px-5 py-3">
+      <p className="flex items-baseline gap-2" aria-live="polite">
+        {stats ? (
+          <>
+            <span className="font-display text-2xl leading-none font-semibold text-text">{fmtCount(stats.total)}</span>
+            <span className="text-sm text-muted">notices</span>
+            <span aria-hidden className="text-muted">
+              ·
+            </span>
+            <span className="text-sm text-text">{stats.sources_count}</span>
+            <span className="text-sm text-muted">sources</span>
+            <span aria-hidden className="text-muted">
+              ·
+            </span>
+            <span className="text-sm text-muted">last poll</span>
+            <span className="font-mono text-sm text-text">{fmtTime(stats.last_poll_at)}</span>
+          </>
+        ) : statsError ? (
+          <span className="text-sm text-muted">Counts unavailable: {statsError}</span>
+        ) : (
+          <span className="inline-block h-6 w-72 bg-surface-2" aria-label="Loading counts" />
+        )}
+      </p>
+      {demo && (
+        <span className="ml-auto rounded-sm border border-line px-2 py-0.5 font-mono text-[11px] tracking-wider text-muted uppercase">
+          Demo data · read-only
+        </span>
+      )}
+    </header>
+  );
+}

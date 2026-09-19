@@ -2,129 +2,160 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/*
+ * RecallIndia tokens -- DESIGN.md is binding. One aesthetic word: ledger.
+ * Dark by default (an ops / records console); the /api docs route is the one light route (P10).
+ *
+ * The shadcn 5-edit fix:
+ *  1. neutral palette -> the navy surface ladder (elevation by lightness, not shadow)
+ *  2. radius off the default -> the real scale 0 / 4 / 10 / 18
+ *  3. font tokens -> Bricolage Grotesque / IBM Plex Sans / IBM Plex Mono
+ *  4. one accent -> petrol primary; the only red is the alert
+ *  5. one signature token shadcn does not ship -> --paper (the notice excerpt, a printed record)
+ *
+ * Contrast (WCAG AA, measured from OKLCH lightness): text 94% and text-muted 68% on every
+ * surface >= 5.9:1; alert 62% >= 4.6:1 on surface-2; primary 58% as text 4.6:1 (links use
+ * primary-strong 70%, 7.4:1); dark text (surface-0) on the primary fill 4.6:1.
+ */
+
 @custom-variant dark (&:is(.dark *));
+
+:root {
+  /* DESIGN.md colours, verbatim */
+  --primary-brand: oklch(58% 0.14 215);
+  --primary-strong: oklch(70% 0.16 215);
+  --surface-0: oklch(15% 0.02 240);
+  --surface-1: oklch(19% 0.02 240);
+  --surface-2: oklch(23% 0.02 240);
+  --surface-3: oklch(28% 0.02 240);
+  --line: oklch(32% 0.02 240);
+  --text: oklch(94% 0.01 240);
+  --text-muted: oklch(68% 0.02 240);
+  --alert: oklch(62% 0.19 25);
+  --hold: oklch(74% 0.14 80);
+  --clear: oklch(72% 0.13 160);
+  --evidence: oklch(80% 0.06 215);
+  /* signature token: the regulator's record, printed on off-white paper in dark ink */
+  --paper: oklch(95% 0.012 95);
+  --ink: oklch(24% 0.02 240);
+  --alert-face: color-mix(in oklch, var(--alert) 16%, var(--surface-2));
+
+  /* shadcn roles mapped onto the ladder */
+  --background: var(--surface-0);
+  --foreground: var(--text);
+  --card: var(--surface-2);
+  --card-foreground: var(--text);
+  --popover: var(--surface-1);
+  --popover-foreground: var(--text);
+  --primary: var(--primary-brand);
+  --primary-foreground: var(--surface-0);
+  --secondary: var(--surface-3);
+  --secondary-foreground: var(--text);
+  --muted: var(--surface-1);
+  --muted-foreground: var(--text-muted);
+  --accent: var(--surface-3);
+  --accent-foreground: var(--text);
+  --destructive: var(--alert);
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--primary-strong);
+  --radius: 10px;
+}
+
+.dark {
+  /* dark is the only theme outside /api: same values */
+  --background: var(--surface-0);
+}
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
-}
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  /* --color-muted is the muted TEXT colour below (text-muted); shadcn's bg-muted uses became
+     bg-surface-* in components/ui */
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
 
-:root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
+  /* semantic classes: bg-surface-1, text-muted, text-alert, border-line, bg-paper ... */
+  --color-surface-0: var(--surface-0);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+  --color-alert: var(--alert);
+  --color-alert-face: var(--alert-face);
+  --color-hold: var(--hold);
+  --color-clear: var(--clear);
+  --color-evidence: var(--evidence);
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-primary-strong: var(--primary-strong);
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, "SFMono-Regular", monospace;
+  --font-display: var(--font-bricolage), var(--font-plex-sans), ui-sans-serif, sans-serif;
+  --font-heading: var(--font-display);
+
+  /* the radius scale is real: records 0, inputs/chips 4, item cards 10, sheets 18 */
+  --radius-none: 0px;
+  --radius-sm: 4px;
+  --radius-md: 10px;
+  --radius-lg: 18px;
+  --radius-xl: 18px;
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
-  body {
-    @apply bg-background text-foreground;
-  }
   html {
     @apply font-sans;
+    color-scheme: dark;
   }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-variant-numeric: tabular-nums;
+  }
+  ::selection {
+    background: color-mix(in oklch, var(--primary-brand) 45%, transparent);
+    color: var(--text);
+  }
+  :focus-visible {
+    outline: 2px solid var(--primary-strong);
+    outline-offset: 2px;
+  }
+  * {
+    scrollbar-color: var(--surface-3) transparent;
+  }
+}
+
+/* Motion only on state change (DESIGN.md); anything CSS-driven collapses for reduced motion.
+   The four named animations run through motion/react and use useReducedMotion themselves. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Feed rows off-screen skip layout and paint (cheap virtualisation for "Load more" lists). */
+.feed-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 40px;
 }
