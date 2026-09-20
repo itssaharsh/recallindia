@@ -7,6 +7,8 @@
 - **Video:** _(link to follow)_
 - Built for the WeMakeDevs × AWS **First Commit** hackathon, 17–20 Sep 2026.
 
+![The landing page: when your medicine fails a quality test, nobody tells you](docs/media/ui-landing.png)
+
 | A government PDF becoming the feed | Something you own, on a notice |
 |---|---|
 | ![The /ingest dissolve: rows lifting off a CDSCO alert PDF](docs/media/ui-ingest.png) | ![The item wall with two red cards](docs/media/ui-mine.png) |
