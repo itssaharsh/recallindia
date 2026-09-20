@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { apiGet } from "@/lib/api";
 import { SNAPSHOT_KIND, fmtBytes, fmtUtc } from "@/lib/case";
+import { fmtClock } from "@/lib/format";
 import type { Evidence, VerifyResult } from "@/lib/types";
 
 import { Seal } from "./seal";
@@ -92,7 +93,7 @@ export function EvidenceCertificate({ caseId, evidence, demo }: { caseId: string
                 : !result
                   ? "Re-reading the locked snapshot and asking KMS Verify…"
                   : result.valid
-                    ? `KMS Verify: the snapshot still hashes to the signed digest · ${fmtUtc(result.checked_at).slice(11)}`
+                    ? `KMS Verify: the snapshot still hashes to the signed digest · ${fmtClock(result.checked_at)}`
                     : "KMS Verify: the signature does not match"}
             </p>
             <Button

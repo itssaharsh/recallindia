@@ -401,7 +401,7 @@ function PasteTab({ demo, onDone }: { demo: boolean; onDone: (items: Item[]) => 
             {rows.map((r, i) => (
               <li
                 key={i}
-                className={`space-y-2 border border-line bg-surface-1 p-3 ${r.needs_confirm && !r.ok ? "border-l-4 border-l-warning" : ""}`}
+                className={`space-y-2 border p-3 ${r.needs_confirm && !r.ok ? "border-transparent bg-warning-soft" : "border-line bg-surface-1"}`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 text-[13px]">
