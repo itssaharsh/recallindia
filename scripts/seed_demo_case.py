@@ -93,6 +93,11 @@ def make_case(dynamo, item: dict, notice: dict, now: str) -> dict:
     item["case_id"] = CASE_ID
     item["status"] = "alert"
     item["last_checked_at"] = now
+    item["last_check_at"] = now
+    # not a Step Functions arn on purpose: check-status then answers from the item and the case
+    # (this case was sealed by the seed, not by an execution), so the case page asks once and
+    # gets its verification chain instead of a 404.
+    item["last_check_arn"] = f"seeded:{CASE_ID}"
     dynamo.put("items", item)
     return data
 
