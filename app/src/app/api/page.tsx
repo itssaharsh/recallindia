@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 
-import { ApiStub } from "./stub";
+import { ApiView } from "./api-view";
 
 export const metadata: Metadata = { title: "API" };
 
 export default function ApiPage() {
-  return <ApiStub />;
+  return <ApiView />;
 }
