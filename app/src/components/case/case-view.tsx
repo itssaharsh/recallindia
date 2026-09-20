@@ -2,48 +2,36 @@
 
 import { ArrowLeft, ArrowUpRight, CloudOff, Scale, SearchX } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { EmptyState } from "@/components/common/empty-state";
 import { RangeBar } from "@/components/common/range-bar";
 import { SourceChip } from "@/components/common/source-chip";
 import { SourceExcerpt } from "@/components/common/source-excerpt";
-import { StatusTag, type Tone } from "@/components/common/status-tag";
 import { useAppState } from "@/components/shell/app-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ApiError, apiGet, apiHost, apiPost } from "@/lib/api";
+import { ApiError, DEMO_HOUSEHOLD, apiGet, apiPost } from "@/lib/api";
 import {
-  approvalStepsFromCase,
-  canReplay,
+  CASE_CHIP,
+  IN_FLIGHT,
   citation,
   datesLine,
-  mergeSteps,
   outcomeLine,
-  replayCase,
-  replayTimings,
-  sealed,
+  outcomeSubLine,
+  pipelineState,
   snapshotNoun,
-  withCurrent,
 } from "@/lib/case";
 import { fmtDay, riskSentence, sourceLabel } from "@/lib/format";
-import type { Approval, Case, CheckStatus, ClaimLink, Item, Notice } from "@/lib/types";
+import type { Case, CheckStatus, Item, Notice } from "@/lib/types";
 import { usePoll } from "@/lib/use-poll";
 
-import { ApprovalPanel } from "./approval-panel";
+import { ApprovalGate } from "./approval-gate";
+import { ClaimLetterPreview } from "./claim-letter-preview";
 import { CertificatePlaceholder, EvidenceCertificate } from "./evidence-certificate";
+import { PipelineSteps } from "./pipeline-steps";
 import { ShowWork } from "./show-work";
 
 const enc = encodeURIComponent;
-const TERMINAL = new Set(["SUCCEEDED", "FAILED", "TIMED_OUT", "ABORTED"]);
-const SEAL_LIMIT_MS = 120_000; // Claim + Evidence take ~5 s warm, ~15 s cold
-const OPENING_MS = 120_000; // an alert case this young may still be starting WaitForApproval
-
-const TAG: Record<Case["decision"], { tone: Tone; label: string }> = {
-  alert: { tone: "alert", label: "Alert" },
-  hold: { tone: "hold", label: "Hold" },
-  dismiss: { tone: "dismissed", label: "Dismissed" },
-};
-
 const sentence = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 /** A static export has no /case/[id] pages to pre-render, so the id comes from ?id= or, behind
@@ -55,9 +43,24 @@ function caseIdFromLocation(): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
-/** The check-status answer is about this case only if it is the same execution. */
-const sameRun = (status: CheckStatus | null, c: Case | null) =>
-  Boolean(status && c && (c.execution_arn ? status.execution_arn === c.execution_arn : status.case_id === c.case_id));
+const TONE: Record<"hold" | "clear" | "muted", string> = {
+  hold: "text-hold",
+  clear: "text-clear",
+  muted: "text-muted",
+};
+
+function StatusChip({ c }: { c: Case }) {
+  const chip = CASE_CHIP[c.status ?? "matching"];
+  if (!chip) return null;
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 font-mono text-[11px] font-medium tracking-[0.08em] uppercase ${TONE[chip.tone]}`}
+    >
+      {c.status === "waiting_approval" && <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-hold" />}
+      {chip.label}
+    </span>
+  );
+}
 
 function Field({ label, children, mono }: { label: string; children: React.ReactNode; mono?: boolean }) {
   return (
@@ -69,33 +72,23 @@ function Field({ label, children, mono }: { label: string; children: React.React
 }
 
 /**
- * /case/?id=<case> (and /case/<case>): one finding, start to finish. The answer in display type;
- * the notice's own words with the matched sentence and the range bar; the human gate (Approve /
- * Reject) that releases the paused Step Functions execution; the claim letter; the signed
- * evidence certificate with its tamper test; and, behind "Show work", the chain and the audit.
+ * S4 `/case/?id=<case>`: one match, start to finish. The outcome in display type (C-15), the
+ * regulator's own row with our highlight (C-13), where your unit falls (C-12), the human gate
+ * (C-16), the pipeline as the server records it (C-17), the letter (C-18), the signed evidence
+ * with its tamper test (C-19), and the audit behind "Show work" (C-20).
  */
 export function CaseView() {
-  const { demo, ready, href } = useAppState();
+  const { demo, ready, href, household, makeCopy } = useAppState();
   const [id, setId] = useState<string | null | undefined>(undefined);
   const [kase, setCase] = useState<Case | null>(null);
-  // demo data: the recorded, sealed case, replayed from the moment it waited (stage 0..3)
-  const [recorded, setRecorded] = useState<Case | null>(null);
-  const [stage, setStage] = useState(0);
   const [item, setItem] = useState<Item | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [status, setStatus] = useState<CheckStatus | null>(null);
   const [loadError, setLoadError] = useState<Error | null>(null);
-  const [loadedAt, setLoadedAt] = useState(0);
-  const [busy, setBusy] = useState<"approve" | "reject" | "claim" | null>(null);
+  const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
   const [answerError, setAnswerError] = useState<string | null>(null);
-  const [claimError, setClaimError] = useState<string | null>(null);
-  const [sealingSince, setSealingSince] = useState<number | null>(null);
-  const [openingDone, setOpeningDone] = useState(false);
-  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const resumed = useRef(false);
 
   useEffect(() => setId(caseIdFromLocation()), []);
-  useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   useEffect(() => {
     if (!ready || !id) return;
@@ -104,9 +97,7 @@ export function CaseView() {
     (async () => {
       try {
         const c = await apiGet<Case>(`/cases/${enc(id)}`, demo, signal);
-        setRecorded(demo && canReplay(c) ? c : null);
         setCase(c);
-        setLoadedAt(Date.now());
         const [it, n, st] = await Promise.all([
           apiGet<Item>(`/items/${enc(c.item_id)}`, demo, signal).catch(() => null),
           c.notice_id ? apiGet<Notice>(`/v1/notices/${enc(c.notice_id)}`, demo, signal).catch(() => null) : null,
@@ -121,211 +112,119 @@ export function CaseView() {
       }
     })();
     return () => controller.abort();
-  }, [ready, id, demo]);
+  }, [ready, id, demo, household]);
 
-  const shown = useMemo(() => (recorded ? replayCase(recorded, stage) : kase), [recorded, stage, kase]);
-  const run = sameRun(status, shown);
-
-  const steps = useMemo(() => {
-    if (!shown) return [];
-    const fromCase = approvalStepsFromCase(shown);
-    if (recorded) return withCurrent(fromCase);
-    const merged = mergeSteps(fromCase, run ? status?.approval_steps : null);
-    return sealingSince !== null ? withCurrent(merged) : merged;
-  }, [shown, recorded, run, status, sealingSince]);
-
-  // opened mid-way (a reload while the letter is drafted): pick the progress up again
-  useEffect(() => {
-    if (resumed.current || recorded || !kase) return;
-    resumed.current = true;
-    if (kase.approval?.status === "approved" && !sealed(approvalStepsFromCase(kase))) setSealingSince(Date.now());
-  }, [kase, recorded]);
-
-  // after Approve: the real step states from check-status every 1.5 s, and the case as it fills
-  usePoll(
-    async (signal) => {
-      if (!kase) return;
-      const [st, fresh] = await Promise.all([
-        apiGet<CheckStatus>(`/items/${enc(kase.item_id)}/check-status`, demo, signal).catch(() => null),
-        apiGet<Case>(`/cases/${enc(kase.case_id)}`, demo, signal),
-      ]);
-      if (signal.aborted) return;
-      if (st) setStatus(st);
-      setCase(fresh);
-      const mine = sameRun(st, fresh);
-      const over = sealed(mergeSteps(approvalStepsFromCase(fresh), mine ? st?.approval_steps : null));
-      if (over || (mine && TERMINAL.has(String(st?.status)))) {
-        setSealingSince(null);
-      } else if (Date.now() - (sealingSince ?? Date.now()) > SEAL_LIMIT_MS) {
-        setSealingSince(null);
-        setAnswerError("The letter and the evidence are taking longer than usual. Reload the page in a minute to see them.");
-      }
-    },
-    1_500,
-    sealingSince !== null && !recorded,
-  );
-
-  // an alert case a moment old: its WaitForApproval task is still storing the token
-  const opening =
-    !demo &&
-    !openingDone &&
-    kase?.decision === "alert" &&
-    !kase.approval &&
-    Boolean(kase.created_at) &&
-    loadedAt - Date.parse(kase.created_at ?? "") < OPENING_MS;
+  // while the pipeline runs, the case itself is the truth: poll it once a second (UI-SPEC S4)
+  const running = Boolean(kase?.status && IN_FLIGHT.has(kase.status));
   usePoll(
     async (signal) => {
       if (!kase) return;
       const fresh = await apiGet<Case>(`/cases/${enc(kase.case_id)}`, demo, signal);
-      if (signal.aborted) return;
-      setCase(fresh);
-      if (fresh.approval || Date.now() - loadedAt > OPENING_MS) setOpeningDone(true);
+      if (!signal.aborted) setCase(fresh);
     },
-    1_500,
-    opening,
+    1_000,
+    running,
   );
 
   useEffect(() => {
     if (item?.name) document.title = `${item.name} · Case · RecallIndia`;
   }, [item?.name]);
 
-  const refresh = useCallback(async () => {
-    if (!kase) return;
-    try {
-      setCase(await apiGet<Case>(`/cases/${enc(kase.case_id)}`, demo));
-    } catch {
-      // the error line already says what failed
-    }
-  }, [kase, demo]);
-
   const answer = useCallback(
     async (approve: boolean) => {
-      if (!shown) return;
+      if (!kase) return;
       setAnswerError(null);
-      if (recorded) {
-        if (!approve) return; // demo data is read-only: rejecting runs on the live API
-        const { claim, evidence } = replayTimings(recorded);
-        setStage(1);
-        timers.current.push(
-          setTimeout(() => setStage(2), claim),
-          setTimeout(() => setStage(3), evidence),
-        );
-        return;
-      }
       setBusy(approve ? "approve" : "reject");
       try {
-        const body = await apiPost<{ case_id: string; approval: Approval | null; warning?: string }>(
-          `/cases/${enc(shown.case_id)}/${approve ? "approve" : "reject"}`,
+        const body = await apiPost<{ case: Case | null }>(
+          `/cases/${enc(kase.case_id)}/${approve ? "approve" : "reject"}`,
           undefined,
           demo,
         );
-        setCase((prev) => (prev && body.approval ? { ...prev, approval: body.approval } : prev));
-        if (approve) setSealingSince(Date.now());
-        if (body.warning) setAnswerError(body.warning);
+        if (body.case) setCase(body.case);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        setAnswerError(`Could not ${approve ? "approve" : "reject"}: ${message}`);
-        if (err instanceof ApiError && err.status === 409) refresh(); // answered elsewhere: show what is true
+        // a 409 is not an error to the reader: somebody already answered, so show what is true
+        if (err instanceof ApiError && err.status === 409) {
+          try {
+            setCase(await apiGet<Case>(`/cases/${enc(kase.case_id)}`, demo));
+          } catch {
+            setAnswerError(`Couldn't reach the approval step (${message}). Try again.`);
+          }
+        } else {
+          setAnswerError(`Couldn't reach the approval step (${message}). Try again.`);
+        }
       } finally {
         setBusy(null);
       }
     },
-    [shown, recorded, demo, refresh],
+    [kase, demo],
   );
 
-  const openClaim = useCallback(async () => {
-    if (!shown) return;
-    setClaimError(null);
-    // open the tab inside the click (a tab opened after an await is a blocked pop-up), then
-    // point it at a fresh presigned link: the link lives 10 minutes, the page may live longer
-    const tab = window.open("", "_blank");
-    setBusy("claim");
-    try {
-      const link = await apiGet<ClaimLink>(`/cases/${enc(shown.case_id)}/claim`, demo);
-      const url = new URL(link.url, window.location.href).toString();
-      if (tab) {
-        tab.opener = null;
-        tab.location.replace(url);
-      } else {
-        window.location.assign(url);
-      }
-    } catch (err) {
-      tab?.close();
-      setClaimError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(null);
-    }
-  }, [shown, demo]);
+  const steps = useMemo(() => (kase ? pipelineState(kase) : []), [kase]);
 
-  if (id === undefined || (id && !shown && !loadError)) return <CaseSkeleton />;
+  if (id === undefined || (id && !kase && !loadError)) return <CaseSkeleton />;
 
   const back = (
     <Link
       href={href("/mine/")}
-      className="inline-flex h-8 items-center rounded-sm border border-line px-2.5 text-sm font-medium text-text hover:bg-surface-2"
+      className="inline-flex h-9 items-center rounded-md border border-line-strong bg-surface-1 px-3 text-sm font-medium text-text hover:bg-surface-2"
     >
       Back to my things
     </Link>
   );
   if (!id) {
-    return (
-      <EmptyState icon={Scale} what="No case chosen" why="A case opens from an item that is on a notice, on My things." action={back} />
-    );
+    return <EmptyState icon={Scale} what="No case chosen" why="A case opens from an item that is on a notice." action={back} />;
   }
-  if (loadError || !shown) {
+  if (loadError || !kase) {
     const missing = loadError instanceof ApiError && loadError.status === 404;
     return (
       <EmptyState
         icon={missing ? SearchX : CloudOff}
         tone={missing ? "neutral" : "error"}
-        what={missing ? `There is no case ${id}` : `Couldn't load case ${id}`}
+        what={missing ? "That case isn't in this household" : "Couldn't load this case"}
         why={
           missing
-            ? "The link is wrong, or the item was checked again and this case was replaced (a reset of the demo items makes new cases)."
-            : `${apiHost()} answered: ${loadError?.message ?? "no answer"}.`
+            ? "The link may belong to another household, or the item was checked again and this case was replaced."
+            : `The API didn't answer (${loadError?.message ?? "no answer"}). Your household is unchanged.`
         }
         action={back}
       />
     );
   }
 
-  const c = shown;
-  const tag = TAG[c.decision] ?? TAG.hold;
+  const c = kase;
   const dates = datesLine(item, notice);
   const excerpt = notice?.raw_excerpt || c.quoted_sentence || "";
   const unit = item?.batch ? "batch" : item?.serial ? "serial" : item?.kind === "vehicle" ? "model year" : "unit";
-  const itemLine = item
-    ? [
-        item.name,
-        item.kind !== "vehicle" ? item.brand : null,
-        item.batch && `batch ${item.batch}`,
-        item.serial && `serial ${item.serial}`,
-        item.kind === "vehicle" && item.year ? `model year ${item.year}` : null,
-        item.reg_no,
-      ]
-        .filter(Boolean)
-        .join(" · ")
-    : null;
-  const approval = c.approval?.status;
+  const subLine = outcomeSubLine(c, item, notice);
+  const isAlert = c.decision === "alert";
+  // the demo household's case is readable by anyone and answerable by nobody
+  const readOnly = demo || (c.household_id ?? DEMO_HOUSEHOLD) === DEMO_HOUSEHOLD;
 
   return (
     <article aria-labelledby="case-title" className="mx-auto max-w-6xl px-5 py-5 md:py-7">
       <nav aria-label="Case" className="mb-5 flex items-center justify-between gap-3">
         <Link href={href("/mine/")} className="inline-flex items-center gap-1 rounded-sm text-[13px] text-muted hover:text-text">
           <ArrowLeft aria-hidden className="size-3.5" /> My things
+          {item?.name ? <span className="text-muted"> / {item.name}</span> : null}
         </Link>
-        <span className="truncate font-mono text-[11px] text-muted">{c.case_id}</span>
+        <StatusChip c={c} />
       </nav>
 
       <header className="space-y-3 border-b border-line pb-6">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <StatusTag tone={tag.tone} label={tag.label} />
           {notice && <SourceChip notice={notice} />}
           {c.created_at && <span className="text-xs text-muted">case opened {fmtDay(c.created_at)}</span>}
+          <span className="font-mono text-[11px] text-muted">{c.case_id}</span>
         </div>
-        <h1 id="case-title" className="max-w-4xl font-display text-[32px] leading-[1.06] font-semibold text-balance text-text md:text-5xl">
+        <h1
+          id="case-title"
+          className="max-w-4xl font-display text-[32px] leading-[1.06] font-semibold text-balance text-text md:text-[40px]"
+        >
           {outcomeLine(c, item, notice)}
         </h1>
+        {subLine && <p className="max-w-2xl text-[15px] text-muted">{subLine}</p>}
         {dates && (
           <p className="font-mono text-[13px] text-text">
             {dates}
@@ -337,93 +236,110 @@ export function CaseView() {
             )}
           </p>
         )}
-        {itemLine && <p className="text-sm text-muted">{itemLine}</p>}
       </header>
 
-      <div className="grid gap-8 py-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:gap-10">
-        <section aria-labelledby="notice-heading" className="min-w-0 space-y-4">
-          <div className="space-y-1">
-            <h2 id="notice-heading" className="font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">
-              The notice
-            </h2>
-            {notice && <p className="font-display text-lg leading-snug font-semibold text-text">{sentence(citation(notice))}</p>}
-          </div>
-          {excerpt && (
-            <SourceExcerpt
-              excerpt={excerpt}
-              quote={c.quoted_sentence}
-              caption={
-                notice ? (
-                  <>
-                    {sourceLabel(notice.source)}&apos;s own words, published {fmtDay(notice.published_at)}
-                    {notice.url && (
-                      <>
-                        {" · "}
-                        <a
-                          href={notice.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-0.5 text-primary-strong hover:underline"
-                        >
-                          open at {sourceLabel(notice.source)} <ArrowUpRight aria-hidden className="size-3" />
-                        </a>
-                      </>
-                    )}
-                  </>
-                ) : (
-                  "The sentence the verifier matched"
-                )
-              }
-            />
-          )}
-          {notice && (
-            <dl>
-              {notice.source === "cdsco_nsq"
-                ? notice.hazard_or_failed_test && <Field label="Failed test">{notice.hazard_or_failed_test}</Field>
-                : riskSentence(notice) && <Field label="Risk">{riskSentence(notice)}</Field>}
-              {notice.lab && <Field label="Tested by">{notice.lab}</Field>}
-              <Field label="Remedy">
-                {notice.remedy || <span className="text-muted">Not stated by the source: the letter asks for a refund or replacement</span>}
-              </Field>
-              {(notice.mfg_date || notice.exp_date) && (
-                <Field label="Mfg · Exp" mono>
-                  {notice.mfg_date ?? "—"} · {notice.exp_date ?? "—"}
-                </Field>
+      <div className="grid gap-8 py-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:gap-10">
+        <div className="min-w-0 space-y-8">
+          <section aria-labelledby="notice-heading" className="min-w-0 space-y-4">
+            <div className="space-y-1">
+              <h2 id="notice-heading" className="font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">
+                The notice
+              </h2>
+              {notice && (
+                <p className="font-display text-lg leading-snug font-semibold text-text">{sentence(citation(notice))}</p>
               )}
-            </dl>
-          )}
-          {c.range_check && (
-            <div className="space-y-2">
-              <h3 className="font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">
-                Your {unit} against the list
-              </h3>
-              <RangeBar check={c.range_check} />
             </div>
-          )}
-        </section>
+            {excerpt && (
+              <SourceExcerpt
+                excerpt={excerpt}
+                quote={c.quoted_sentence}
+                caption={
+                  notice ? (
+                    <>
+                      {sourceLabel(notice.source)}&apos;s own words, published {fmtDay(notice.published_at)}
+                      {notice.url && (
+                        <>
+                          {" · "}
+                          <a
+                            href={notice.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-0.5 text-primary-strong hover:underline"
+                          >
+                            open the regulator&apos;s page <ArrowUpRight aria-hidden className="size-3" />
+                          </a>
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    "The sentence the verifier matched"
+                  )
+                }
+              />
+            )}
+            {notice && (
+              <dl>
+                {notice.source === "cdsco_nsq"
+                  ? notice.hazard_or_failed_test && <Field label="Failed test">{notice.hazard_or_failed_test}</Field>
+                  : riskSentence(notice) && <Field label="Hazard">{riskSentence(notice)}</Field>}
+                {notice.lab && <Field label="Tested by">{notice.lab}</Field>}
+                <Field label="Remedy">
+                  {notice.remedy || (
+                    <span className="text-muted">Not stated by the source: the letter asks for a refund or a replacement</span>
+                  )}
+                </Field>
+                {(notice.mfg_date || notice.exp_date) && (
+                  <Field label="Mfg · Exp" mono>
+                    {notice.mfg_date ?? "—"} · {notice.exp_date ?? "—"}
+                  </Field>
+                )}
+              </dl>
+            )}
+            {c.range_check && (
+              <div className="space-y-2">
+                <h3 className="font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">
+                  Your {unit} against the list
+                </h3>
+                <RangeBar check={c.range_check} />
+              </div>
+            )}
+          </section>
 
-        <section aria-labelledby="answer-heading" className="min-w-0 space-y-2">
-          <h2 id="answer-heading" className="font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">
-            {c.decision === "alert" ? "Your answer" : "Decision"}
-          </h2>
-          {c.decision === "alert" ? (
-            <ApprovalPanel
+          {isAlert && (
+            <ApprovalGate
               c={c}
               item={item}
               notice={notice}
-              steps={steps}
               busy={busy}
               error={answerError}
-              demo={demo}
-              replay={recorded !== null}
-              opening={opening}
+              demoReadOnly={readOnly}
               onApprove={() => answer(true)}
               onReject={() => answer(false)}
-              onOpenClaim={openClaim}
-              claimError={claimError}
+              onMakeCopy={() => makeCopy()}
             />
-          ) : (
-            <div className="space-y-2 rounded-md border border-line border-l-4 border-l-hold bg-surface-2 p-4 md:p-5">
+          )}
+
+          {isAlert && (c.claim_pdf_s3_key || c.status === "writing_letter") && (
+            <ClaimLetterPreview c={c} item={item} demo={demo} writing={!c.claim_pdf_s3_key} />
+          )}
+
+          {isAlert &&
+            (c.evidence ? (
+              <EvidenceCertificate caseId={c.case_id} evidence={c.evidence} demo={demo} />
+            ) : (
+              <CertificatePlaceholder
+                why={
+                  c.status === "sealing"
+                    ? `Sealing ${snapshotNoun(notice)} now: a write-once copy in S3, its SHA-256, and a KMS signature over it.`
+                    : c.status === "rejected" || c.status === "expired"
+                      ? `Nothing was sealed: this case was ${c.status}.`
+                      : `Sealed after you approve: a write-once copy of ${snapshotNoun(notice)}, its SHA-256, and a KMS signature over it.`
+                }
+              />
+            ))}
+
+          {!isAlert && (
+            <div className="space-y-2 rounded-md border border-line bg-surface-1 p-4 md:p-5">
               <p className="text-[14px] leading-relaxed text-text">
                 {c.decision === "dismiss" ? "Dismissed" : "On hold"}: {c.reason}.
               </p>
@@ -434,28 +350,38 @@ export function CaseView() {
               </p>
             </div>
           )}
-        </section>
+        </div>
+
+        {isAlert && (
+          <aside aria-labelledby="case-file" className="min-w-0 lg:sticky lg:top-6 lg:self-start">
+            <div className="space-y-4 rounded-md border border-line bg-surface-1 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <h2 id="case-file" className="font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">
+                  Case file
+                </h2>
+                <StatusChip c={c} />
+              </div>
+              <PipelineSteps steps={steps} />
+              <dl className="space-y-1.5 border-t border-line pt-3 text-[12px]">
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted">Item</dt>
+                  <dd className="min-w-0 truncate text-text">{item?.name ?? c.item_id}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted">Notice</dt>
+                  <dd className="min-w-0 truncate font-mono text-text">{notice?.notice_id ?? c.notice_id}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted">Source</dt>
+                  <dd className="text-text">{notice ? sourceLabel(notice.source) : "—"}</dd>
+                </div>
+              </dl>
+            </div>
+          </aside>
+        )}
       </div>
 
-      {c.decision === "alert" && (
-        <div className="pb-6">
-          {c.evidence ? (
-            <EvidenceCertificate caseId={c.case_id} evidence={c.evidence} demo={demo} />
-          ) : (
-            <CertificatePlaceholder
-              why={
-                approval === "approved"
-                  ? `Sealing ${snapshotNoun(notice)} now: a write-once copy in S3, its SHA-256, and a KMS signature over it.`
-                  : approval === "rejected" || approval === "expired"
-                    ? `Nothing was sealed: this case was ${approval}.`
-                    : `Sealed after you approve: a write-once copy of ${snapshotNoun(notice)}, its SHA-256, and a KMS signature over it.`
-              }
-            />
-          )}
-        </div>
-      )}
-
-      <ShowWork c={c} item={item} notice={notice} steps={run ? (status?.steps ?? null) : null} />
+      <ShowWork c={c} item={item} notice={notice} steps={status?.steps ?? null} />
     </article>
   );
 }
@@ -469,7 +395,7 @@ function CaseSkeleton() {
         <Skeleton className="h-10 w-3/4" />
         <Skeleton className="h-3 w-1/2" />
       </div>
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
         <Skeleton className="h-48" />
         <Skeleton className="h-48" />
       </div>

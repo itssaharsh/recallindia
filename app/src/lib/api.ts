@@ -4,6 +4,36 @@
 
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/+$/, "");
 
+// No accounts: one header scopes the wall, its cases and every approval. A missing header is
+// the read-only demo household, which is what a first visit (and every demo-mode read) sees.
+export const HOUSEHOLD_KEY = "ri.household";
+export const DEMO_HOUSEHOLD = "demo";
+
+export function householdId(): string {
+  try {
+    return localStorage.getItem(HOUSEHOLD_KEY) || DEMO_HOUSEHOLD;
+  } catch {
+    return DEMO_HOUSEHOLD; // storage blocked: the demo wall still reads
+  }
+}
+
+export function setHouseholdId(id: string | null): void {
+  try {
+    if (id && id !== DEMO_HOUSEHOLD) localStorage.setItem(HOUSEHOLD_KEY, id);
+    else localStorage.removeItem(HOUSEHOLD_KEY);
+  } catch {
+    // a browser that refuses storage keeps the demo household for this tab
+  }
+}
+
+/** The header goes on household routes only, never on the public /v1 polls. */
+const HOUSEHOLD_ROUTE = /^\/(items|cases|households|scan)(\/|$|\?)/;
+
+function householdHeaders(path: string): Record<string, string> {
+  const id = householdId();
+  return HOUSEHOLD_ROUTE.test(path) && id !== DEMO_HOUSEHOLD ? { "x-household": id } : {};
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -53,18 +83,30 @@ export async function apiGet<T>(path: string, demo: boolean, signal?: AbortSigna
     return (await readJson(resp)) as T;
   }
   if (!API_URL) throw new ApiError(0, "NEXT_PUBLIC_API_URL is not set for this build");
-  const resp = await fetch(`${API_URL}${path}`, { signal, cache: "no-store" });
+  const resp = await fetch(`${API_URL}${path}`, {
+    signal,
+    cache: "no-store",
+    headers: householdHeaders(path),
+  });
   const body = (await readJson(resp)) as { error?: string };
   if (!resp.ok) throw new ApiError(resp.status, body?.error ?? `HTTP ${resp.status}`);
   return body as T;
 }
 
 export async function apiPost<T>(path: string, body: unknown, demo: boolean): Promise<T> {
+  return apiWrite<T>("POST", path, body, demo);
+}
+
+export async function apiPatch<T>(path: string, body: unknown, demo: boolean): Promise<T> {
+  return apiWrite<T>("PATCH", path, body, demo);
+}
+
+async function apiWrite<T>(method: "POST" | "PATCH", path: string, body: unknown, demo: boolean): Promise<T> {
   if (demo) throw new ApiError(403, "Demo data is read-only: adding and checking run on the live API.");
   if (!API_URL) throw new ApiError(0, "NEXT_PUBLIC_API_URL is not set for this build");
   const resp = await fetch(`${API_URL}${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
+    method,
+    headers: { "content-type": "application/json", ...householdHeaders(path) },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const parsed = (await readJson(resp)) as { error?: string };

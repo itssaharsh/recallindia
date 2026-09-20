@@ -4,7 +4,7 @@
 
 import { fmtDay, sourceLabel } from "./format";
 import { monthLabel } from "./ingest";
-import type { ApprovalStep, ApprovalStepName, AuditEvent, Case, Item, Notice } from "./types";
+import type { Case, CaseStatus, Item, Notice, PipelineStepName, StepRecord } from "./types";
 
 /** Whole days from `a` to `b` (calendar dates, ISO strings). */
 export function daysBetween(a?: string | null, b?: string | null): number | null {
@@ -24,24 +24,25 @@ export function alertMonth(notice: Notice): string {
   return Number.isFinite(at) ? MONTH_YEAR.format(at) : label;
 }
 
-const unitOf = (item: Item | null) =>
-  item?.batch ? `batch ${item.batch}` : item?.serial ? `serial ${item.serial}` : null;
-
-/** The one-line answer at the top of the case, in display type. */
+/** The one-line answer at the top of the case, in display type (UI-SPEC C-15). */
 export function outcomeLine(c: Case, item: Item | null, notice: Notice | null): string {
   if (c.decision === "alert") {
     const days = daysBetween(notice?.published_at, item?.purchase_date);
-    if (c.sold_after_notice && days !== null && days >= 0) {
-      return `You were sold this ${days} day${days === 1 ? "" : "s"} after the notice`;
+    if (item?.kind === "vehicle" && notice) {
+      const what = [item.year, item.make || item.brand, item.model || item.name]
+        .filter(Boolean)
+        .map(String)
+        .join(" ");
+      return `Your ${what || item.name} matches ${sourceLabel(notice.source)} recall ${notice.notice_id} by make, model and year.`;
+    }
+    if (c.sold_after_notice && days !== null && days >= 0 && notice?.source === "cdsco_nsq") {
+      return `You were sold this strip ${days} day${days === 1 ? "" : "s"} after CDSCO flagged it.`;
     }
     if (notice?.source === "cdsco_nsq") {
-      return `Your ${unitOf(item) ?? item?.name ?? "medicine"} is listed on CDSCO's ${alertMonth(notice)} alert`;
+      return `Your strip's batch is on CDSCO's ${alertMonth(notice)} list of drug samples that failed quality tests.`;
     }
-    if (notice) {
-      const what = item?.kind === "vehicle" && item.year ? `${item.year} ${item.name}` : (item?.name ?? "product");
-      return `Your ${what} is on ${sourceLabel(notice.source)} recall ${notice.notice_id}`;
-    }
-    return "Your item is on a notice";
+    if (notice) return `Your ${item?.name ?? "thing"} is on ${sourceLabel(notice.source)} recall ${notice.notice_id}.`;
+    return "Your thing is on a notice";
   }
   if (c.decision === "dismiss") {
     const yours = c.range_check?.yours;
@@ -49,6 +50,12 @@ export function outcomeLine(c: Case, item: Item | null, notice: Notice | null): 
     return yours ? `Your ${unit} ${yours} is not the one listed` : "The notice is about another unit";
   }
   return "This needs one more detail from you";
+}
+
+/** The line under a vehicle outcome: a US campaign matched on make, model and year. */
+export function outcomeSubLine(c: Case, item: Item | null, notice: Notice | null): string | null {
+  if (c.decision !== "alert" || item?.kind !== "vehicle" || notice?.source !== "nhtsa") return null;
+  return "NHTSA covers US vehicles. Confirm with your dealer using the VIN.";
 }
 
 /** "Purchased 12 Jul 2026 · CDSCO alert 01 Jul 2026" (+ "sold after notice", set in bold). */
@@ -102,124 +109,55 @@ export function fmtUtc(iso?: string | null): string {
 export const fmtBytes = (n?: number | null) =>
   typeof n !== "number" ? "" : n < 1024 ? `${n} B` : `${(n / 1024).toFixed(n < 10_240 ? 1 : 0)} KB`;
 
-export const APPROVAL_STEP_NAMES: ApprovalStepName[] = ["WaitForApproval", "Claim", "Evidence"];
+export const PIPELINE: { name: PipelineStepName; label: string }[] = [
+  { name: "approve", label: "Approve" },
+  { name: "seal_evidence", label: "Seal evidence" },
+  { name: "write_letter", label: "Write letter" },
+  { name: "verify", label: "Verify signature" },
+];
 
-/** WaitForApproval / Claim / Evidence from the case alone (mirrors ui_api.approval_steps_from_case,
- *  used when the item's last check is not this case's execution). */
-export function approvalStepsFromCase(c: Case): ApprovalStep[] {
-  const steps: Record<ApprovalStepName, ApprovalStep> = {
-    WaitForApproval: { name: "WaitForApproval", state: "pending" },
-    Claim: { name: "Claim", state: "pending" },
-    Evidence: { name: "Evidence", state: "pending" },
-  };
-  const approval = c.approval;
-  if (approval?.status === "waiting") {
-    steps.WaitForApproval = { name: "WaitForApproval", state: "running", started_at: approval.token_issued_at };
-  } else if (approval && approval.status !== "approved") {
-    const ended = approval.status === "rejected" ? approval.rejected_at : approval.expired_at;
-    steps.WaitForApproval = { name: "WaitForApproval", state: "failed", ended_at: ended, summary: { error: approval.status } };
-    steps.Claim.state = "skipped";
-    steps.Evidence.state = "skipped";
-  } else if (approval?.status === "approved") {
-    steps.WaitForApproval = { name: "WaitForApproval", state: "done", ended_at: approval.approved_at };
-    const failed = (event: string) => c.audit?.find((a) => a.event === event);
-    for (const [name, done, event] of [
-      ["Claim", Boolean(c.claim_pdf_s3_key), "claim.failed"],
-      ["Evidence", Boolean(c.evidence), "evidence.failed"],
-    ] as const) {
-      const failure = failed(event);
-      steps[name] = done
-        ? { name, state: "done" }
-        : failure
-          ? { name, state: "failed", summary: { error: failure.detail?.error } }
-          : { name, state: "pending" };
-    }
-  }
-  return APPROVAL_STEP_NAMES.map((n) => steps[n]);
+export type StepState = "pending" | "running" | "done" | "failed";
+
+export interface PipelineStep {
+  name: PipelineStepName;
+  label: string;
+  state: StepState;
+  seconds: number | null;
 }
 
-/** The approval steps are over: the letter and the evidence are made (or failed). */
-export const sealed = (steps: ApprovalStep[]) =>
-  steps.every((s) => s.name === "WaitForApproval" || ["done", "failed", "skipped"].includes(s.state));
+/** The statuses that move on their own: the case page polls once a second while in one. */
+export const IN_FLIGHT = new Set<CaseStatus>(["approving", "sealing", "writing_letter", "verifying"]);
 
-const RANK: Record<string, number> = { pending: 0, running: 1, done: 2, failed: 2, skipped: 2 };
+const stepSeconds = (step: StepRecord): number | null => {
+  const from = Date.parse(step.started_at ?? "");
+  const to = Date.parse(step.finished_at ?? "");
+  return Number.isFinite(from) && Number.isFinite(to) ? Math.max(0, (to - from) / 1000) : null;
+};
 
-/** Step Functions history and the case, merged: each step as far along as either has seen it
- *  (the history knows a step started; the case knows its result the moment it is written). */
-export function mergeSteps(fromCase: ApprovalStep[], fromHistory?: ApprovalStep[] | null): ApprovalStep[] {
-  if (!fromHistory?.length) return fromCase;
-  return fromCase.map((mine) => {
-    const theirs = fromHistory.find((s) => s.name === mine.name);
-    if (!theirs) return mine;
-    return RANK[theirs.state] >= RANK[mine.state] ? { ...mine, ...theirs, summary: { ...mine.summary, ...theirs.summary } } : mine;
+/** C-17: the four steps exactly as the server recorded them (never a timer). */
+export function pipelineState(c: Case): PipelineStep[] {
+  return PIPELINE.map(({ name, label }) => {
+    const step: StepRecord = c.steps?.[name] ?? {};
+    const state: StepState = step.error
+      ? "failed"
+      : step.finished_at
+        ? "done"
+        : step.started_at
+          ? "running"
+          : "pending";
+    return { name, label, state, seconds: stepSeconds(step) };
   });
 }
 
-/** After an approval, the first step still to do is the one running (Claim starts the moment
- *  the task token is answered, Evidence the moment Claim ends). */
-export function withCurrent(steps: ApprovalStep[]): ApprovalStep[] {
-  if (steps[0]?.state !== "done" || steps.some((s) => s.state === "running")) return steps;
-  const next = steps.findIndex((s) => s.state === "pending");
-  return next < 0 ? steps : steps.map((s, i) => (i === next ? { ...s, state: "running" } : s));
-}
-
-// --- demo replay --------------------------------------------------------------------------
-// Demo data is a recording of a live case after it was approved, signed and sealed. The page
-// plays it back from the moment it waited for the human: Approve replays Claim -> Evidence with
-// the recorded gaps, then shows the recorded case, its claim link and its verify answers.
-
-const AFTER_APPROVAL = /^(approval\.(approved|rejected|expired|send_failed)|claim\.|evidence\.)/;
-
-/** The recorded case as it stood while it waited: no answer, no letter, no evidence. */
-export function asWaiting(c: Case): Case {
-  return {
-    ...c,
-    approval: { status: "waiting", token_issued_at: c.approval?.token_issued_at ?? c.created_at ?? "" },
-    claim_pdf_s3_key: null,
-    claim_text: null,
-    claim_addressee: null,
-    claim_created_at: null,
-    evidence: null,
-    audit: (c.audit ?? []).filter((a) => !AFTER_APPROVAL.test(a.event)),
-  };
-}
-
-export const canReplay = (c: Case) => c.approval?.status === "approved" && Boolean(c.evidence) && Boolean(c.claim_pdf_s3_key);
-
-/** The recording at a replay stage: 0 waiting · 1 approved (Claim running) · 2 letter drafted
- *  (Evidence running) · 3 sealed (the recorded case itself). */
-export function replayCase(c: Case, stage: number): Case {
-  if (stage >= 3) return c;
-  const waiting = asWaiting(c);
-  if (stage <= 0) return waiting;
-  const shown = (a: AuditEvent) =>
-    !a.event.startsWith("evidence.") && (stage >= 2 || !a.event.startsWith("claim.")) && !a.event.startsWith("approval.send_failed");
-  return {
-    ...waiting,
-    approval: c.approval,
-    ...(stage >= 2
-      ? {
-          claim_pdf_s3_key: c.claim_pdf_s3_key,
-          claim_text: c.claim_text,
-          claim_addressee: c.claim_addressee,
-          claim_created_at: c.claim_created_at,
-        }
-      : {}),
-    audit: (c.audit ?? []).filter(shown),
-  };
-}
-
-const at = (audit: AuditEvent[] | undefined, event: string) => {
-  const hit = audit?.find((a) => a.event === event);
-  return hit ? Date.parse(hit.ts) : NaN;
+/** The chip at the top of the case and on its card (the status table in UI-SPEC §5). */
+export const CASE_CHIP: Partial<Record<CaseStatus, { label: string; tone: "hold" | "clear" | "muted" }>> = {
+  waiting_approval: { label: "Waiting for you", tone: "hold" },
+  approving: { label: "Approving", tone: "hold" },
+  sealing: { label: "Sealing evidence", tone: "hold" },
+  writing_letter: { label: "Writing letter", tone: "hold" },
+  verifying: { label: "Verifying", tone: "hold" },
+  verified: { label: "Verified", tone: "clear" },
+  rejected: { label: "Rejected", tone: "muted" },
+  expired: { label: "Expired", tone: "muted" },
+  error: { label: "Error", tone: "hold" },
 };
-
-/** Milliseconds after Approve at which the recorded Claim and Evidence finished (each step on
- *  screen for at least `floor` ms, so a one-second recording still reads as two steps). */
-export function replayTimings(c: Case, floor = 900): { claim: number; evidence: number } {
-  const approved = Date.parse(c.approval?.approved_at ?? "") || at(c.audit, "approval.approved");
-  const claim = at(c.audit, "claim.drafted") - approved;
-  const evidence = at(c.audit, "evidence.signed") - approved;
-  const claimMs = Math.max(floor, Number.isFinite(claim) ? claim : 0);
-  return { claim: claimMs, evidence: Math.max(claimMs + floor, Number.isFinite(evidence) ? evidence : 0) };
-}

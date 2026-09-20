@@ -81,6 +81,34 @@ export interface RangeCheck {
 
 export type ApprovalStatus = "waiting" | "approved" | "rejected" | "expired";
 
+/** The case's own state machine (UI-SPEC §7). "invalid" is never stored: a tamper test is a
+ *  client-side question about a stored signature. */
+export type CaseStatus =
+  | "matching"
+  | "waiting_approval"
+  | "approving"
+  | "sealing"
+  | "writing_letter"
+  | "verifying"
+  | "verified"
+  | "rejected"
+  | "expired"
+  | "error"
+  | "needs_you"
+  | "near_miss"
+  | "clear";
+
+/** The four steps after the human gate, as the server records them. */
+export type PipelineStepName = "approve" | "seal_evidence" | "write_letter" | "verify";
+
+export interface StepRecord {
+  started_at?: string | null;
+  finished_at?: string | null;
+  error?: string | null;
+}
+
+export type CaseSteps = Record<PipelineStepName, StepRecord>;
+
 /** The human gate (the task token itself never leaves the API). */
 export interface Approval {
   status: ApprovalStatus;
@@ -95,6 +123,7 @@ export interface Approval {
 export interface Evidence {
   sha256: string;
   kms_key_id: string;
+  key_alias?: string | null;
   signature_b64: string;
   signing_algorithm?: string;
   object_lock_mode?: string;
@@ -117,6 +146,9 @@ export interface AuditEvent {
 export interface Case {
   case_id: string;
   item_id: string;
+  household_id?: string;
+  status?: CaseStatus;
+  steps?: CaseSteps;
   notice_id: string;
   decision: Decision;
   reason: string;
@@ -142,12 +174,19 @@ export interface Case {
 export interface VerifyResult {
   case_id: string;
   valid: boolean;
+  /** the hash the signature covers (what was sealed) */
   sha256: string;
-  recorded_sha256: string;
+  /** the hash of the copy just read back */
+  recomputed_sha256: string;
+  flipped_byte_index: number | null;
+  byte_before: number | null;
+  byte_after: number | null;
   signed_at: string | null;
   key_id: string;
+  key_alias?: string | null;
   algorithm?: string | null;
   retain_until?: string | null;
+  snapshot_s3_key?: string | null;
   tampered: boolean;
   demo_control: string | null;
   checked_at: string;
@@ -157,14 +196,25 @@ export interface VerifyResult {
 export interface ClaimLink {
   case_id: string;
   key: string;
-  url: string;
+  /** open in a tab */
+  view: string;
+  /** the same object with Content-Disposition: attachment */
+  download: string;
+  /** kept so a recorded fixture with one link still opens */
+  url?: string;
   expires_in: number;
   created_at?: string | null;
+  addressee?: string | null;
+  /** the letter's first two paragraphs, for the preview (C-18) */
+  paragraphs?: string[];
 }
 
 export interface Item {
   pk: string;
   item_id: string;
+  household_id?: string;
+  copied_from?: string | null;
+  bought_from?: string | null;
   kind: ItemKind;
   name: string;
   brand?: string | null;

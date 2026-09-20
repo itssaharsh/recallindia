@@ -9,8 +9,8 @@ import { SNAPSHOT_KIND, fmtBytes, fmtUtc } from "@/lib/case";
 import { CROSSFADE, STAMP } from "@/lib/motion";
 import type { Evidence, VerifyResult } from "@/lib/types";
 
-const CAPTION = "Snapshot is write-once for 30 days (S3 Object Lock) and signed with an AWS KMS asymmetric key.";
-const short = (sha?: string | null) => (sha ? `${sha.slice(0, 12)}…` : "—");
+const CAPTION =
+  "The snapshot is locked for 30 days (S3 Object Lock) and its SHA-256 is signed with an AWS KMS key. Change one byte and the signature no longer matches.";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -92,7 +92,7 @@ export function EvidenceCertificate({ caseId, evidence, demo }: { caseId: string
         <div className="grid gap-5 p-4 md:grid-cols-[minmax(0,1fr)_15rem]">
           <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-[12px] leading-snug sm:grid-cols-[8rem_minmax(0,1fr)]">
             <Row label="SHA-256">{evidence.sha256}</Row>
-            <Row label="KMS key">{evidence.kms_key_id}</Row>
+            <Row label="Signed with">{evidence.key_alias || evidence.kms_key_id}</Row>
             <Row label="Algorithm">{evidence.signing_algorithm ?? "RSASSA_PKCS1_V1_5_SHA_256"}</Row>
             <Row label="Retain until">
               {fmtUtc(evidence.object_lock_retain_until)} · Object Lock {evidence.object_lock_mode ?? "GOVERNANCE"}
@@ -111,12 +111,12 @@ export function EvidenceCertificate({ caseId, evidence, demo }: { caseId: string
             <Stamp result={error ? null : result} busy={busy} />
             <p className="min-h-10 text-center text-[11px] leading-snug text-muted">
               {error
-                ? `Could not verify: ${error}`
+                ? `Couldn't reach KMS to verify (${error}). Try again.`
                 : !result
                   ? "Re-reading the locked snapshot and asking KMS Verify…"
                   : result.valid
-                    ? `KMS Verify: the snapshot hashes to the signed digest · ${fmtUtc(result.checked_at).slice(11)}${demo ? " (recorded)" : ""}`
-                    : `KMS Verify: the copy hashes to ${short(result.sha256)}, the signature covers ${short(result.recorded_sha256)}`}
+                    ? `KMS Verify: the snapshot still hashes to the signed digest · ${fmtUtc(result.checked_at).slice(11)}`
+                    : "KMS Verify: the signature does not match"}
             </p>
             <Button
               variant="outline"
@@ -126,14 +126,27 @@ export function EvidenceCertificate({ caseId, evidence, demo }: { caseId: string
               onClick={() => verify(!tampered)}
               title="Demo control: flips one byte of the downloaded copy in memory; nothing stored changes"
             >
-              {busy ? "Verifying…" : tampered ? "Verify the original" : "Tamper test"}
+              {busy ? "Verifying…" : tampered ? "Verify again" : "Run tamper test"}
             </Button>
           </div>
         </div>
-        {tampered && result?.demo_control && (
-          <p className="border-t border-line px-4 py-2 font-sans text-xs text-muted">
-            <span className="text-hold">Demo control</span>: {result.demo_control.replace(/^demo control:\s*/i, "")}.
-          </p>
+        {tampered && result && (
+          <div className="border-t border-line px-4 py-3 text-[12px]">
+            <p className="text-text">
+              Changed byte {result.flipped_byte_index}: 0x
+              {(result.byte_before ?? 0).toString(16).padStart(2, "0")} → 0x
+              {(result.byte_after ?? 0).toString(16).padStart(2, "0")}
+            </p>
+            <p className="mt-1 break-all text-text">
+              Recomputed: {result.recomputed_sha256} <span className="font-sans text-muted">does not match</span>
+            </p>
+            {result.demo_control && (
+              <p className="mt-1 font-sans text-muted">
+                <span className="text-hold">Demo control</span>: one byte of the downloaded copy was flipped in memory. The
+                stored snapshot is untouched.
+              </p>
+            )}
+          </div>
         )}
       </section>
       <figcaption className="mt-2 text-xs text-muted">{CAPTION}</figcaption>

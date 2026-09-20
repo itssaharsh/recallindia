@@ -3,6 +3,7 @@
 import { fmtCount, fmtTime } from "@/lib/format";
 
 import { useAppState } from "./app-state";
+import { HouseholdPill } from "./household-pill";
 
 /** The live counter: "N notices · S sources · last poll hh:mm:ss", tabular numerals throughout. */
 export function TopBar() {
@@ -37,11 +38,14 @@ export function TopBar() {
           <span className="inline-block h-6 w-72 bg-surface-2" aria-label="Loading counts" />
         )}
       </p>
-      {demo && (
-        <span className="ml-auto rounded-sm border border-line px-2 py-0.5 font-mono text-[11px] tracking-wider text-muted uppercase">
-          Demo data · read-only
-        </span>
-      )}
+      <div className="ml-auto flex items-center gap-2">
+        {demo && (
+          <span className="rounded-sm border border-line px-2 py-0.5 font-mono text-[11px] tracking-wider text-muted uppercase">
+            Demo data · read-only
+          </span>
+        )}
+        <HouseholdPill />
+      </div>
     </header>
   );
 }
