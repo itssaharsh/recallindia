@@ -154,7 +154,12 @@ def check_seeded(mock: bool, skip: set[str], timeout: int = 240) -> dict[str, in
 
         from api import match_api
 
-        machine = os.environ["MATCH_STATE_MACHINE_ARN"]
+        machine = os.environ.get("MATCH_STATE_MACHINE_ARN") or ""
+        if not machine:
+            raise SystemExit(
+                "seed_demo: MATCH_STATE_MACHINE_ARN is not set; the stack's MatchStateMachineArn "
+                "output is what configure_live reads"
+            )
         sfn = boto3.client("stepfunctions")
         for index, entry in enumerate(entries):
             item_id = entry["item_id"]

@@ -13,6 +13,8 @@ OUTPUT_ENV = {
     "EvidenceBucketName": "EVIDENCE_BUCKET",
     "ClaimsBucketName": "CLAIMS_BUCKET",
     "SigningKeyId": "KMS_KEY_ID",
+    # a script that runs the matcher itself (seed_demo --reset) starts executions on it
+    "MatchStateMachineArn": "MATCH_STATE_MACHINE_ARN",
 }
 
 
