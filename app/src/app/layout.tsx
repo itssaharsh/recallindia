@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image" },
 };
 
-export const viewport: Viewport = { themeColor: "#ECEEEA", colorScheme: "light" };
+export const viewport: Viewport = { themeColor: "#F4F7FC", colorScheme: "light" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   // every page's first data waits on the API (client-side fetch): open that connection with the
