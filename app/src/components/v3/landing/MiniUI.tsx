@@ -377,7 +377,7 @@ export function SealSteps({
       </ol>
       <div className="col-span-2 flex items-center gap-2.5 border-t border-dashed border-line pt-3.5 font-sans text-[13.5px] font-medium leading-[1.3] text-ink-muted">
         <b className="font-display text-[20px] font-extrabold leading-none tracking-[-.02em] text-ink">{secs} s</b>
-        end to end in the demo case
+        end to end on a live approval
       </div>
     </div>
   )

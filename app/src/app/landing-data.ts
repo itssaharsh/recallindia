@@ -12,8 +12,13 @@
 import { landingDataFromStats, type LandingData, type StatsResponse } from "@/components/v3/landing";
 import type { Stats } from "@/lib/types";
 
-/** approve → verified on case_demo_ft5427. No response carries it (landing/README §Backend), so it is baked. */
-export const PIPELINE_SECONDS = 9;
+/**
+ * Approve → verified, measured on a live approval (11 s on 20 Sep 2026). No response carries it
+ * (landing/README §Backend), so it is baked. It is not read off case_demo_ft5427: that record's
+ * steps are stamped to the whole second by four Lambdas, so its stored span is 1 s, which measures
+ * the stamping, not the work.
+ */
+export const PIPELINE_SECONDS = 11;
 
 /**
  * GET /v1/stats, read 20 Sep 2026 15:08 IST, mapped through `landingDataFromStats`.
