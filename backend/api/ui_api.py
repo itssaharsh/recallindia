@@ -193,6 +193,19 @@ def items_ocr(_params: dict, event: dict) -> Result:
     lines = result.pop("all_lines")
     # the edge-band lines first: they carry the stamp (batch / Mfg / Exp) the UI shows as read
     lines = [ln for ln in lines if ln.get("edge")] + [ln for ln in lines if not ln.get("edge")]
+    batch = str((result.get("fields") or {}).get("batch") or "")
+    # Only the full-image pass has coordinates that belong to the photo: an edge-band line is
+    # measured inside its crop, so the UI would draw it in the wrong place.
+    boxes = [
+        {
+            "text": ln["text"],
+            "confidence": ln["confidence"],
+            "box": {k: ln[k] for k in ("left", "top", "width", "height")},
+            "is_batch": bool(batch) and batch.upper() in str(ln["text"]).upper(),
+        }
+        for ln in lines
+        if not ln.get("edge") and all(k in ln for k in ("left", "top", "width", "height"))
+    ]
     return 200, {
         "key": key,
         **result,
@@ -201,6 +214,9 @@ def items_ocr(_params: dict, event: dict) -> Result:
             {"text": ln["text"], "confidence": ln["confidence"], "edge": ln.get("edge")}
             for ln in lines
         ][:MAX_LINES_RETURNED],
+        # what the UI draws on the photo (T-06): every line Textract read, with the batch marked
+        "words": boxes[:MAX_LINES_RETURNED],
+        "batch_candidates": [w for w in boxes if w["is_batch"]][:3],
     }
 
 

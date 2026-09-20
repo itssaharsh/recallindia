@@ -1,7 +1,8 @@
 // Shapes of the HTTP API responses (backend/api). Kept loose where the API is loose: every
 // optional field is optional here too, so a fixture recorded from the live API always fits.
 
-export type SourceId = "cdsco_nsq" | "cpsc" | "nhtsa" | "openfda" | (string & {});
+export type SourceId =
+  "cdsco_nsq" | "cpsc" | "nhtsa" | "openfda" | (string & {});
 export type Health = "healthy" | "degraded" | "down";
 export type ItemStatus = "clear" | "hold" | "alert";
 export type Decision = "alert" | "hold" | "dismiss";
@@ -110,7 +111,8 @@ export type CaseStatus =
   | "clear";
 
 /** The four steps after the human gate, as the server records them. */
-export type PipelineStepName = "approve" | "seal_evidence" | "write_letter" | "verify";
+export type PipelineStepName =
+  "approve" | "seal_evidence" | "write_letter" | "verify";
 
 export interface StepRecord {
   started_at?: string | null;
@@ -248,7 +250,8 @@ export interface Item {
   case?: Case | null;
 }
 
-export type StepName = "Candidates" | "Verify" | "RangeCheck" | "Decide" | "Notify";
+export type StepName =
+  "Candidates" | "Verify" | "RangeCheck" | "Decide" | "Notify";
 export type ApprovalStepName = "WaitForApproval" | "Claim" | "Evidence";
 export type StepState = "pending" | "running" | "done" | "failed" | "skipped";
 
@@ -272,7 +275,14 @@ export interface CheckStatus {
   item_id: string;
   execution_arn: string;
   /** WAITING_FOR_APPROVAL: the check is over and an alert waits for the human */
-  status: "RUNNING" | "WAITING_FOR_APPROVAL" | "SUCCEEDED" | "FAILED" | "TIMED_OUT" | "ABORTED" | string;
+  status:
+    | "RUNNING"
+    | "WAITING_FOR_APPROVAL"
+    | "SUCCEEDED"
+    | "FAILED"
+    | "TIMED_OUT"
+    | "ABORTED"
+    | string;
   steps: CheckStep[];
   approval_steps?: ApprovalStep[];
   approval?: Approval | null;
@@ -298,6 +308,14 @@ export interface OcrFields {
   exp_date: string | null;
 }
 
+/** One line Textract read, with the geometry the UI draws on the photo (fractions of the image). */
+export interface OcrWord {
+  text: string;
+  confidence: number;
+  box: { left: number; top: number; width: number; height: number };
+  is_batch: boolean;
+}
+
 export interface OcrResult {
   key: string;
   fields: OcrFields;
@@ -307,6 +325,8 @@ export interface OcrResult {
   needs_confirm: boolean;
   passes: string[];
   lines: { text: string; confidence: number; edge?: string | null }[];
+  words?: OcrWord[];
+  batch_candidates?: OcrWord[];
 }
 
 export interface PasteRow {
