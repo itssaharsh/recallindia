@@ -518,6 +518,21 @@ def patch_item(params: dict, event: dict) -> Result:
     return 200, {"item": dynamo.get("items", Item.make_pk(item_id)), "check": checked}
 
 
+def delete_item(params: dict, event: dict) -> Result:
+    """``DELETE /items/{id}``: take a thing off the wall. Own household only (the demo wall
+    is read-only); a case the thing raised stays, because its sealed evidence is the record
+    of what was found, and the item id on it still says what it was about."""
+    item_id = _path_id(params)
+    item = dynamo.get("items", Item.make_pk(item_id)) if item_id else None
+    household = households.from_event(event)
+    if item is None or not households.owns(item, household):
+        return 404, {"error": "not found", "item_id": item_id}
+    if households.is_demo_household(household):
+        return 403, {"error": "demo_read_only", "item_id": item_id}
+    dynamo.delete("items", Item.make_pk(item_id))
+    return 200, {"deleted": item_id, "case_id": item.get("case_id")}
+
+
 # --- GET /cases/{id} ------------------------------------------------------------------
 
 

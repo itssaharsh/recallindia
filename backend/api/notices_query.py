@@ -25,7 +25,12 @@ DEFAULT_LIMIT = 50
 MAX_LIMIT = 100
 CURSOR_VERSION = 1
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_Q_FIELDS = ("title", "product", "brand")
+_Q_FIELDS = ("title", "product", "brand", "model", "notice_id")
+_Q_LIST_FIELDS = ("batches",)
+# ``q`` keeps reading until it has a page of matches: pages of Q_PAGE rows, MAX_Q_PAGES at most
+# (2,000 rows, about twenty index queries), whatever page size the client asked for
+Q_PAGE = 100
+MAX_Q_PAGES = 20
 
 
 class BadCursor(ValueError):
@@ -56,9 +61,15 @@ def sources_for(source: str | None) -> list[str]:
 
 
 def matches_q(item: dict, q: str) -> bool:
-    """Case-insensitive substring match over title / product / brand."""
+    """Case-insensitive substring match over title / product / brand / model / notice id and
+    every listed batch code, so "FT5427" finds the CDSCO row that lists it."""
     needle = q.lower()
-    return needle in " ".join(str(item.get(k) or "") for k in _Q_FIELDS).lower()
+    parts = [str(item.get(k) or "") for k in _Q_FIELDS]
+    for k in _Q_LIST_FIELDS:
+        value = item.get(k)
+        if isinstance(value, list):
+            parts.extend(str(v) for v in value)
+    return needle in " ".join(parts).lower()
 
 
 # --- cursor ---------------------------------------------------------------------

@@ -126,22 +126,36 @@ def _paged_notices(qs: dict[str, str], *, since: str | None) -> dict | tuple[lis
             cursor = notices_query.decode_cursor(cursor_text, sources=sources, since=since)
         except notices_query.BadCursor:
             return respond(400, {"error": "bad cursor"})
-    notices, next_cursor = notices_query.query_page(
-        sources, since=since, limit=limit, cursor=cursor
-    )
     q = (qs.get("q") or "").strip()
+    # a search reads index pages of Q_PAGE rows however small the page asked for, so a rare
+    # term is looked for across thousands of rows rather than the five the palette wants back
+    page = max(limit, notices_query.Q_PAGE) if q and cursor is None else limit
+    page_limit = int(cursor["limit"]) if cursor else page
+    notices, next_cursor = notices_query.query_page(sources, since=since, limit=page, cursor=cursor)
     if q:
+        # a filtered page is read on: up to MAX_Q_PAGES index pages, until `limit` matches are
+        # in hand or the listing ends, so a search answers instead of "none on this page"
         notices = [n for n in notices if notices_query.matches_q(n, q)]
-    return notices, next_cursor, int(cursor["limit"]) if cursor else limit
+        pages = 1
+        while len(notices) < limit and next_cursor and pages < notices_query.MAX_Q_PAGES:
+            cursor = notices_query.decode_cursor(next_cursor, sources=sources, since=since)
+            more, next_cursor = notices_query.query_page(
+                sources, since=since, limit=page, cursor=cursor
+            )
+            notices.extend(n for n in more if notices_query.matches_q(n, q))
+            pages += 1
+    return notices, next_cursor, page_limit
 
 
 def list_notices(_params: dict, event: dict) -> dict:
     """``GET /v1/notices?source=&since=&q=&limit=&cursor=`` -- never a table scan.
 
     Newest first, ``limit`` per page (default 50, max 100), ``next_cursor`` null on the last
-    page. ``q`` filters the page after pagination, so a filtered page may hold fewer than
-    ``limit`` rows while the cursor still advances by a full page. A cursor carries its own
-    page size; the response's ``limit`` echoes the size that was used.
+    page. ``q`` is a substring match over product, brand, model, notice id and listed batch
+    codes, applied after pagination: the handler reads on through up to ``MAX_Q_PAGES``
+    index pages until it holds a page of matches or the listing ends, and the cursor points
+    past the last page it read. A cursor carries its own page size; the response's ``limit``
+    echoes the size that was used.
     """
     qs = _query_string(event)
     since = (qs.get("since") or "").strip() or None
@@ -231,6 +245,7 @@ ROUTES: list[tuple[str, re.Pattern[str], Route]] = [
     ("GET", re.compile(r"^/items/(?P<id>[^/]+)/check-status/?$"), _wrap(ui_api.check_status)),
     ("GET", re.compile(r"^/items/(?P<id>[^/]+)/?$"), _wrap(match_api.get_item)),
     ("PATCH", re.compile(r"^/items/(?P<id>[^/]+)/?$"), _wrap(match_api.patch_item)),
+    ("DELETE", re.compile(r"^/items/(?P<id>[^/]+)/?$"), _wrap(match_api.delete_item)),
     ("POST", re.compile(r"^/households/?$"), _wrap(household_api.create_household)),
     (
         "POST",

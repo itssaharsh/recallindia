@@ -124,7 +124,7 @@ counts: {'alert': 2, 'hold': 0, 'dismiss': 1, 'clear': 12}  took=12.1s
 PASS
 
 $ .venv/bin/python -m pytest -q
-853 passed
+857 passed
 ```
 
 **The human gate is real.** While a case waits, the execution is parked:
@@ -180,7 +180,7 @@ unverified in `ap-south-1`, so it is logged as `email.skipped` and never fails a
 
 ```bash
 make install                 # venv, dev deps, npm ci, pre-commit
-DEMO_MODE=1 make test        # 853 tests against fixtures; no AWS credentials needed
+DEMO_MODE=1 make test        # 857 tests against fixtures; no AWS credentials needed
 make app-dev                 # the app against the deployed API
 ```
 

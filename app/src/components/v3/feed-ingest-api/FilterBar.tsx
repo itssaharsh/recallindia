@@ -185,14 +185,14 @@ function SearchField({ value, onChange }: { value: string; onChange: (q: string)
     >
       <Search aria-hidden className="size-[18px] shrink-0 text-ink-muted" />
       <label htmlFor="feed-q" className="sr-only">
-        Search product, brand or model
+        Search product, batch or model
       </label>
       <input
         ref={input}
         id="feed-q"
         type="search"
         value={draft}
-        placeholder="Search product, brand or model"
+        placeholder="Search product, batch or model"
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Escape") {

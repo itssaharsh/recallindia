@@ -348,6 +348,26 @@ def test_check_unknown_item_is_404():
     assert status == 404 and body["item_id"] == "ghost"
 
 
+def test_delete_item_is_own_household_only():
+    status, body = _call(
+        "POST", "/items", body=[{"kind": "appliance", "name": "Kettle", "brand": "Bajaj"}]
+    )
+    assert status == 201
+    item_id = body["items"][0]["item_id"]
+    # another household cannot see it, so it cannot delete it
+    status, body = _call("DELETE", f"/items/{item_id}", headers={"x-household": "hh_other234"})
+    assert status == 404
+    # the demo wall is read-only
+    demo_status, _ = _call("DELETE", "/items/demo-alert", headers={"x-household": "demo"})
+    assert demo_status in (403, 404)
+    status, body = _call("DELETE", f"/items/{item_id}")
+    assert status == 200 and body["deleted"] == item_id
+    status, _ = _call("GET", f"/items/{item_id}")
+    assert status == 404
+    status, _ = _call("DELETE", f"/items/{item_id}")
+    assert status == 404
+
+
 def test_demo_check_needs_the_matcher_modules(monkeypatch):
     _call("POST", "/items", body={"name": "x", "item_id": "i1"})
     monkeypatch.setattr(match_api, "_matcher_modules", lambda: None)

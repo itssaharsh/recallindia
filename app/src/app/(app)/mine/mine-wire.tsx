@@ -51,7 +51,7 @@ import {
   type VehicleOptions,
 } from "@/components/v3/mine";
 import { Button } from "@/components/v3/ui";
-import { ApiError, DEMO_HOUSEHOLD, apiGet, apiHost, apiPatch, apiPost } from "@/lib/api";
+import { apiDelete, ApiError, apiGet, apiHost, apiPatch, apiPost, DEMO_HOUSEHOLD } from "@/lib/api";
 import { PhotoError, photoToJpeg } from "@/lib/image";
 import type { CheckStatus, Item, Notice, OcrResult, Stats, UploadTicket } from "@/lib/types";
 import { usePoll } from "@/lib/use-poll";
@@ -673,12 +673,17 @@ export function MineWire() {
         );
       }}
       onRemove={(itemId) => {
+        if (isDemoHousehold) return readOnlyToast();
         const thing = mineItems.find((it) => it.item_id === itemId);
-        toast(
-          `${thing ? displayName(thing) : "That thing"} stays: the API has no way to remove one thing. Resetting your copy puts the demo things back.`,
-          { label: "Reset my copy", onClick: () => void resetCopy() },
-          "mine-remove",
-        );
+        const name = thing ? displayName(thing) : "That thing";
+        void apiDelete(`/items/${enc(itemId)}`, demo)
+          .then(() => {
+            toast(`${name} removed from your household.`, undefined, "mine-remove");
+            return load();
+          })
+          .catch((err: unknown) =>
+            toast(`Couldn't remove ${name}: ${err instanceof Error ? err.message : String(err)}`, undefined, "mine-remove"),
+          );
       }}
     />
   );

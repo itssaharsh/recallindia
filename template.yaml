@@ -324,7 +324,7 @@ Resources:
     Properties:
       CorsConfiguration:
         AllowOrigins: !Ref AppOrigins
-        AllowMethods: [GET, POST, PATCH, OPTIONS]
+        AllowMethods: [GET, POST, PATCH, DELETE, OPTIONS]
         # x-household scopes items, cases and approvals (there is no auth)
         AllowHeaders: [content-type, x-household]
         MaxAge: 600
@@ -473,6 +473,12 @@ Resources:
           Properties:
             ApiId: !Ref HttpApi
             Method: PATCH
+            Path: "/items/{id}"
+        ItemDelete:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: DELETE
             Path: "/items/{id}"
         CreateHousehold:
           Type: HttpApi

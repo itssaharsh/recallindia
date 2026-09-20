@@ -101,7 +101,11 @@ export async function apiPatch<T>(path: string, body: unknown, demo: boolean): P
   return apiWrite<T>("PATCH", path, body, demo);
 }
 
-async function apiWrite<T>(method: "POST" | "PATCH", path: string, body: unknown, demo: boolean): Promise<T> {
+export async function apiDelete<T>(path: string, demo: boolean): Promise<T> {
+  return apiWrite<T>("DELETE", path, undefined, demo);
+}
+
+async function apiWrite<T>(method: "POST" | "PATCH" | "DELETE", path: string, body: unknown, demo: boolean): Promise<T> {
   if (demo) throw new ApiError(403, "Demo data is read-only: adding and checking run on the live API.");
   if (!API_URL) throw new ApiError(0, "NEXT_PUBLIC_API_URL is not set for this build");
   const resp = await fetch(`${API_URL}${path}`, {

@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   description:
     "India's recalls and drug-quality failures (CDSCO, CPSC, NHTSA, openFDA) as one live feed, matched against the things you own.",
   manifest: "/manifest.webmanifest",
-  metadataBase: new URL("https://main.d2jn22qjgettr5.amplifyapp.com"),
+  metadataBase: new URL("https://recallindia.d2jn22qjgettr5.amplifyapp.com"),
   openGraph: {
     type: "website",
     siteName: "RecallIndia",

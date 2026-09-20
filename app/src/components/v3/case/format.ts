@@ -124,8 +124,8 @@ export function pipelineTotalMs(c: CaseRecord | null): number | null {
 
 /** 1 decimal, as a number for NumberFlow */
 export const secs1 = (ms: number) => Math.round(ms / 100) / 10;
-/** "1.0 s" */
-export const secsLabel = (ms: number) => `${secs1(ms).toFixed(1)} s`;
+/** "1.0 s"; under half a second it reads "<1 s", because the steps are stamped to the whole second */
+export const secsLabel = (ms: number) => (ms < 500 ? "<1 s" : `${secs1(ms).toFixed(1)} s`);
 
 /* ------------------------------------------------------------------ hashes, bytes, keys */
 
