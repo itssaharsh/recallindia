@@ -93,7 +93,7 @@ export function KitView() {
           {SWATCHES.map((s) => (
             <li key={s.name} className={`rounded-md border border-line p-3 ${s.token}`}>
               <p className={`font-mono text-[12px] ${s.on}`}>{s.name}</p>
-              <p className={`text-[11px] ${s.on} opacity-80`}>{s.note}</p>
+              <p className={`text-[12px] ${s.on}`}>{s.note}</p>
             </li>
           ))}
         </ul>

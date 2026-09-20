@@ -187,7 +187,11 @@ export function ApiView() {
           </div>
 
           <div className="flex items-start gap-2">
-            <pre className="min-w-0 flex-1 overflow-x-auto border border-line bg-surface-1 px-3 py-2.5 font-mono text-[13px] text-ink">
+            <pre
+              tabIndex={0}
+              aria-label="The curl command for this request"
+              className="min-w-0 flex-1 overflow-x-auto border border-line bg-surface-1 px-3 py-2.5 font-mono text-[13px] text-ink"
+            >
               {curl}
             </pre>
             <CopyButton text={curl} />
@@ -205,7 +209,11 @@ export function ApiView() {
           </p>
           {error && <p className="text-[13px] text-warning">{error}</p>}
           {result && (
-            <pre className="max-h-[480px] overflow-auto border border-line bg-surface-1 p-4 font-mono text-[13px] leading-relaxed text-ink">
+            <pre
+              tabIndex={0}
+              aria-label="The JSON the API returned"
+              className="max-h-[480px] overflow-auto border border-line bg-surface-1 p-4 font-mono text-[13px] leading-relaxed text-ink"
+            >
               {result.body}
             </pre>
           )}
@@ -217,7 +225,7 @@ export function ApiView() {
           Sources
         </h2>
         {/* the table keeps its columns; on a phone it scrolls rather than squeezing them */}
-        <div className="-mx-5 overflow-x-auto px-5 md:mx-0 md:px-0">
+        <div tabIndex={0} aria-label="Sources" className="-mx-5 overflow-x-auto px-5 md:mx-0 md:px-0">
           <div role="table" className="min-w-[720px] border-t border-line text-[14px]">
             <div
               role="row"

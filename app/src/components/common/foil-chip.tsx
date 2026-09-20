@@ -25,6 +25,7 @@ export function FoilChip({
   const box = size === "lg" ? "h-12 px-3.5 text-[36px]" : "h-8 px-2.5 text-[22px]";
   return (
     <span
+      role="img"
       className={`foil-chip inline-flex w-fit shrink-0 items-center self-start rounded-sm leading-none whitespace-nowrap ${box} ${className ?? ""}`}
       aria-label={`Batch ${chars.join(" ")}`}
     >
