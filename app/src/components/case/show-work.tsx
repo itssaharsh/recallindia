@@ -88,7 +88,7 @@ export function ShowWork({
         aria-expanded={open}
         aria-controls="case-work"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1.5 rounded-sm px-1 py-1 text-sm text-primary-strong hover:bg-surface-2"
+        className="inline-flex items-center gap-1.5 rounded-sm px-1 py-1 text-sm text-primary hover:bg-surface-2"
       >
         <ChevronRight aria-hidden className={`size-4 transition-transform ${open ? "rotate-90" : ""}`} />
         {open ? "Hide work" : "Show work"}
@@ -107,7 +107,7 @@ export function ShowWork({
                       <span aria-hidden className={`w-3 shrink-0 font-mono ${TONE[state]}`}>
                         {GLYPH[state]}
                       </span>
-                      <span className={state === "failed" ? "text-alert" : state === "done" ? "text-text" : "text-muted"}>
+                      <span className={state === "failed" ? "text-danger" : state === "done" ? "text-ink" : "text-muted"}>
                         {chainCopy(name, c, item, notice, step)}
                         <span className="sr-only"> ({STATE_WORD[state]})</span>
                       </span>
@@ -121,7 +121,7 @@ export function ShowWork({
                 Verifier reasoning{c.verifier ? ` · ${c.verifier}` : ""}
                 {typeof c.confidence === "number" ? ` · confidence ${c.confidence}` : ""}
               </h3>
-              <p className="border-l-2 border-line py-0.5 pl-3 font-mono text-[12px] leading-relaxed break-words text-text">
+              <p className="border-l-2 border-line py-0.5 pl-3 font-mono text-[12px] leading-relaxed break-words text-ink">
                 {c.reasoning || c.reason}
               </p>
               {c.verifier !== "bedrock" && (
@@ -131,7 +131,7 @@ export function ShowWork({
             {c.execution_arn && (
               <div className="space-y-1">
                 <h3 className="font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">Step Functions execution</h3>
-                <p className="font-mono text-[12px] break-all text-text">{c.execution_arn}</p>
+                <p className="font-mono text-[12px] break-all text-ink">{c.execution_arn}</p>
               </div>
             )}
           </div>
@@ -145,7 +145,7 @@ export function ShowWork({
                     <span className="text-muted" title={a.ts}>
                       {a.ts.slice(11, 19)}
                     </span>
-                    <span className="text-text">{a.event}</span>
+                    <span className="text-ink">{a.event}</span>
                     <span className="col-span-2 break-words text-muted sm:col-span-1" title={detail.length > 160 ? detail : undefined}>
                       {clip(detail)}
                     </span>

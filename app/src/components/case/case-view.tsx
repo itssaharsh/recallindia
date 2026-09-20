@@ -44,8 +44,8 @@ function caseIdFromLocation(): string | null {
 }
 
 const TONE: Record<"hold" | "clear" | "muted", string> = {
-  hold: "text-hold",
-  clear: "text-clear",
+  hold: "text-warning",
+  clear: "text-success",
   muted: "text-muted",
 };
 
@@ -56,7 +56,7 @@ function StatusChip({ c }: { c: Case }) {
     <span
       className={`inline-flex items-center gap-1.5 font-mono text-[11px] font-medium tracking-[0.08em] uppercase ${TONE[chip.tone]}`}
     >
-      {c.status === "waiting_approval" && <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-hold" />}
+      {c.status === "waiting_approval" && <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-warning" />}
       {chip.label}
     </span>
   );
@@ -66,7 +66,7 @@ function Field({ label, children, mono }: { label: string; children: React.React
   return (
     <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-3 border-b border-line py-2 text-[13px]">
       <dt className="text-muted">{label}</dt>
-      <dd className={`min-w-0 text-text ${mono ? "font-mono text-[12.5px]" : ""}`}>{children}</dd>
+      <dd className={`min-w-0 text-ink ${mono ? "font-mono text-[12.5px]" : ""}`}>{children}</dd>
     </div>
   );
 }
@@ -168,7 +168,7 @@ export function CaseView() {
   const back = (
     <Link
       href={href("/mine/")}
-      className="inline-flex h-9 items-center rounded-md border border-line-strong bg-surface-1 px-3 text-sm font-medium text-text hover:bg-surface-2"
+      className="inline-flex h-9 items-center rounded-md border border-line-strong bg-surface-1 px-3 text-sm font-medium text-ink hover:bg-surface-2"
     >
       Back to my things
     </Link>
@@ -205,7 +205,7 @@ export function CaseView() {
   return (
     <article aria-labelledby="case-title" className="mx-auto max-w-6xl px-5 py-5 md:py-7">
       <nav aria-label="Case" className="mb-5 flex items-center justify-between gap-3">
-        <Link href={href("/mine/")} className="inline-flex items-center gap-1 rounded-sm text-[13px] text-muted hover:text-text">
+        <Link href={href("/mine/")} className="inline-flex items-center gap-1 rounded-sm text-[13px] text-muted hover:text-ink">
           <ArrowLeft aria-hidden className="size-3.5" /> My things
           {item?.name ? <span className="text-muted"> / {item.name}</span> : null}
         </Link>
@@ -220,18 +220,18 @@ export function CaseView() {
         </div>
         <h1
           id="case-title"
-          className="max-w-4xl font-display text-[32px] leading-[1.06] font-semibold text-balance text-text md:text-[40px]"
+          className="max-w-4xl font-display text-[32px] leading-[1.06] font-semibold text-balance text-ink md:text-[40px]"
         >
           {outcomeLine(c, item, notice)}
         </h1>
         {subLine && <p className="max-w-2xl text-[15px] text-muted">{subLine}</p>}
         {dates && (
-          <p className="font-mono text-[13px] text-text">
+          <p className="font-mono text-[13px] text-ink">
             {dates}
             {c.sold_after_notice && (
               <>
                 <span className="text-muted"> → </span>
-                <strong className="font-semibold text-alert">sold after notice</strong>
+                <strong className="font-semibold text-danger">sold after notice</strong>
               </>
             )}
           </p>
@@ -246,7 +246,7 @@ export function CaseView() {
                 The notice
               </h2>
               {notice && (
-                <p className="font-display text-lg leading-snug font-semibold text-text">{sentence(citation(notice))}</p>
+                <p className="font-display text-lg leading-snug font-semibold text-ink">{sentence(citation(notice))}</p>
               )}
             </div>
             {excerpt && (
@@ -264,7 +264,7 @@ export function CaseView() {
                             href={notice.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-0.5 text-primary-strong hover:underline"
+                            className="inline-flex items-center gap-0.5 text-primary hover:underline"
                           >
                             open the regulator&apos;s page <ArrowUpRight aria-hidden className="size-3" />
                           </a>
@@ -340,7 +340,7 @@ export function CaseView() {
 
           {!isAlert && (
             <div className="space-y-2 rounded-md border border-line bg-surface-1 p-4 md:p-5">
-              <p className="text-[14px] leading-relaxed text-text">
+              <p className="text-[14px] leading-relaxed text-ink">
                 {c.decision === "dismiss" ? "Dismissed" : "On hold"}: {c.reason}.
               </p>
               <p className="text-[13px] leading-relaxed text-muted">
@@ -365,15 +365,15 @@ export function CaseView() {
               <dl className="space-y-1.5 border-t border-line pt-3 text-[12px]">
                 <div className="flex justify-between gap-3">
                   <dt className="text-muted">Item</dt>
-                  <dd className="min-w-0 truncate text-text">{item?.name ?? c.item_id}</dd>
+                  <dd className="min-w-0 truncate text-ink">{item?.name ?? c.item_id}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-muted">Notice</dt>
-                  <dd className="min-w-0 truncate font-mono text-text">{notice?.notice_id ?? c.notice_id}</dd>
+                  <dd className="min-w-0 truncate font-mono text-ink">{notice?.notice_id ?? c.notice_id}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-muted">Source</dt>
-                  <dd className="text-text">{notice ? sourceLabel(notice.source) : "—"}</dd>
+                  <dd className="text-ink">{notice ? sourceLabel(notice.source) : "—"}</dd>
                 </div>
               </dl>
             </div>

@@ -101,7 +101,7 @@ export function MineView() {
     <section aria-labelledby="mine-title" className="px-5 py-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 id="mine-title" className="m-0 font-display text-3xl leading-tight font-semibold text-text md:text-4xl">
+          <h1 id="mine-title" className="m-0 font-display text-3xl leading-tight font-semibold text-ink md:text-4xl">
             {items === null
               ? "Your things"
               : onNotice > 0
@@ -128,7 +128,7 @@ export function MineView() {
               type="button"
               aria-pressed={filter === f.id}
               onClick={() => setFilter(f.id)}
-              className={`h-8 rounded-sm border px-2.5 text-[13px] ${filter === f.id ? "border-primary-strong bg-surface-3 text-text" : "border-line text-muted hover:bg-surface-2 hover:text-text"}`}
+              className={`h-8 rounded-sm border px-2.5 text-[13px] ${filter === f.id ? "border-primary bg-surface-2 text-ink" : "border-line text-muted hover:bg-surface-2 hover:text-ink"}`}
             >
               {f.label}
             </button>
@@ -137,7 +137,7 @@ export function MineView() {
       )}
 
       {checkError && (
-        <p role="alert" className="mt-4 mb-0 text-[13px] text-alert">
+        <p role="alert" className="mt-4 mb-0 text-[13px] text-danger">
           Could not start the check for {checkError}
         </p>
       )}

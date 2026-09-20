@@ -16,7 +16,7 @@ export default function NotFound() {
         action={
           <Link
             href="/"
-            className="inline-flex h-8 items-center rounded-sm border border-line px-2.5 text-sm font-medium text-text hover:bg-surface-2"
+            className="inline-flex h-8 items-center rounded-sm border border-line px-2.5 text-sm font-medium text-ink hover:bg-surface-2"
           >
             Go to the feed
           </Link>

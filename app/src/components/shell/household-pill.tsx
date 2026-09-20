@@ -23,12 +23,12 @@ export function HouseholdPill({ inline = false }: { inline?: boolean }) {
     if (own || demo) return null;
     return (
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-line bg-surface-1 px-3 py-2">
-        <p className="text-[13px] text-text">You&apos;re looking at the demo household. It&apos;s read-only.</p>
+        <p className="text-[13px] text-ink">You&apos;re looking at the demo household. It&apos;s read-only.</p>
         <Button size="sm" variant="outline" onClick={() => makeCopy()} disabled={busy}>
           {busy ? <Loader2 aria-hidden className="size-3.5 animate-spin" /> : null}
           {busy ? "Copying 15 things…" : "Make my own copy"}
         </Button>
-        {householdError && <span className="text-xs text-alert">Couldn&apos;t copy the demo household. Try again.</span>}
+        {householdError && <span className="text-xs text-danger">Couldn&apos;t copy the demo household. Try again.</span>}
       </div>
     );
   }
@@ -42,7 +42,7 @@ export function HouseholdPill({ inline = false }: { inline?: boolean }) {
         {busy ? (
           <Loader2 aria-hidden className="size-3.5 animate-spin" />
         ) : own ? (
-          <Check aria-hidden className="size-3.5 text-clear" />
+          <Check aria-hidden className="size-3.5 text-success" />
         ) : null}
         {busy ? "Copying 15 things…" : own ? `Your household · ${short}` : "Demo household · read-only"}
       </span>
@@ -52,7 +52,7 @@ export function HouseholdPill({ inline = false }: { inline?: boolean }) {
             type="button"
             onClick={() => resetCopy()}
             disabled={busy}
-            className="rounded-sm px-1.5 py-1 text-[12px] text-muted hover:text-text disabled:opacity-50"
+            className="rounded-sm px-1.5 py-1 text-[12px] text-muted hover:text-ink disabled:opacity-50"
           >
             Reset
           </button>
@@ -65,7 +65,7 @@ export function HouseholdPill({ inline = false }: { inline?: boolean }) {
         <button
           type="button"
           onClick={useDemoHousehold}
-          className="rounded-sm px-1.5 py-1 text-[12px] text-muted hover:text-text"
+          className="rounded-sm px-1.5 py-1 text-[12px] text-muted hover:text-ink"
         >
           View the demo
         </button>

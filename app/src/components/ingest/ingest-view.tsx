@@ -37,7 +37,7 @@ import { RecentRuns } from "./recent-runs";
 // pdf.js is browser-only: the stage never renders on the server (static export)
 const PdfStage = dynamic(() => import("./pdf-stage").then((m) => memo(m.PdfStage)), {
   ssr: false,
-  loading: () => <div className="aspect-[1.414] w-full bg-paper" />,
+  loading: () => <div className="aspect-[1.414] w-full bg-surface-1" />,
 });
 
 /** The run the button starts (live) and the run demo mode replays. */
@@ -252,7 +252,7 @@ export function IngestView() {
     <section aria-labelledby="ingest-title" className="flex flex-col gap-4 px-5 py-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 id="ingest-title" className="m-0 font-display text-2xl leading-tight font-semibold text-text md:text-3xl">
+          <h1 id="ingest-title" className="m-0 font-display text-2xl leading-tight font-semibold text-ink md:text-3xl">
             A CDSCO alert PDF, becoming the feed
           </h1>
           <p className="mt-1 mb-0 text-sm text-muted">
@@ -278,18 +278,18 @@ export function IngestView() {
       {error && (
         <p
           role="alert"
-          className="m-0 flex items-center gap-2 border border-alert/60 bg-alert-face px-3 py-2 text-[13px] text-text"
+          className="m-0 flex items-center gap-2 border border-danger/60 bg-danger px-3 py-2 text-[13px] text-ink"
         >
-          <AlertTriangle aria-hidden className="size-4 text-alert" /> {error}
+          <AlertTriangle aria-hidden className="size-4 text-danger" /> {error}
         </p>
       )}
       {play.status === "SUCCEEDED" && phase === "done" && (
         <div
           role="status"
-          className="ingest-fade-in flex flex-wrap items-center gap-x-3 gap-y-2 border border-line bg-surface-2 px-4 py-3"
+          className="ingest-fade-in flex flex-wrap items-center gap-x-3 gap-y-2 border border-line bg-surface-1 px-4 py-3"
         >
-          <CheckCircle2 aria-hidden className="size-5 text-clear" />
-          <p className="m-0 text-sm text-text">
+          <CheckCircle2 aria-hidden className="size-5 text-success" />
+          <p className="m-0 text-sm text-ink">
             <span className="font-display text-lg font-semibold">{play.noticesOut ?? "—"} notices</span>
             <span className="text-muted"> · </span>
             {methodLabel(play.method)}
@@ -300,14 +300,14 @@ export function IngestView() {
           <Link
             prefetch={false}
             href={href("/?source=cdsco_nsq")}
-            className="ml-auto inline-flex h-8 items-center gap-1 rounded-sm border border-line px-3 text-[13px] text-primary-strong hover:bg-surface-3"
+            className="ml-auto inline-flex h-8 items-center gap-1 rounded-sm border border-line px-3 text-[13px] text-primary hover:bg-surface-2"
           >
             Open in feed <ArrowUpRight aria-hidden className="size-3.5" />
           </Link>
         </div>
       )}
       {failedStep && isTerminal(play.status) && (
-        <p role="alert" className="m-0 border border-alert/60 bg-alert-face px-3 py-2 text-[13px] text-text">
+        <p role="alert" className="m-0 border border-danger/60 bg-danger px-3 py-2 text-[13px] text-ink">
           The run stopped at {failedStep.name}: {play.error ?? "see the step above"}. Nothing new was published.
         </p>
       )}

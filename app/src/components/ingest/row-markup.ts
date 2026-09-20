@@ -8,8 +8,8 @@ export const ROW_GRID =
 export const ROW_CHIP =
   "inline-flex h-5 w-fit items-center rounded-sm border border-line px-1.5 font-mono text-[10.5px] tracking-wider text-muted uppercase";
 export const ROW_CELLS = [
-  "truncate text-text",
-  "truncate font-mono text-[12.5px] text-text",
+  "truncate text-ink",
+  "truncate font-mono text-[12.5px] text-ink",
   "hidden truncate text-muted 2xl:block",
 ] as const;
 
@@ -40,7 +40,7 @@ function rowGrid(n: RowNotice): HTMLDivElement {
 /** A landed row, exactly as the React list renders it (LandedRow in dissolve-column.tsx). */
 export function buildLandedRow(n: RowNotice, fade: boolean): HTMLLIElement {
   const li = document.createElement("li");
-  li.className = `border-b border-line bg-surface-2 contain-content${fade ? " ingest-fade-in" : ""}`;
+  li.className = `border-b border-line bg-surface-1 contain-content${fade ? " ingest-fade-in" : ""}`;
   li.append(rowGrid(n));
   return li;
 }
@@ -55,13 +55,13 @@ export function buildFlight(
 ): { el: HTMLDivElement; paper: HTMLDivElement } {
   const el = document.createElement("div");
   // a continuation line has no row of its own to become: no row surface, only its pixels
-  el.className = n ? "fixed overflow-hidden border-b border-line bg-surface-2" : "fixed overflow-hidden";
+  el.className = n ? "fixed overflow-hidden border-b border-line bg-surface-1" : "fixed overflow-hidden";
   el.style.transformOrigin = "0 0";
   el.style.willChange = "transform";
   el.style.contain = "strict"; // sized explicitly: nothing inside can reach layout outside
   if (n) el.append(rowGrid(n));
   const paper = document.createElement("div");
-  paper.className = "absolute inset-0 border border-evidence bg-paper";
+  paper.className = "absolute inset-0 border border-success bg-surface-1";
   if (pixels) Object.assign(paper.style, pixels);
   el.append(paper);
   return { el, paper };

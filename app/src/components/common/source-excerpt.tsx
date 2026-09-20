@@ -13,7 +13,7 @@ function highlight(paragraph: string, quote: string): React.ReactNode {
   return (
     <>
       {text.slice(0, at)}
-      <mark className="bg-evidence px-0.5 text-ink [box-decoration-break:clone]">{text.slice(at, at + q.length)}</mark>
+      <mark className="bg-mark px-0.5 text-ink [box-decoration-break:clone]">{text.slice(at, at + q.length)}</mark>
       {text.slice(at + q.length)}
     </>
   );
@@ -39,7 +39,7 @@ export function SourceExcerpt({
   }
   return (
     <figure>
-      <blockquote className="space-y-2 bg-paper px-3.5 py-3 text-[13px] leading-relaxed text-ink">
+      <blockquote className="space-y-2 bg-surface-1 px-3.5 py-3 text-[13px] leading-relaxed text-ink">
         {paragraphs.map((p, i) => (
           <p key={i}>
             {quote ? highlight(p, quote) : squash(p)}

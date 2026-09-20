@@ -5,15 +5,15 @@ import type { PipelineStep } from "@/lib/case";
 const DOT: Record<PipelineStep["state"], string> = {
   pending: "border-line-strong",
   running: "animate-pulse border-primary bg-primary",
-  done: "border-clear bg-clear",
-  failed: "border-hold bg-hold",
+  done: "border-success bg-success",
+  failed: "border-warning bg-warning",
 };
 
 const LABEL: Record<PipelineStep["state"], string> = {
   pending: "text-muted",
-  running: "text-text",
-  done: "text-text",
-  failed: "text-hold",
+  running: "text-ink",
+  done: "text-ink",
+  failed: "text-warning",
 };
 
 const WORD: Record<PipelineStep["state"], string> = {

@@ -15,7 +15,7 @@ function Field({ label, children, mono }: { label: string; children: React.React
   return (
     <div className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-3 border-b border-line py-2 text-[13px]">
       <dt className="text-muted">{label}</dt>
-      <dd className={`m-0 text-text ${mono ? "font-mono text-[12.5px]" : ""}`}>{children}</dd>
+      <dd className={`m-0 text-ink ${mono ? "font-mono text-[12.5px]" : ""}`}>{children}</dd>
     </div>
   );
 }
@@ -53,7 +53,7 @@ export function NoticeSheet({ notice, onClose }: { notice: Notice | null; onClos
                 <span className="text-xs text-muted">{noticeRef(notice).replace(/^\S+\s/, "")}</span>
                 <span className="text-xs text-muted">· {fmtDay(notice.published_at)}</span>
               </div>
-              <SheetTitle className="font-display text-xl leading-snug font-semibold text-text">{notice.product || notice.title}</SheetTitle>
+              <SheetTitle className="font-display text-xl leading-snug font-semibold text-ink">{notice.product || notice.title}</SheetTitle>
               <SheetDescription className="text-[13px] text-muted">{notice.title}</SheetDescription>
             </SheetHeader>
             <div className="space-y-5 p-5">
@@ -110,7 +110,7 @@ export function NoticeSheet({ notice, onClose }: { notice: Notice | null; onClos
                     href={notice.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex h-8 items-center gap-2 rounded-sm border border-line px-3 text-[13px] text-primary-strong hover:bg-surface-2"
+                    className="inline-flex h-8 items-center gap-2 rounded-sm border border-line px-3 text-[13px] text-primary hover:bg-surface-2"
                   >
                     <ExternalLink aria-hidden className="size-3.5" />
                     Open at {sourceLabel(notice.source)}
@@ -121,14 +121,14 @@ export function NoticeSheet({ notice, onClose }: { notice: Notice | null; onClos
                   <button
                     type="button"
                     onClick={() => openPdf(notice)}
-                    className="inline-flex h-8 items-center gap-2 rounded-sm border border-line px-3 text-[13px] text-primary-strong hover:bg-surface-2"
+                    className="inline-flex h-8 items-center gap-2 rounded-sm border border-line px-3 text-[13px] text-primary hover:bg-surface-2"
                   >
                     <FileText aria-hidden className="size-3.5" />
                     Open the PDF{notice.row_ref?.page ? ` · page ${notice.row_ref.page}` : ""}
                   </button>
                 )}
               </div>
-              {pdfError && <p className="text-xs text-alert">Could not open the PDF: {pdfError}</p>}
+              {pdfError && <p className="text-xs text-danger">Could not open the PDF: {pdfError}</p>}
             </div>
           </>
         )}

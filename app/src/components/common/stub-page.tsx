@@ -27,7 +27,7 @@ export function StubPage({
   const { href } = useAppState();
   return (
     <section aria-label={title} className="px-5 py-6">
-      <h1 className="m-0 font-display text-3xl font-semibold text-text md:text-4xl">{title}</h1>
+      <h1 className="m-0 font-display text-3xl font-semibold text-ink md:text-4xl">{title}</h1>
       <EmptyState
         icon={icon}
         what={what}
@@ -35,7 +35,7 @@ export function StubPage({
         action={
           <Link
             href={href(action.path)}
-            className="inline-flex h-8 items-center rounded-sm border border-line px-2.5 text-sm font-medium text-text hover:bg-surface-2"
+            className="inline-flex h-8 items-center rounded-sm border border-line px-2.5 text-sm font-medium text-ink hover:bg-surface-2"
           >
             {action.label}
           </Link>

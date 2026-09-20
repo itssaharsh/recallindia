@@ -29,11 +29,11 @@ export const FeedRow = memo(function FeedRow({
     <button
       type="button"
       onClick={() => onOpen(notice)}
-      className="grid h-10 w-full grid-cols-[4rem_minmax(0,1fr)_6.5rem] items-center gap-3 px-5 text-left text-[13px] transition-colors hover:bg-surface-1 focus-visible:bg-surface-1 md:grid-cols-[4.75rem_minmax(0,1.2fr)_9rem_minmax(0,1fr)_6.5rem]"
+      className="grid h-10 w-full grid-cols-[4rem_minmax(0,1fr)_6.5rem] items-center gap-3 px-5 text-left text-[13px] transition-colors hover:bg-surface-2 focus-visible:bg-surface-1 md:grid-cols-[4.75rem_minmax(0,1.2fr)_9rem_minmax(0,1fr)_6.5rem]"
     >
       <SourceChip notice={notice} />
-      <span className="truncate text-text">{notice.product || notice.title}</span>
-      <span className="truncate font-mono text-[12.5px] text-text">{noticeIdentifier(notice)}</span>
+      <span className="truncate text-ink">{notice.product || notice.title}</span>
+      <span className="truncate font-mono text-[12.5px] text-ink">{noticeIdentifier(notice)}</span>
       <span className="hidden truncate text-muted md:block">{notice.hazard_or_failed_test || "—"}</span>
       <span className="hidden text-right text-xs text-muted md:block">{fmtDay(notice.published_at)}</span>
     </button>
@@ -58,11 +58,11 @@ function SnapIn({ children }: { children: React.ReactNode }) {
 export function FeedRowSkeleton() {
   return (
     <li aria-hidden className="grid h-10 grid-cols-[4rem_minmax(0,1fr)_6.5rem] items-center gap-3 border-b border-line px-5 md:grid-cols-[4.75rem_minmax(0,1.2fr)_9rem_minmax(0,1fr)_6.5rem]">
-      <span className="h-5 w-14 bg-surface-2" />
-      <span className="h-3 w-4/5 bg-surface-2" />
-      <span className="h-3 w-20 bg-surface-2" />
-      <span className="hidden h-3 w-3/4 bg-surface-2 md:block" />
-      <span className="ml-auto hidden h-3 w-16 bg-surface-2 md:block" />
+      <span className="h-5 w-14 bg-surface-1" />
+      <span className="h-3 w-4/5 bg-surface-1" />
+      <span className="h-3 w-20 bg-surface-1" />
+      <span className="hidden h-3 w-3/4 bg-surface-1 md:block" />
+      <span className="ml-auto hidden h-3 w-16 bg-surface-1 md:block" />
     </li>
   );
 }

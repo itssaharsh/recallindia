@@ -16,7 +16,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   return (
     <>
       <dt className="text-muted">{label}</dt>
-      <dd className="min-w-0 text-text [overflow-wrap:anywhere]">{children}</dd>
+      <dd className="min-w-0 text-ink [overflow-wrap:anywhere]">{children}</dd>
     </>
   );
 }
@@ -26,7 +26,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 function Stamp({ result, busy }: { result: VerifyResult | null; busy: boolean }) {
   const reduce = useReducedMotion();
   const label = !result ? "Verifying" : result.valid ? "Verified" : "Signature invalid";
-  const tone = !result ? "border-line text-muted" : result.valid ? "border-clear text-clear" : "border-alert text-alert";
+  const tone = !result ? "border-line text-muted" : result.valid ? "border-success text-success" : "border-danger text-danger";
   const press = reduce
     ? { initial: { opacity: 0, rotate: 6 }, animate: { opacity: 1, rotate: 6 }, transition: CROSSFADE }
     : { initial: { opacity: 0, scale: 1.15, rotate: 6 }, animate: { opacity: 1, scale: 1, rotate: 6 }, transition: STAMP };
@@ -84,7 +84,7 @@ export function EvidenceCertificate({ caseId, evidence, demo }: { caseId: string
     <figure>
       <section aria-labelledby="certificate-title" className="border border-line bg-surface-1 font-mono">
         <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-line px-4 py-2.5">
-          <h2 id="certificate-title" className="text-[11px] font-medium tracking-[0.14em] text-evidence uppercase">
+          <h2 id="certificate-title" className="text-[11px] font-medium tracking-[0.14em] text-success uppercase">
             Evidence certificate
           </h2>
           <span className="text-[11px] text-muted">{caseId}</span>
@@ -132,17 +132,17 @@ export function EvidenceCertificate({ caseId, evidence, demo }: { caseId: string
         </div>
         {tampered && result && (
           <div className="border-t border-line px-4 py-3 text-[12px]">
-            <p className="text-text">
+            <p className="text-ink">
               Changed byte {result.flipped_byte_index}: 0x
               {(result.byte_before ?? 0).toString(16).padStart(2, "0")} → 0x
               {(result.byte_after ?? 0).toString(16).padStart(2, "0")}
             </p>
-            <p className="mt-1 break-all text-text">
+            <p className="mt-1 break-all text-ink">
               Recomputed: {result.recomputed_sha256} <span className="font-sans text-muted">does not match</span>
             </p>
             {result.demo_control && (
               <p className="mt-1 font-sans text-muted">
-                <span className="text-hold">Demo control</span>: one byte of the downloaded copy was flipped in memory. The
+                <span className="text-warning">Demo control</span>: one byte of the downloaded copy was flipped in memory. The
                 stored snapshot is untouched.
               </p>
             )}

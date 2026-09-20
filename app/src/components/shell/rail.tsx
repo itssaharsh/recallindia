@@ -4,6 +4,8 @@ import { Boxes, Braces, FileScan, Rss } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { Logo } from "@/components/brand/logo";
+
 import { useAppState } from "./app-state";
 
 const NAV = [
@@ -25,9 +27,12 @@ export function Rail() {
     >
       <Link
         href={href("/")}
-        className="mr-3 font-display text-[17px] leading-none font-semibold tracking-tight text-text md:mr-0 md:mb-6 md:px-2 md:text-xl"
+        aria-label="RecallIndia, the feed"
+        className="mr-3 flex items-center text-ink md:mr-0 md:mb-6 md:px-1"
       >
-        RecallIndia
+        {/* the lockup at 20 px in the mobile bar, 24 px in the rail (UI-SPEC §9) */}
+        <Logo height={20} className="md:hidden" />
+        <Logo height={24} className="hidden md:block" />
       </Link>
       {NAV.map(({ path, label, icon: Icon }) => {
         const on = active(path);
@@ -37,7 +42,7 @@ export function Rail() {
             href={href(path)}
             aria-current={on ? "page" : undefined}
             className={`flex items-center gap-2.5 rounded-sm px-2.5 py-2 text-sm transition-colors ${
-              on ? "bg-surface-3 text-text" : "text-muted hover:bg-surface-2 hover:text-text"
+              on ? "bg-surface-2 text-ink" : "text-muted hover:bg-surface-2 hover:text-ink"
             }`}
           >
             <Icon aria-hidden className="size-4 shrink-0" strokeWidth={1.75} />

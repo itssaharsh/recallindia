@@ -255,7 +255,7 @@ export function PdfStage({
 
   return (
     <figure className="m-0 flex min-w-0 flex-col gap-2">
-      <div ref={box} className="ingest-layer relative min-h-40 overflow-hidden bg-paper">
+      <div ref={box} className="ingest-layer relative min-h-40 overflow-hidden bg-surface-1">
         {!url && <PagePlaceholder text="The alert PDF appears here when a run fetches it" />}
         {url && mode === "pdf" && <PdfErrorBoundary onError={fallBack}>{doc}</PdfErrorBoundary>}
         {url && mode === "poster" && posterBase && (
@@ -296,8 +296,8 @@ export function PdfStage({
               onClick={() => onPage(i + 1)}
               className={`h-7 min-w-7 rounded-sm border px-1.5 font-mono text-xs disabled:cursor-default ${
                 page === i + 1
-                  ? "border-primary-strong bg-surface-3 text-text"
-                  : "border-line text-muted hover:bg-surface-2 hover:text-text"
+                  ? "border-primary bg-surface-2 text-ink"
+                  : "border-line text-muted hover:bg-surface-2 hover:text-ink"
               }`}
             >
               {i + 1}

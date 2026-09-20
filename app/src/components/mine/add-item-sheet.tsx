@@ -37,7 +37,7 @@ export function AddItemSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full gap-0 overflow-y-auto rounded-l-lg border-line bg-surface-1 sm:max-w-xl">
         <SheetHeader className="border-b border-line p-5 pr-12">
-          <SheetTitle className="font-display text-xl font-semibold text-text">Add something you own</SheetTitle>
+          <SheetTitle className="font-display text-xl font-semibold text-ink">Add something you own</SheetTitle>
           <SheetDescription className="text-[13px] text-muted">
             It is checked against every notice as soon as it is added.
             {demo && " Demo data is read-only: adding runs on the live API."}
@@ -147,11 +147,11 @@ function ScanTab({ demo, onDone }: { demo: boolean; onDone: (items: Item[]) => v
           type={type}
           value={form[key]}
           onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-          className={`${mono ? "font-mono" : ""} ${flagged ? "border-hold" : ""}`}
+          className={`${mono ? "font-mono" : ""} ${flagged ? "border-warning" : ""}`}
           aria-describedby={flagged ? `scan-${key}-hint` : undefined}
         />
         {flagged && (
-          <p id={`scan-${key}-hint`} className="text-xs text-hold">
+          <p id={`scan-${key}-hint`} className="text-xs text-warning">
             {form[key] ? `Read at ${Math.round((conf ?? 0) * 100)}%: check it against the strip.` : "Not found on the photo: type it in."}
           </p>
         )}
@@ -174,7 +174,7 @@ function ScanTab({ demo, onDone }: { demo: boolean; onDone: (items: Item[]) => v
           disabled={busy || demo}
           onChange={(e) => onFile(e.target.files?.[0])}
         />
-        <span className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-sm border border-line px-3 text-sm font-medium text-text hover:bg-surface-2">
+        <span className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-sm border border-line px-3 text-sm font-medium text-ink hover:bg-surface-2">
           <Camera aria-hidden className="size-4" /> {ocr ? "Scan another photo" : "Take or choose a photo"}
         </span>
       </label>
@@ -192,7 +192,7 @@ function ScanTab({ demo, onDone }: { demo: boolean; onDone: (items: Item[]) => v
       )}
 
       {error && (
-        <p role="alert" className="m-0 text-[13px] text-alert">
+        <p role="alert" className="m-0 text-[13px] text-danger">
           {error}
         </p>
       )}
@@ -238,10 +238,10 @@ function Step({ state, children }: { state: "pending" | "running" | "done"; chil
   const glyph = state === "done" ? "●" : state === "running" ? "◐" : "○";
   return (
     <li className="flex gap-2.5">
-      <span aria-hidden className={`w-3 font-mono ${state === "running" ? "text-primary-strong" : state === "done" ? "text-text" : "text-muted"}`}>
+      <span aria-hidden className={`w-3 font-mono ${state === "running" ? "text-primary" : state === "done" ? "text-ink" : "text-muted"}`}>
         {glyph}
       </span>
-      <span className={state === "pending" ? "text-muted" : "text-text"}>{children}</span>
+      <span className={state === "pending" ? "text-muted" : "text-ink"}>{children}</span>
     </li>
   );
 }
@@ -316,7 +316,7 @@ function PasteTab({ demo, onDone }: { demo: boolean; onDone: (items: Item[]) => 
         {busy && !rows ? "Reading…" : "Read lines"}
       </Button>
       {error && (
-        <p role="alert" className="m-0 text-[13px] text-alert">
+        <p role="alert" className="m-0 text-[13px] text-danger">
           {error}
         </p>
       )}
@@ -324,17 +324,17 @@ function PasteTab({ demo, onDone }: { demo: boolean; onDone: (items: Item[]) => 
         <div className="space-y-3">
           <ul className="m-0 list-none space-y-2 p-0">
             {rows.map((r, i) => (
-              <li key={i} className={`space-y-2 border border-line bg-surface-2 p-3 ${r.needs_confirm && !r.ok ? "border-l-4 border-l-hold" : ""}`}>
+              <li key={i} className={`space-y-2 border border-line bg-surface-1 p-3 ${r.needs_confirm && !r.ok ? "border-l-4 border-l-warning" : ""}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 text-[13px]">
-                    <p className="m-0 truncate text-text">{r.name || "—"}</p>
+                    <p className="m-0 truncate text-ink">{r.name || "—"}</p>
                     <p className="m-0 truncate text-xs text-muted">
                       {r.kind}
                       {r.why?.[0] ? ` · ${r.why[0]}` : ""}
                     </p>
                   </div>
                   <span
-                    className={`shrink-0 font-mono text-[11px] ${r.confidence >= 0.8 ? "text-clear" : "text-hold"}`}
+                    className={`shrink-0 font-mono text-[11px] ${r.confidence >= 0.8 ? "text-success" : "text-warning"}`}
                     title="How sure the reading is (Comprehend + the rules)"
                   >
                     {Math.round(r.confidence * 100)}%
@@ -354,7 +354,7 @@ function PasteTab({ demo, onDone }: { demo: boolean; onDone: (items: Item[]) => 
                     className="h-8 font-mono text-[13px]"
                   />
                 </div>
-                <label className="flex items-center gap-2 text-[13px] text-text">
+                <label className="flex items-center gap-2 text-[13px] text-ink">
                   <input type="checkbox" checked={r.ok} onChange={(e) => update(i, { ok: e.target.checked })} className="size-4 accent-[var(--primary-brand)]" />
                   {r.needs_confirm ? "Looks right: add it" : "Add it"}
                 </label>
@@ -436,7 +436,7 @@ function VehicleTab({ demo, onDone }: { demo: boolean; onDone: (items: Item[]) =
       </div>
       <p className="m-0 text-xs text-muted">Checked against NHTSA campaigns for the same make, model and year.</p>
       {error && (
-        <p role="alert" className="m-0 text-[13px] text-alert">
+        <p role="alert" className="m-0 text-[13px] text-danger">
           {error}
         </p>
       )}

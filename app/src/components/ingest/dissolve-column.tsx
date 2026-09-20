@@ -99,7 +99,7 @@ export const DissolveColumn = memo(
                 after Publish announces the result */}
             <p className="m-0 flex items-baseline gap-2">
               {/* written directly while rows land; React only ever renders its first "0" */}
-              <span ref={counter} className="font-display text-5xl leading-none font-semibold text-text tabular-nums">
+              <span ref={counter} className="font-display text-5xl leading-none font-semibold text-ink tabular-nums">
                 0
               </span>
               <span className="text-sm text-muted">notices</span>
@@ -128,7 +128,7 @@ export const DissolveColumn = memo(
 const LandedRow = memo(function LandedRow({ notice }: { notice: RowNotice }) {
   const [product, batch, test] = rowTexts(notice);
   return (
-    <li className="border-b border-line bg-surface-2 contain-content">
+    <li className="border-b border-line bg-surface-1 contain-content">
       <div className={ROW_GRID} title={`${notice.product} · ${notice.maker}`}>
         <span className={ROW_CHIP}>CDSCO</span>
         <span className={ROW_CELLS[0]}>{product}</span>

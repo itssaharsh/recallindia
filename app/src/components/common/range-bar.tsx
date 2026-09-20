@@ -17,7 +17,7 @@ export function RangeBar({ check }: { check: RangeCheck }) {
   const reduce = useReducedMotion();
   const years = parseYears(check);
   const hit = check.inside === true;
-  const tone = check.inside === true ? "bg-alert" : check.inside === false ? "bg-hold" : "bg-muted";
+  const tone = check.inside === true ? "bg-primary" : check.inside === false ? "bg-warning" : "bg-line-strong";
   const draw = reduce
     ? { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: CROSSFADE }
     : { initial: { scaleX: 0 }, animate: { scaleX: 1 }, transition: DRAW };
@@ -31,7 +31,7 @@ export function RangeBar({ check }: { check: RangeCheck }) {
         : `${yours} · outside ${spanLabel(from, to)}`;
     return (
       <div className="space-y-1.5" role="img" aria-label={`Model year ${label}`}>
-        <div className="relative h-2 bg-surface-3">
+        <div className="relative h-2 bg-surface-2">
           <motion.div
             className="absolute inset-y-0 origin-left bg-line"
             style={{ left: pos(from - 0.5), width: `calc(${pos(to + 0.5)} - ${pos(from - 0.5)})` }}
@@ -43,7 +43,7 @@ export function RangeBar({ check }: { check: RangeCheck }) {
             aria-hidden
           />
         </div>
-        <p className="font-mono text-xs text-text">{label}</p>
+        <p className="font-mono text-xs text-ink">{label}</p>
       </div>
     );
   }
@@ -57,21 +57,23 @@ export function RangeBar({ check }: { check: RangeCheck }) {
   return (
     <div className="space-y-1.5" role="img" aria-label={`${check.kind === "serial" ? "Serial" : "Batch"} ${label}; listed: ${listed.join(", ") || "none"}`}>
       <div className="flex items-center gap-2">
-        <motion.div className="flex min-w-0 flex-1 origin-left items-center gap-1 bg-surface-3 px-1 py-1" {...draw}>
+        <motion.div className="flex min-w-0 flex-1 origin-left items-center gap-1 bg-surface-2 px-1 py-1" {...draw}>
           {listed.map((b) => (
             <span
               key={b}
-              className={`truncate px-1.5 py-0.5 font-mono text-[11px] ${hit && eq(b, yours) ? "bg-alert text-surface-0" : "bg-surface-1 text-muted"}`}
+              className={`truncate rounded-sm px-1.5 py-0.5 font-mono text-[11px] ${
+                hit && eq(b, yours) ? "bg-surface-1 text-ink outline-2 outline-primary" : "bg-surface-1 text-muted"
+              }`}
             >
               {b}
             </span>
           ))}
         </motion.div>
         {!hit && (
-          <span className={`shrink-0 px-1.5 py-0.5 font-mono text-[11px] text-surface-0 ${tone}`}>{yours}</span>
+          <span className={`shrink-0 rounded-sm px-1.5 py-0.5 font-mono text-[11px] text-accent-ink ${tone}`}>{yours}</span>
         )}
       </div>
-      <p className="font-mono text-xs text-text">{label}</p>
+      <p className="font-mono text-xs text-ink">{label}</p>
     </div>
   );
 }

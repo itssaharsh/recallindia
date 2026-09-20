@@ -3,7 +3,7 @@
 import { fmtCount, fmtWhen } from "@/lib/format";
 import type { Health, SourceStat, Stats } from "@/lib/types";
 
-const DOT: Record<Health, string> = { healthy: "bg-clear", degraded: "bg-hold", down: "bg-alert" };
+const DOT: Record<Health, string> = { healthy: "bg-success", degraded: "bg-warning", down: "bg-danger" };
 
 function healthText(s: SourceStat): string {
   if (s.health === "healthy") return `healthy, last success ${fmtWhen(s.last_success_at)}`;
@@ -26,7 +26,7 @@ export function SourceFilters({
 }) {
   const chip = (on: boolean) =>
     `inline-flex h-8 items-center gap-2 rounded-sm border px-2.5 text-[13px] transition-colors ${
-      on ? "border-primary-strong bg-surface-3 text-text" : "border-line text-muted hover:bg-surface-2 hover:text-text"
+      on ? "border-primary bg-surface-2 text-ink" : "border-line text-muted hover:bg-surface-2 hover:text-ink"
     }`;
   return (
     <div role="group" aria-label="Filter by source" className="flex flex-wrap items-center gap-2">
@@ -46,7 +46,7 @@ export function SourceFilters({
           <span aria-hidden className={`size-2 rounded-full ${DOT[s.health]}`} />
           <span>{s.label}</span>
           <span className="font-mono text-xs text-muted">{fmtCount(s.count)}</span>
-          <span className={s.health === "healthy" ? "sr-only" : "text-xs text-hold"}>{healthText(s)}</span>
+          <span className={s.health === "healthy" ? "sr-only" : "text-xs text-warning"}>{healthText(s)}</span>
         </button>
       ))}
     </div>

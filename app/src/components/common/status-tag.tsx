@@ -1,10 +1,10 @@
 const TONE = {
-  alert: "text-alert",
-  hold: "text-hold",
-  dismissed: "text-hold",
-  clear: "text-clear",
+  alert: "text-danger",
+  hold: "text-warning",
+  dismissed: "text-warning",
+  clear: "text-success",
   unchecked: "text-muted",
-  checking: "text-primary-strong",
+  checking: "text-primary",
 } as const;
 
 export type Tone = keyof typeof TONE;

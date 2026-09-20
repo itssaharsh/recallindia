@@ -49,8 +49,8 @@ export function ApprovalGate({
   if (status === "verified" || status === "approving" || status === "sealing" || status === "writing_letter" || status === "verifying") {
     return (
       <div className={`${frame} flex items-center gap-2.5`}>
-        <Check aria-hidden className="size-4 text-clear" />
-        <p className="text-[14px] text-text">
+        <Check aria-hidden className="size-4 text-success" />
+        <p className="text-[14px] text-ink">
           Approved at {fmtHm(approvedAt)} · the pipeline resumed
         </p>
       </div>
@@ -59,7 +59,7 @@ export function ApprovalGate({
   if (status === "rejected") {
     return (
       <div className={frame}>
-        <p className="text-[14px] text-text">
+        <p className="text-[14px] text-ink">
           Rejected at {fmtHm(c.approval?.rejected_at)} · no letter was written
         </p>
       </div>
@@ -68,7 +68,7 @@ export function ApprovalGate({
   if (status === "expired") {
     return (
       <div className={frame}>
-        <p className="text-[14px] text-text">
+        <p className="text-[14px] text-ink">
           This approval expired after 24 hours. Check the item again to start a new case.
         </p>
       </div>
@@ -77,8 +77,8 @@ export function ApprovalGate({
 
   return (
     <div className={`${frame} space-y-3`}>
-      <h2 className="font-display text-xl font-semibold text-text">Approve the claim letter</h2>
-      <p className="text-[15px] leading-relaxed text-text">
+      <h2 className="font-display text-xl font-semibold text-ink">Approve the claim letter</h2>
+      <p className="text-[15px] leading-relaxed text-ink">
         RecallIndia will seal a copy of this notice as evidence, then write a letter to the {seller(item)} asking for{" "}
         {remedyWord(item, notice)} that cites it. Nothing is sent; you download the letter.
       </p>
@@ -102,7 +102,7 @@ export function ApprovalGate({
               type="button"
               onClick={onReject}
               disabled={busy !== null}
-              className="rounded-sm px-2 py-1 text-sm text-muted hover:text-text disabled:opacity-50"
+              className="rounded-sm px-2 py-1 text-sm text-muted hover:text-ink disabled:opacity-50"
             >
               {busy === "reject" ? "Rejecting…" : "Reject"}
             </button>
@@ -113,7 +113,7 @@ export function ApprovalGate({
         </>
       )}
       {error && (
-        <p role="alert" className="text-[13px] text-hold">
+        <p role="alert" className="text-[13px] text-warning">
           {error}
         </p>
       )}

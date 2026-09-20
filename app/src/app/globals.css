@@ -3,68 +3,87 @@
 @import "shadcn/tailwind.css";
 
 /*
- * RecallIndia tokens -- DESIGN.md is binding. One aesthetic word: ledger.
- * Dark by default (an ops / records console); the /api docs route is the one light route (P10).
+ * RecallIndia tokens -- DESIGN.md (Gazette & Foil) is binding. Two objects: the gazette (a
+ * printed public notice: ruled tables, newsprint) and the foil (the back of a medicine strip,
+ * where the batch code is dot-printed).
+ *
+ * Light only. The source world is paper, and light surfaces keep their detail after YouTube
+ * compression, where dark gradients band. The v1 dark petrol ledger is retired; petrol survives
+ * as the accent, which in code is --primary (shadcn already owns --accent for hover surfaces).
  *
  * The shadcn 5-edit fix:
- *  1. neutral palette -> the navy surface ladder (elevation by lightness, not shadow)
- *  2. radius off the default -> the real scale 0 / 4 / 10 / 18
- *  3. font tokens -> Bricolage Grotesque / IBM Plex Sans / IBM Plex Mono
- *  4. one accent -> petrol primary; the only red is the alert
- *  5. one signature token shadcn does not ship -> --paper (the notice excerpt, a printed record)
+ *  1. neutral palette -> the newsprint ladder (canvas -> surface-1 -> surface-2)
+ *  2. radius off the default -> 0 / 2 / 6 / 10, and records stay 0
+ *  3. font tokens -> Schibsted Grotesk / IBM Plex Mono / Doto (the foil chip only)
+ *  4. one accent -> petrol #0B5D7A; the only red is "something you own is affected"
+ *  5. one signature token shadcn does not ship -> --foil-hi/--foil-lo, the brushed foil chip
  *
- * Contrast (WCAG AA, measured from OKLCH lightness): text 94% and text-muted 68% on every
- * surface >= 5.9:1; alert 62% >= 4.6:1 on surface-2; primary 58% as text 4.6:1 (links use
- * primary-strong 70%, 7.4:1); dark text (surface-0) on the primary fill 4.6:1.
+ * Contrast (WCAG 2, measured on their usual background): ink 15.0:1 on canvas, ink-muted 6.2:1,
+ * primary 6.3:1, line-strong 3.35:1 (a border, not text), accent-ink 6.95:1 on primary, and the
+ * text-on-soft-tint pairs 4.7-5.0:1.
  */
-
-@custom-variant dark (&:is(.dark *));
 
 :root {
   /* DESIGN.md colours, verbatim */
-  --primary-brand: oklch(58% 0.14 215);
-  --primary-strong: oklch(70% 0.16 215);
-  --surface-0: oklch(15% 0.02 240);
-  --surface-1: oklch(19% 0.02 240);
-  --surface-2: oklch(23% 0.02 240);
-  --surface-3: oklch(28% 0.02 240);
-  --line: oklch(32% 0.02 240);
-  --text: oklch(94% 0.01 240);
-  --text-muted: oklch(68% 0.02 240);
-  --alert: oklch(62% 0.19 25);
-  --hold: oklch(74% 0.14 80);
-  --clear: oklch(72% 0.13 160);
-  --evidence: oklch(80% 0.06 215);
-  /* signature token: the regulator's record, printed on off-white paper in dark ink */
-  --paper: oklch(95% 0.012 95);
-  --ink: oklch(24% 0.02 240);
-  --alert-face: color-mix(in oklch, var(--alert) 16%, var(--surface-2));
+  --canvas: #eceeea;
+  --surface-1: #f8f9f6;
+  --surface-2: #e1e4de;
+  --line: #c3c8c0;
+  --line-strong: #7f8b85;
+  --ink: #0e1b23;
+  --ink-muted: #4a5962;
+  --primary: #0b5d7a;
+  --primary-hover: #004c65;
+  --primary-press: #003b4f;
+  --primary-foreground: #f8f9f6;
+  --accent-soft: #d2dcdc;
+  --mark: #cfdcdf;
+  --success: #1b6b45;
+  --success-soft: #d3ded5;
+  --warning: #7a5200;
+  --warning-soft: #dedacf;
+  --danger: #b3121e;
+  --danger-hover: #990013;
+  --danger-soft: #e9d7d1;
+  /* the one gradient in the product: brushed foil behind a dot-matrix batch code */
+  --foil-hi: #f1f2f1;
+  --foil-lo: #c9cdcb;
 
   /* shadcn roles mapped onto the ladder */
-  --background: var(--surface-0);
-  --foreground: var(--text);
-  --card: var(--surface-2);
-  --card-foreground: var(--text);
+  --background: var(--canvas);
+  --foreground: var(--ink);
+  --card: var(--surface-1);
+  --card-foreground: var(--ink);
   --popover: var(--surface-1);
-  --popover-foreground: var(--text);
-  --primary: var(--primary-brand);
-  --primary-foreground: var(--surface-0);
-  --secondary: var(--surface-3);
-  --secondary-foreground: var(--text);
-  --muted: var(--surface-1);
-  --muted-foreground: var(--text-muted);
-  --accent: var(--surface-3);
-  --accent-foreground: var(--text);
-  --destructive: var(--alert);
+  --popover-foreground: var(--ink);
+  --secondary: var(--surface-1);
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--ink-muted);
+  --accent: var(--surface-2);
+  --accent-foreground: var(--ink);
+  --destructive: var(--danger);
   --border: var(--line);
-  --input: var(--line);
-  --ring: var(--primary-strong);
-  --radius: 10px;
-}
+  --input: var(--line-strong);
+  --ring: var(--primary);
+  --radius: 6px;
 
-.dark {
-  /* dark is the only theme outside /api: same values */
-  --background: var(--surface-0);
+  /* motion (UI-SPEC §6): one set of easings and durations for every transition */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-enter: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --ease-exit: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --dur-press: 120ms;
+  --dur-hover: 150ms;
+  --dur-pop: 200ms;
+  --dur-modal: 280ms;
+  --dur-exit: 150ms;
+  --dur-drawer: 450ms;
+
+  /* the only two shadows: floating layers, tinted with ink. Cards on the canvas get none. */
+  --shadow-1: 0 1px 0 rgb(14 27 35 / 0.06), 0 1px 3px rgb(14 27 35 / 0.08);
+  --shadow-2: 0 2px 4px rgb(14 27 35 / 0.06), 0 12px 32px -8px rgb(14 27 35 / 0.2);
 }
 
 @theme inline {
@@ -78,8 +97,7 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
-  /* --color-muted is the muted TEXT colour below (text-muted); shadcn's bg-muted uses became
-     bg-surface-* in components/ui */
+  /* --color-muted is the muted TEXT colour (text-muted); surfaces are bg-surface-* */
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
@@ -88,34 +106,43 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  /* semantic classes: bg-surface-1, text-muted, text-alert, border-line, bg-paper ... */
-  --color-surface-0: var(--surface-0);
+  /* semantic classes: bg-canvas, bg-surface-1, text-ink, text-muted, border-line, bg-mark ... */
+  --color-canvas: var(--canvas);
   --color-surface-1: var(--surface-1);
   --color-surface-2: var(--surface-2);
-  --color-surface-3: var(--surface-3);
   --color-line: var(--line);
-  --color-text: var(--text);
-  --color-muted: var(--text-muted);
-  --color-alert: var(--alert);
-  --color-alert-face: var(--alert-face);
-  --color-hold: var(--hold);
-  --color-clear: var(--clear);
-  --color-evidence: var(--evidence);
-  --color-paper: var(--paper);
+  --color-line-strong: var(--line-strong);
   --color-ink: var(--ink);
-  --color-primary-strong: var(--primary-strong);
+  --color-muted: var(--ink-muted);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--primary-foreground);
+  --color-mark: var(--mark);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-soft: var(--danger-soft);
+  --color-foil-hi: var(--foil-hi);
+  --color-foil-lo: var(--foil-lo);
 
-  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-plex-mono), ui-monospace, "SFMono-Regular", monospace;
-  --font-display: var(--font-bricolage), var(--font-plex-sans), ui-sans-serif, sans-serif;
+  --font-sans: var(--ff-display), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--ff-mono), ui-monospace, "SFMono-Regular", monospace;
+  --font-display: var(--ff-display), ui-sans-serif, sans-serif;
   --font-heading: var(--font-display);
+  /* the foil chip only: a batch code, never a word (DESIGN.md typography) */
+  --font-foil: var(--ff-foil), var(--font-mono);
 
-  /* the radius scale is real: records 0, inputs/chips 4, item cards 10, sheets 18 */
+  /* the radius scale is real: records 0, chips 2, buttons/cards 6, sheets 10 */
   --radius-none: 0px;
-  --radius-sm: 4px;
-  --radius-md: 10px;
-  --radius-lg: 18px;
-  --radius-xl: 18px;
+  --radius-sm: 2px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 10px;
+
+  --shadow-pop: var(--shadow-1);
+  --shadow-layer: var(--shadow-2);
 }
 
 @layer base {
@@ -124,27 +151,27 @@
   }
   html {
     @apply font-sans;
-    color-scheme: dark;
+    color-scheme: light;
   }
   body {
     @apply bg-background text-foreground antialiased;
     font-variant-numeric: tabular-nums;
   }
   ::selection {
-    background: color-mix(in oklch, var(--primary-brand) 45%, transparent);
-    color: var(--text);
+    background: var(--accent-soft);
+    color: var(--ink);
   }
   :focus-visible {
-    outline: 2px solid var(--primary-strong);
+    outline: 2px solid var(--primary);
     outline-offset: 2px;
   }
   * {
-    scrollbar-color: var(--surface-3) transparent;
+    scrollbar-color: var(--line-strong) transparent;
   }
 }
 
 /* Motion only on state change (DESIGN.md); anything CSS-driven collapses for reduced motion.
-   The four named animations run through motion/react and use useReducedMotion themselves. */
+   The named animations run through motion/react and use useReducedMotion themselves. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -154,13 +181,24 @@
   }
 }
 
+/* The foil chip: a batch code as it is dot-printed on the back of a strip (C-11). */
+.foil-chip {
+  background: linear-gradient(180deg, var(--foil-hi) 0%, #dde0de 46%, var(--foil-lo) 54%, #e6e8e7 100%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.7),
+    inset 0 0 0 1px rgb(14 27 35 / 0.14);
+  font-family: var(--font-foil);
+  letter-spacing: 0.06em;
+  color: var(--ink);
+}
+
 /* /ingest: an outline per extracted row over the PDF page; the dissolve engine sets its state:
    shown (read) -> gone (its row lifted off: an empty slot) -> done (the page whole again).
    State changes are instant on purpose: 57 CSS transitions fire ~1,200 transition events through
    React's root listener during a dissolve (measured), and the flight covers the change anyway. */
 .ingest-outline {
   opacity: 0;
-  border: 1px solid color-mix(in oklch, var(--evidence) 65%, transparent);
+  border: 1px solid color-mix(in oklch, var(--primary) 55%, transparent);
 }
 .ingest-outline[data-state="shown"],
 .ingest-outline[data-state="gone"],
@@ -168,11 +206,11 @@
   opacity: 1;
 }
 .ingest-outline[data-state="gone"] {
-  background-color: var(--paper);
+  background-color: var(--surface-1);
   border: 1px dashed color-mix(in oklch, var(--ink) 30%, transparent);
 }
 .ingest-outline[data-state="done"] {
-  border-color: color-mix(in oklch, var(--evidence) 40%, transparent);
+  border-color: color-mix(in oklch, var(--primary) 30%, transparent);
 }
 .ingest-fade-in {
   animation: ingest-fade 150ms linear both;

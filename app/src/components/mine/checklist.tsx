@@ -4,9 +4,9 @@ import type { CheckStep, Item, StepName, StepState } from "@/lib/types";
 export const GLYPH: Record<StepState, string> = { pending: "○", running: "◐", done: "●", failed: "●", skipped: "○" };
 export const TONE: Record<StepState, string> = {
   pending: "text-muted",
-  running: "text-primary-strong",
-  done: "text-text",
-  failed: "text-alert",
+  running: "text-primary",
+  done: "text-ink",
+  failed: "text-danger",
   skipped: "text-muted line-through decoration-line",
 };
 export const STATE_WORD: Record<StepState, string> = {
@@ -72,7 +72,7 @@ export function Checklist({ steps, item, sources }: { steps: CheckStep[]; item: 
           <span aria-hidden className={`w-3 shrink-0 font-mono ${TONE[step.state]}`}>
             {GLYPH[step.state]}
           </span>
-          <span className={step.state === "done" ? "text-text" : step.state === "failed" ? "text-alert" : "text-muted"}>
+          <span className={step.state === "done" ? "text-ink" : step.state === "failed" ? "text-danger" : "text-muted"}>
             {copy(step, item, sources)}
             <span className="sr-only"> ({STATE_WORD[step.state]})</span>
           </span>

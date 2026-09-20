@@ -122,7 +122,7 @@ export function FeedView() {
   return (
     <section aria-labelledby="feed-title" className="flex flex-col">
       <div className="flex flex-col gap-3 border-b border-line px-5 py-4">
-        <h1 id="feed-title" className="font-display text-lg font-semibold text-text">
+        <h1 id="feed-title" className="font-display text-lg font-semibold text-ink">
           Feed <span className="font-sans text-sm font-normal text-muted">· newest first{shown ? ` · ${shown.label} only` : ""}</span>
         </h1>
         <SourceFilters stats={stats} value={source} onChange={setSource} />

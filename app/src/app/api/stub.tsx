@@ -30,9 +30,9 @@ function CopyButton({ text }: { text: string }) {
           setCopied(false);
         }
       }}
-      className="inline-flex size-7 shrink-0 items-center justify-center rounded-sm border border-line text-muted hover:bg-surface-2 hover:text-text"
+      className="inline-flex size-7 shrink-0 items-center justify-center rounded-sm border border-line text-muted hover:bg-surface-2 hover:text-ink"
     >
-      {copied ? <Check aria-hidden className="size-3.5 text-clear" /> : <Copy aria-hidden className="size-3.5" />}
+      {copied ? <Check aria-hidden className="size-3.5 text-success" /> : <Copy aria-hidden className="size-3.5" />}
     </button>
   );
 }
@@ -43,7 +43,7 @@ export function ApiStub() {
   const { href } = useAppState();
   return (
     <section aria-label="Public API" className="mx-auto max-w-3xl px-5 py-6 md:py-8">
-      <h1 className="font-display text-3xl font-semibold text-text md:text-4xl">Public API</h1>
+      <h1 className="font-display text-3xl font-semibold text-ink md:text-4xl">Public API</h1>
       <p className="mt-2 text-[15px] leading-relaxed text-muted">
         Every notice on the feed is on the HTTP API too, as JSON. No key, no sign-up, CORS open.
       </p>
@@ -52,7 +52,7 @@ export function ApiStub() {
           <li key={call.curl} className="space-y-1.5">
             <p className="text-[13px] text-muted">{call.what}</p>
             <div className="flex items-start gap-2">
-              <pre className="min-w-0 flex-1 overflow-x-auto border border-line bg-surface-1 px-3 py-2 font-mono text-[12.5px] leading-relaxed text-text">
+              <pre className="min-w-0 flex-1 overflow-x-auto border border-line bg-surface-1 px-3 py-2 font-mono text-[12.5px] leading-relaxed text-ink">
                 {call.curl}
               </pre>
               <CopyButton text={call.curl} />
@@ -62,7 +62,7 @@ export function ApiStub() {
       </ul>
       <Link
         href={href("/")}
-        className="mt-6 inline-flex h-8 items-center rounded-sm border border-line px-2.5 text-sm font-medium text-text hover:bg-surface-2"
+        className="mt-6 inline-flex h-8 items-center rounded-sm border border-line px-2.5 text-sm font-medium text-ink hover:bg-surface-2"
       >
         See the same notices on the feed
       </Link>

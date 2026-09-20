@@ -98,10 +98,10 @@ export function ItemCard({
   const wide = face === "alert" || face === "dismissed";
   const frame = `rounded-md border ${
     face === "alert"
-      ? "border-alert bg-alert-face shadow-[0_18px_40px_-20px_oklch(0%_0_0_/_0.75)]"
+      ? "border-danger bg-danger shadow-[0_18px_40px_-20px_oklch(0%_0_0_/_0.75)]"
       : face === "hold" || face === "dismissed"
-        ? "border-line border-l-4 border-l-hold bg-surface-2"
-        : "border-line bg-surface-2"
+        ? "border-line border-l-4 border-l-warning bg-surface-1"
+        : "border-line bg-surface-1"
   }`;
 
   const front = <Front item={item} face={face} sources={sources} demo={demo} onCheck={() => onCheck(item)} busy={checking} />;
@@ -109,7 +109,7 @@ export function ItemCard({
     <div className="flex h-full flex-col gap-3 p-4">
       <div className="flex items-start justify-between gap-3">
         <p className="m-0 text-[13px] text-muted">
-          Checking <span className="text-text">{item.name}</span>
+          Checking <span className="text-ink">{item.name}</span>
         </p>
         <StatusTag tone="checking" label="Checking" />
       </div>
@@ -127,7 +127,7 @@ export function ItemCard({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={CROSSFADE}
-            className={`min-h-44 ${checking ? "rounded-md border border-line bg-surface-2" : frame}`}
+            className={`min-h-44 ${checking ? "rounded-md border border-line bg-surface-1" : frame}`}
           >
             {checking ? back : front}
           </motion.div>
@@ -146,7 +146,7 @@ export function ItemCard({
             {front}
           </div>
           <div
-            className="[grid-area:1/1] rounded-md border border-line bg-surface-2 [backface-visibility:hidden] [transform:rotateY(180deg)]"
+            className="[grid-area:1/1] rounded-md border border-line bg-surface-1 [backface-visibility:hidden] [transform:rotateY(180deg)]"
             aria-hidden={!checking}
           >
             {(checking || backMounted) && back}
@@ -193,7 +193,7 @@ function Front({
     <div className="flex h-full flex-col gap-3 p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="m-0 truncate font-display text-base font-semibold text-text">{item.name}</h3>
+          <h3 className="m-0 truncate font-display text-base font-semibold text-ink">{item.name}</h3>
           <p className="m-0 truncate text-xs text-muted">
             {[item.brand, identifier(item)].filter(Boolean).join(" · ") || item.kind}
           </p>
@@ -203,7 +203,7 @@ function Front({
 
       {face === "alert" && c && (
         <>
-          <p className="m-0 font-display text-[17px] leading-snug font-semibold text-text">{alertHeadline(c.notice_id, headline)}</p>
+          <p className="m-0 font-display text-[17px] leading-snug font-semibold text-ink">{alertHeadline(c.notice_id, headline)}</p>
           {c.range_check && <RangeBar check={c.range_check} />}
           {(notice?.raw_excerpt || c.quoted_sentence) && (
             <SourceExcerpt
@@ -214,13 +214,13 @@ function Front({
             />
           )}
           {notice && notice.source !== "cdsco_nsq" && riskSentence(notice) && (
-            <p className="m-0 text-[13px] leading-snug text-text">
+            <p className="m-0 text-[13px] leading-snug text-ink">
               <span className="text-muted">Risk: </span>
               {riskSentence(notice)}
             </p>
           )}
           {c.sold_after_notice && item.purchase_date && notice && (
-            <p className="m-0 text-[13px] text-text">
+            <p className="m-0 text-[13px] text-ink">
               Bought {fmtDay(item.purchase_date)}, after the notice of {fmtDay(notice.published_at)}.
             </p>
           )}
@@ -229,7 +229,7 @@ function Front({
 
       {face === "dismissed" && c && (
         <>
-          <p className="m-0 text-[13px] text-text">Dismissed: {c.reason}</p>
+          <p className="m-0 text-[13px] text-ink">Dismissed: {c.reason}</p>
           {c.range_check && <RangeBar check={c.range_check} />}
           {notice && (
             <p className="m-0 text-xs text-muted">
@@ -240,7 +240,7 @@ function Front({
       )}
 
       {face === "hold" && c && (
-        <p className="m-0 text-[13px] text-text">
+        <p className="m-0 text-[13px] text-ink">
           {sentence(headline)}
           {detail ? `; ${detail}` : ""}
         </p>
@@ -262,7 +262,7 @@ function Front({
           {c?.case_id && (
             <Link
               href={href(`/case/?id=${encodeURIComponent(c.case_id)}`)}
-              className="inline-flex h-7 items-center gap-1 rounded-sm px-2 text-[13px] whitespace-nowrap text-primary-strong hover:bg-surface-3"
+              className="inline-flex h-7 items-center gap-1 rounded-sm px-2 text-[13px] whitespace-nowrap text-primary hover:bg-surface-2"
             >
               Open case <ArrowUpRight aria-hidden className="size-3.5" />
             </Link>
@@ -284,10 +284,10 @@ function Front({
 
 export function ItemCardSkeleton() {
   return (
-    <li aria-hidden className="flex min-h-44 list-none flex-col gap-3 rounded-md border border-line bg-surface-2 p-4">
-      <span className="h-4 w-2/3 bg-surface-3" />
-      <span className="h-3 w-1/2 bg-surface-3" />
-      <span className="mt-auto h-3 w-3/4 bg-surface-3" />
+    <li aria-hidden className="flex min-h-44 list-none flex-col gap-3 rounded-md border border-line bg-surface-1 p-4">
+      <span className="h-4 w-2/3 bg-surface-2" />
+      <span className="h-3 w-1/2 bg-surface-2" />
+      <span className="mt-auto h-3 w-3/4 bg-surface-2" />
     </li>
   );
 }

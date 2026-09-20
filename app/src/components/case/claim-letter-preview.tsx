@@ -69,10 +69,10 @@ export function ClaimLetterPreview({
   if (writing) {
     return (
       <section aria-label="Claim letter" className="space-y-3">
-        <h2 className="font-display text-lg font-semibold text-text">Writing the letter…</h2>
+        <h2 className="font-display text-lg font-semibold text-ink">Writing the letter…</h2>
         <div aria-hidden className="space-y-2 border border-line bg-surface-1 px-8 py-8">
           {[90, 96, 72, 88, 40].map((w, i) => (
-            <span key={i} className="block h-3 animate-pulse bg-surface-2" style={{ width: `${w}%` }} />
+            <span key={i} className="block h-3 animate-pulse bg-surface-1" style={{ width: `${w}%` }} />
           ))}
         </div>
       </section>
@@ -90,7 +90,7 @@ export function ClaimLetterPreview({
   return (
     <section aria-labelledby="letter-title" className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="letter-title" className="font-display text-lg font-semibold text-text">
+        <h2 id="letter-title" className="font-display text-lg font-semibold text-ink">
           The claim letter
         </h2>
         <div className="flex items-center gap-2">
@@ -115,7 +115,7 @@ export function ClaimLetterPreview({
         ))}
         <p className="mt-4 text-muted">The rest of the letter is in the PDF.</p>
       </article>
-      {error && <p className="text-[13px] text-hold">The letter couldn&apos;t be opened ({error}). Try again.</p>}
+      {error && <p className="text-[13px] text-warning">The letter couldn&apos;t be opened ({error}). Try again.</p>}
     </section>
   );
 }

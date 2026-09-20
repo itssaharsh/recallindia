@@ -19,8 +19,8 @@ export function EmptyState({
 }) {
   return (
     <div role={tone === "error" ? "alert" : "status"} className="mx-auto flex max-w-lg flex-col items-start gap-3 px-5 py-16">
-      <Icon aria-hidden className={`size-6 ${tone === "error" ? "text-alert" : "text-muted"}`} strokeWidth={1.5} />
-      <h2 className="font-display text-xl font-semibold text-text">{what}</h2>
+      <Icon aria-hidden className={`size-6 ${tone === "error" ? "text-danger" : "text-muted"}`} strokeWidth={1.5} />
+      <h2 className="font-display text-xl font-semibold text-ink">{what}</h2>
       <p className="text-sm leading-relaxed text-muted">{why}</p>
       {action && <div className="pt-1">{action}</div>}
     </div>

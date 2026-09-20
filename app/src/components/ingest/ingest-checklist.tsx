@@ -8,9 +8,9 @@ import type { StepState } from "@/lib/types";
 const GLYPH: Record<StepState, string> = { pending: "○", running: "◐", done: "●", failed: "●", skipped: "○" };
 const GLYPH_TONE: Record<StepState, string> = {
   pending: "text-muted",
-  running: "text-primary-strong",
-  done: "text-text",
-  failed: "text-alert",
+  running: "text-primary",
+  done: "text-ink",
+  failed: "text-danger",
   skipped: "text-muted",
 };
 const WORD: Record<StepState, string> = {
@@ -47,12 +47,12 @@ export const IngestChecklist = memo(function IngestChecklist({ store }: { store:
             <span aria-hidden className={`w-3 shrink-0 font-mono text-sm ${GLYPH_TONE[step.state]}`}>
               {GLYPH[step.state]}
             </span>
-            <span className={`truncate text-[13px] font-medium ${step.state === "pending" ? "text-muted" : "text-text"}`}>
+            <span className={`truncate text-[13px] font-medium ${step.state === "pending" ? "text-muted" : "text-ink"}`}>
               {STEP_LABEL[step.name]}
             </span>
             <span className="ml-auto shrink-0 font-mono text-[11px] text-muted tabular-nums">{fmtSeconds(step.ms)}</span>
           </div>
-          <p className={`m-0 text-xs leading-snug ${step.state === "failed" ? "text-alert" : "text-muted"}`}>
+          <p className={`m-0 text-xs leading-snug ${step.state === "failed" ? "text-danger" : "text-muted"}`}>
             {step.name === "Extract" && play.method && (
               <>
                 <MethodChip method={play.method} />{" "}
