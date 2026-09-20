@@ -28,7 +28,7 @@ const DOCS: Doc[] = [
     params: [
       ["source", "cdsco_nsq, cpsc, nhtsa or openfda"],
       ["since", "YYYY-MM-DD, published on or after"],
-      ["q", "Words in product, brand, batch or model"],
+      ["q", "Words in the product, brand or model"],
       ["limit", "1 to 100 · default 50"],
       ["cursor", <>{mono("next_cursor")} from the page before</>],
     ],
