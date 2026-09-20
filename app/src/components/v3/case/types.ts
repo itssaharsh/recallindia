@@ -291,5 +291,7 @@ export interface CaseViewProps {
   highlight?: string | null;
   /** Retention period copy before sealing. Default 30. */
   retentionDays?: number;
+  /** Added to the page wrapper. An app shell whose `<main>` already draws the gutter passes `px-0!`. */
+  className?: string;
   on?: CaseHandlers;
 }

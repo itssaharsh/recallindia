@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
-import { KIT_FIXTURE, KitView, ShellLinkProvider, isKitState, type ShellLinkComponent } from "@/components/v3/shell";
+import { KitView, ShellLinkProvider, isKitState, type ShellLinkComponent } from "@/components/v3/shell";
+import { KIT_FIXTURE } from "@/components/v3/shell/fixtures";
 
 function Kit() {
   const router = useRouter();

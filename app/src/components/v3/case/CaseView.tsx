@@ -74,7 +74,7 @@ export function CaseView(props: CaseViewProps) {
   const {
     state, caseRecord, notice, item, household, nearMiss, verify, tamper, verifiedAgainAt, claimPdfUrl, timedOut = false,
     pending = {}, elapsedMs, clientAudit = [], showWorkOpen = false, animateOnMount = true, bandInView: bandInViewProp,
-    sharedLayout = false, backHref = "/mine/", highlight, retentionDays = 30, on = {},
+    sharedLayout = false, backHref = "/mine/", highlight, retentionDays = 30, className, on = {},
   } = props;
 
   const live = useLive();
@@ -175,7 +175,7 @@ export function CaseView(props: CaseViewProps) {
   /* ---------------------------------------------------------------- loading */
   if (state === "loading" || !caseRecord || !notice || !item) {
     return (
-      <div aria-busy className="mx-auto w-full max-w-[1536px] px-8 max-lg:px-6 max-md:px-4">
+      <div aria-busy className={cn("mx-auto w-full max-w-[1536px] px-8 max-lg:px-6 max-md:px-4", className)}>
         <CaseCrumbs state="loading" itemName={null} caseId={null} createdAt={null} backHref={backHref} />
         <CaseHeaderSkeleton />
         <div className="mt-6 grid grid-cols-[minmax(0,1fr)_400px] items-start gap-7 max-[1440px]:grid-cols-1">
@@ -214,7 +214,7 @@ export function CaseView(props: CaseViewProps) {
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="mx-auto w-full max-w-[1536px] px-8 max-lg:px-6 max-md:px-4">
+      <div className={cn("mx-auto w-full max-w-[1536px] px-8 max-lg:px-6 max-md:px-4", className)}>
         <CaseCrumbs
           state={chrome}
           itemName={item.name}

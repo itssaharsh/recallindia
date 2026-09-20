@@ -2,6 +2,7 @@
 import * as React from "react";
 import { AnimatePresence, motion, useAnimate, useReducedMotion } from "framer-motion";
 import { Activity, Copy, Download, FileText, Key, Lock, Stamp, TriangleAlert, X } from "lucide-react";
+import { useSound } from "@/components/shell/sound";
 import { Button, cn } from "../ui";
 import { FIELD_LABEL } from "./classes";
 import {
@@ -89,6 +90,7 @@ export function EvidenceBand(props: EvidenceBandProps) {
 
   /* ---------------------------------------------------------------- choreography state */
   const [scope, animate] = useAnimate<HTMLElement>();
+  const thunk = useSound();
   const sealRef = React.useRef<HTMLDivElement>(null);
   const sealBoxRef = React.useRef<HTMLDivElement>(null);
   const centreRef = React.useRef<HTMLDivElement>(null);
@@ -113,13 +115,16 @@ export function EvidenceBand(props: EvidenceBandProps) {
   const run = React.useRef(0);
 
   const impact = React.useCallback((rings: boolean) => {
+    // the stamp's thunk lands with the impact, not with the first frame (the shell's sound toggle
+    // owns it: with sound off, or outside the provider, this is a no-op)
+    thunk();
     if (scope.current) animate(scope.current, { y: [0, 2, 0] }, { duration: 0.12, times: [0, 0.33, 1], ease: "easeOut" });
     if (rings) {
       if (ring1Ref.current) animate(ring1Ref.current, { scale: [1, 1.45], opacity: [0.55, 0] }, { duration: 0.46, ease: EASE_DRAW });
       if (ring2Ref.current) animate(ring2Ref.current, { scale: [1, 1.8], opacity: [0.3, 0] }, { duration: 0.46, ease: EASE_DRAW, delay: 0.08 });
     }
     if (typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches) navigator.vibrate?.(12);
-  }, [animate, scope]);
+  }, [animate, scope, thunk]);
 
   React.useLayoutEffect(() => {
     const from = lastSeal.current;

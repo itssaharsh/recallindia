@@ -10,14 +10,46 @@
  */
 import NumberFlow from '@number-flow/react'
 import { motion, useReducedMotionConfig, type Transition } from 'framer-motion'
+import dynamic from 'next/dynamic'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import FoilStripHero from '../FoilStripHero'
 import { Button, Dot } from '../ui'
 import { alertSourceLine, fmtInt, LOCALE, lowerReason, pollSummary } from './format'
 import { EASE_LANDING, HERO_INTRO, spring } from './motion'
 import s from './landing.module.css'
 import { CTA_XL } from './styles'
 import type { LandingData, LandingDataStatus, LandingLinks, LandingState, LandingStory } from './types'
+
+/** FoilStripHero's own default poster (app/public/strip), and what the lazy fallback paints. */
+const POSTER = '/strip/strip-poster-hero.png'
+
+/**
+ * The stage before the strip wrapper's chunk arrives: the poster alone, at the stage's exact box.
+ * It is what the static export prints, so the poster is still the LCP image and nothing shifts when
+ * FoilStripHero mounts on top of it with the same <img> (served from cache) plus its chips.
+ */
+function StripPoster() {
+  return (
+    <div aria-hidden="true" className="size-full" style={{ position: 'relative', aspectRatio: '4 / 3' }}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- static export; the poster must stay byte-identical to the 3D render */}
+      <img
+        src={POSTER}
+        alt=""
+        width={1400}
+        height={1050}
+        decoding="async"
+        fetchPriority="high"
+        draggable={false}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', userSelect: 'none' }}
+      />
+    </div>
+  )
+}
+
+/**
+ * The strip wrapper is its own lazy chunk (next/dynamic, ssr: false), so only "/" ever downloads it
+ * and three.js stays one chunk further out (FoilStripHero loads FoilStrip3D the same way).
+ */
+const FoilStripHero = dynamic(() => import('../FoilStripHero'), { ssr: false, loading: () => <StripPoster /> })
 
 export interface HeroProps {
   data: LandingData
