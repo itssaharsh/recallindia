@@ -11,7 +11,7 @@ import { SoundToggle } from "@/components/shell/sound";
 import { useAppState } from "./app-state";
 
 const NAV = [
-  { path: "/", label: "Feed", icon: Rss },
+  { path: "/feed/", label: "Feed", icon: Rss },
   { path: "/ingest/", label: "Ingest", icon: FileScan },
   { path: "/mine/", label: "My things", icon: Boxes },
   { path: "/api/", label: "API", icon: Braces },

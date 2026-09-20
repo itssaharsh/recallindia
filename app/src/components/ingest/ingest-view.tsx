@@ -299,7 +299,7 @@ export function IngestView() {
           </p>
           <Link
             prefetch={false}
-            href={href("/?source=cdsco_nsq")}
+            href={href("/feed/?source=cdsco_nsq")}
             className="ml-auto inline-flex h-8 items-center gap-1 rounded-sm border border-line px-3 text-[13px] text-primary hover:bg-surface-2"
           >
             Open in feed <ArrowUpRight aria-hidden className="size-3.5" />

@@ -12,6 +12,15 @@ const compat = new FlatCompat({
 const eslintConfig = [
   ...compat.extends("next/core-web-vitals", "next/typescript"),
   {
+    // the v3 pack ships as vendored source: its prose keeps real apostrophes and quotes, and its
+    // own type-check is the gate. Lint it for correctness, not for typography.
+    files: ["src/components/v3/**"],
+    rules: {
+      "react/no-unescaped-entities": "off",
+      "@typescript-eslint/no-unused-vars": "warn",
+    },
+  },
+  {
     ignores: [
       "node_modules/**",
       ".next/**",

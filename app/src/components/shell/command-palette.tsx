@@ -44,7 +44,7 @@ export function CommandPalette() {
         return;
       }
       if (pending === "g") {
-        const path = { f: "/", i: "/ingest/", m: "/mine/", a: "/api/" }[event.key.toLowerCase()];
+        const path = { f: "/feed/", i: "/ingest/", m: "/mine/", a: "/api/" }[event.key.toLowerCase()];
         setPending(null);
         if (path) {
           event.preventDefault();
@@ -60,7 +60,7 @@ export function CommandPalette() {
     {
       group: "Go to",
       items: [
-        { id: "feed", label: "Go to feed", hint: "g f", run: go("/") },
+        { id: "feed", label: "Go to feed", hint: "g f", run: go("/feed/") },
         { id: "ingest", label: "Go to ingest", hint: "g i", run: go("/ingest/") },
         { id: "mine", label: "Go to my things", hint: "g m", run: go("/mine/") },
         { id: "api", label: "Go to the API", hint: "g a", run: go("/api/") },
@@ -70,7 +70,7 @@ export function CommandPalette() {
       group: "Filter the feed",
       items: Object.entries(SOURCE_LABEL)
         .filter(([id]) => id !== "siam")
-        .map(([id, label]) => ({ id: `source-${id}`, label: `Filter feed: ${label}`, run: go(`/?source=${id}`) })),
+        .map(([id, label]) => ({ id: `source-${id}`, label: `Filter feed: ${label}`, run: go(`/feed/?source=${id}`) })),
     },
     {
       group: "This household",
