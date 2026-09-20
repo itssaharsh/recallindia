@@ -97,7 +97,7 @@ export function ShowWork({
         <div id="case-work" className="grid gap-8 pt-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
           <div className="min-w-0 space-y-5">
             <div className="space-y-2">
-              <h3 className="font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">Verification chain</h3>
+              <h3 className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">Verification chain</h3>
               <ol className="list-none space-y-1.5 p-0">
                 {CHAIN.map((name) => {
                   const step = steps?.find((s) => s.name === name);
@@ -117,7 +117,7 @@ export function ShowWork({
               </ol>
             </div>
             <div className="space-y-2">
-              <h3 className="font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">
+              <h3 className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">
                 Verifier reasoning{c.verifier ? ` · ${c.verifier}` : ""}
                 {typeof c.confidence === "number" ? ` · confidence ${c.confidence}` : ""}
               </h3>
@@ -130,13 +130,13 @@ export function ShowWork({
             </div>
             {c.execution_arn && (
               <div className="space-y-1">
-                <h3 className="font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">Step Functions execution</h3>
-                <p className="font-mono text-[12px] break-all text-ink">{c.execution_arn}</p>
+                <h3 className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">Step Functions execution</h3>
+                <p className="font-mono text-[12px] text-ink [overflow-wrap:anywhere]">{c.execution_arn}</p>
               </div>
             )}
           </div>
           <div className="min-w-0 space-y-2">
-            <h3 className="font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">Audit trail</h3>
+            <h3 className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">Audit trail</h3>
             <ol className="list-none border-t border-line p-0 font-mono text-[12px]">
               {(c.audit ?? []).map((a, i) => {
                 const detail = detailText(a.detail);

@@ -216,7 +216,7 @@ export function CaseView() {
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           {notice && <SourceChip notice={notice} />}
           {c.created_at && <span className="text-xs text-muted">case opened {fmtDay(c.created_at)}</span>}
-          <span className="font-mono text-[11px] text-muted">{c.case_id}</span>
+          <span className="font-mono text-[11px] break-all text-muted">{c.case_id}</span>
         </div>
         <h1
           id="case-title"
@@ -231,7 +231,7 @@ export function CaseView() {
             {c.sold_after_notice && (
               <>
                 <span className="text-muted"> → </span>
-                <strong className="font-semibold text-danger">sold after notice</strong>
+                <strong className="font-bold text-ink">sold after notice</strong>
               </>
             )}
           </p>
@@ -242,7 +242,7 @@ export function CaseView() {
         <div className="min-w-0 space-y-8">
           <section aria-labelledby="notice-heading" className="min-w-0 space-y-4">
             <div className="space-y-1">
-              <h2 id="notice-heading" className="font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">
+              <h2 id="notice-heading" className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">
                 The notice
               </h2>
               {notice && (
@@ -297,7 +297,7 @@ export function CaseView() {
             )}
             {c.range_check && (
               <div className="space-y-2">
-                <h3 className="font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">
+                <h3 className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">
                   Your {unit} against the list
                 </h3>
                 <RangeBar check={c.range_check} />
@@ -356,7 +356,7 @@ export function CaseView() {
           <aside aria-labelledby="case-file" className="min-w-0 lg:sticky lg:top-6 lg:self-start">
             <div className="space-y-4 rounded-md border border-line bg-surface-1 p-4">
               <div className="flex items-center justify-between gap-2">
-                <h2 id="case-file" className="font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">
+                <h2 id="case-file" className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">
                   Case file
                 </h2>
                 <StatusChip c={c} />

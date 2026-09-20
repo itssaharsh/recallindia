@@ -4,7 +4,7 @@ import { Check, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { addressee, snapshotNoun } from "@/lib/case";
-import { fmtHm } from "@/lib/format";
+import { fmtClock } from "@/lib/format";
 import type { Case, Item, Notice } from "@/lib/types";
 
 /** What the letter will ask for, in the words the letter uses. */
@@ -51,7 +51,7 @@ export function ApprovalGate({
       <div className={`${frame} flex items-center gap-2.5`}>
         <Check aria-hidden className="size-4 text-success" />
         <p className="text-[14px] text-ink">
-          Approved at {fmtHm(approvedAt)} · the pipeline resumed
+          Approved at {fmtClock(approvedAt)} · the pipeline resumed
         </p>
       </div>
     );
@@ -60,7 +60,7 @@ export function ApprovalGate({
     return (
       <div className={frame}>
         <p className="text-[14px] text-ink">
-          Rejected at {fmtHm(c.approval?.rejected_at)} · no letter was written
+          Rejected at {fmtClock(c.approval?.rejected_at)} · no letter was written
         </p>
       </div>
     );

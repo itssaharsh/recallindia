@@ -1,11 +1,13 @@
 import type { Notice, SourceId } from "./types";
 
-// Times are shown in the viewer's local time, 24-hour, so "last poll 14:02:11" reads the same
-// in the video and in a browser in Mumbai.
-const TIME = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
-const HM = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
-const DAY = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-const DAY_TIME = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+// One clock everywhere: India Standard Time, 24-hour, labelled. A page that mixes an unlabelled
+// local time with a UTC one cannot be read at a glance (and the video is recorded in IST).
+export const ZONE = "Asia/Kolkata";
+export const ZONE_LABEL = "IST";
+const TIME = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: ZONE });
+const HM = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: ZONE });
+const DAY = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: ZONE });
+const DAY_TIME = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: ZONE });
 const COUNT = new Intl.NumberFormat("en-IN");
 
 function parse(iso?: string | null): Date | null {
@@ -17,6 +19,11 @@ function parse(iso?: string | null): Date | null {
 
 export const fmtTime = (iso?: string | null) => (parse(iso) ? TIME.format(parse(iso)!) : "--:--:--");
 export const fmtHm = (iso?: string | null) => (parse(iso) ? HM.format(parse(iso)!) : "--:--");
+/** A time a person will quote back ("approved at 17:04 IST"): always says which clock. */
+export const fmtClock = (iso?: string | null) => `${fmtHm(iso)} ${ZONE_LABEL}`;
+/** A stamp on a record: "20 Sep 2026, 17:04:11 IST". */
+export const fmtStamp = (iso?: string | null) =>
+  parse(iso) ? `${DAY.format(parse(iso)!)}, ${TIME.format(parse(iso)!)} ${ZONE_LABEL}` : "—";
 export const fmtDay = (iso?: string | null) => (parse(iso) ? DAY.format(parse(iso)!) : "");
 export const fmtCount = (n?: number | null) => COUNT.format(n ?? 0);
 

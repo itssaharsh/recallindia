@@ -47,7 +47,7 @@ const STEPS: PipelineStep[] = [
 function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
   return (
     <section aria-labelledby={id} className="space-y-4 border-t border-line pt-8">
-      <h2 id={id} className="font-mono text-[11px] font-medium tracking-[0.12em] text-muted uppercase">
+      <h2 id={id} className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">
         {title}
       </h2>
       {children}

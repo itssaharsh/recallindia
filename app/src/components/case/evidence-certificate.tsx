@@ -84,7 +84,7 @@ export function EvidenceCertificate({ caseId, evidence, demo }: { caseId: string
     <figure>
       <section aria-labelledby="certificate-title" className="border border-line bg-surface-1 font-mono">
         <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-line px-4 py-2.5">
-          <h2 id="certificate-title" className="text-[11px] font-medium tracking-[0.14em] text-success uppercase">
+          <h2 id="certificate-title" className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">
             Evidence certificate
           </h2>
           <span className="text-[11px] text-muted">{caseId}</span>
@@ -159,7 +159,7 @@ export function CertificatePlaceholder({ why }: { why: string }) {
   return (
     <figure>
       <section aria-label="Evidence certificate" className="border border-dashed border-line px-4 py-3.5 font-mono">
-        <p className="text-[11px] font-medium tracking-[0.14em] text-muted uppercase">Evidence certificate</p>
+        <p className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">Evidence certificate</p>
         <p className="mt-1.5 font-sans text-[13px] text-muted">{why}</p>
       </section>
       <figcaption className="mt-2 text-xs text-muted">{CAPTION}</figcaption>

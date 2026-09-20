@@ -155,6 +155,14 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+  }
+  /* Schibsted's tabular set widens "," and "." too, so prose set in it reads "4 ,868" and
+     "flagged it .". Tabular numerals go on the things that align or tick, never on a sentence. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+  /* every identifier is already fixed-width */
+  .font-mono {
     font-variant-numeric: tabular-nums;
   }
   ::selection {

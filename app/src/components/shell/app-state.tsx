@@ -20,22 +20,23 @@ interface AppState {
   resetCopy: () => Promise<string | null>;
   /** leave the copy and look at the demo wall */
   useDemoHousehold: () => void;
-  /** true with ?demo=1 (kept for the tab's session): every read comes from /fixtures. */
+  /** Always false. `?demo=1` used to read recorded fixtures; the read-only demo household
+   *  replaced it, so the flag is stripped and every read is live. Kept so call sites that pass
+   *  it through to the API helpers do not all have to change. */
   demo: boolean;
   /** false until the client has read the URL; data hooks wait for it. */
   ready: boolean;
   stats: Stats | null;
   statsError: string | null;
   refreshStats: () => void;
-  /** An in-app link that keeps demo mode on. */
+  /** An in-app link (the demo flag is gone, so this is the path itself). */
   href: (path: string) => string;
 }
 
 const Ctx = createContext<AppState | null>(null);
-const DEMO_KEY = "recallindia-demo";
 
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
-  const [demo, setDemo] = useState(false);
+  const demo = false; // the fixture mode is retired; the demo household replaced it
   const [ready, setReady] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
@@ -45,21 +46,23 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [householdError, setHouseholdError] = useState<string | null>(null);
 
   useEffect(() => {
-    const flag = new URLSearchParams(window.location.search).get("demo");
-    let on = false;
-    try {
-      if (flag === "1") sessionStorage.setItem(DEMO_KEY, "1");
-      if (flag === "0") sessionStorage.removeItem(DEMO_KEY);
-      on = sessionStorage.getItem(DEMO_KEY) === "1";
-    } catch {
-      on = flag === "1"; // storage blocked: the URL alone decides
+    // ?demo=1 is a no-op now: strip it so an old link cannot pin the page to data that no longer
+    // matches the API. The demo household (read-only, live) is what a visitor lands on.
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("demo")) {
+      url.searchParams.delete("demo");
+      window.history.replaceState(null, "", url.pathname + url.search + url.hash);
     }
-    setDemo(on);
+    try {
+      sessionStorage.removeItem("recallindia-demo");
+    } catch {
+      // storage blocked: nothing to clear
+    }
     const kept = householdId();
     setHousehold(kept);
     setHouseholdState(kept === DEMO_HOUSEHOLD ? "demo" : "own");
     setReady(true);
-    if (!on && API_URL) fetch(`${API_URL}/health`).catch(() => undefined); // warm the Lambda
+    if (API_URL) fetch(`${API_URL}/health`).catch(() => undefined); // warm the Lambda
   }, []);
 
   usePoll(
@@ -114,7 +117,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const refreshStats = useCallback(() => setNonce((n) => n + 1), []);
-  const href = useCallback((path: string) => (demo ? `${path}${path.includes("?") ? "&" : "?"}demo=1` : path), [demo]);
+  const href = useCallback((path: string) => path, []);
 
   const value = useMemo(
     () => ({

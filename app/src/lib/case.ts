@@ -2,7 +2,7 @@
 // CDSCO's <month> alert" (a failed quality test), never "recalled"; recalls are named as recalls;
 // nothing is ever called "safe".
 
-import { fmtDay, sourceLabel } from "./format";
+import { fmtDay, fmtStamp, sourceLabel } from "./format";
 import { monthLabel } from "./ingest";
 import type { Case, CaseStatus, Item, Notice, PipelineStepName, StepRecord } from "./types";
 
@@ -99,12 +99,8 @@ export function snapshotNoun(notice: Notice | null): string {
   return `the ${sourceLabel(notice.source)} recall record`;
 }
 
-/** "2026-09-19 20:22:38 UTC": the certificate speaks one clock. */
-export function fmtUtc(iso?: string | null): string {
-  if (!iso) return "—";
-  const at = new Date(iso);
-  return Number.isNaN(at.getTime()) ? iso : `${at.toISOString().slice(0, 19).replace("T", " ")} UTC`;
-}
+/** The certificate speaks the same clock as the rest of the page: "20 Sep 2026, 17:04:11 IST". */
+export const fmtUtc = fmtStamp;
 
 export const fmtBytes = (n?: number | null) =>
   typeof n !== "number" ? "" : n < 1024 ? `${n} B` : `${(n / 1024).toFixed(n < 10_240 ? 1 : 0)} KB`;

@@ -45,8 +45,10 @@ export function PipelineSteps({ steps, orientation = "vertical" }: { steps: Pipe
             {step.label}
             <span className="sr-only"> ({WORD[step.state]})</span>
           </span>
-          {step.seconds !== null && step.state === "done" && (
-            <span className="font-mono text-[11px] text-muted tabular-nums">{step.seconds.toFixed(1)} s</span>
+          {step.state === "done" && (
+            <span className="font-mono text-[11px] text-muted">
+              {step.seconds !== null && step.seconds >= 0.1 ? `${step.seconds.toFixed(1)} s` : "—"}
+            </span>
           )}
         </li>
       ))}

@@ -16,7 +16,7 @@ export function TopBar() {
           <>
             {/* each figure stays on one line with its label; the groups wrap on a phone */}
             <span className="whitespace-nowrap">
-              <span className="font-display text-2xl leading-none font-semibold text-ink">{fmtCount(stats.total)}</span>{" "}
+              <span className="tnum font-display text-2xl leading-none font-semibold text-ink">{fmtCount(stats.total)}</span>{" "}
               <span className="text-sm text-muted">notices</span>
             </span>
             <span aria-hidden className="text-muted">
@@ -29,7 +29,7 @@ export function TopBar() {
               ·
             </span>
             <span className="text-sm whitespace-nowrap">
-              <span className="text-muted">last poll</span> <span className="font-mono text-ink">{fmtTime(stats.last_poll_at)}</span>
+              <span className="text-muted">last poll</span> <span className="font-mono text-ink">{fmtTime(stats.last_poll_at)} IST</span>
             </span>
           </>
         ) : statsError ? (
