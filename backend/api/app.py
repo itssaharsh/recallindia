@@ -19,6 +19,7 @@ from __future__ import annotations
 import base64
 import gzip
 import json
+import logging
 import re
 from collections.abc import Callable
 from decimal import Decimal
@@ -30,13 +31,22 @@ from common.demo_mode import is_demo
 from common.notices import is_meta
 
 try:
-    from api import case_api, household_api, ingest_api, match_api, notices_query, ui_api
+    from api import (
+        case_api,
+        household_api,
+        ingest_api,
+        match_api,
+        notices_query,
+        search_index,
+        ui_api,
+    )
 except ModuleNotFoundError:  # Lambda layout: CodeUri backend/api/ -> siblings at /var/task
     import case_api  # type: ignore[no-redef]
     import household_api  # type: ignore[no-redef]
     import ingest_api  # type: ignore[no-redef]
     import match_api  # type: ignore[no-redef]
     import notices_query  # type: ignore[no-redef]
+    import search_index  # type: ignore[no-redef]
     import ui_api  # type: ignore[no-redef]
 
 CORS_HEADERS = {
@@ -120,21 +130,32 @@ def _paged_notices(qs: dict[str, str], *, since: str | None) -> dict | tuple[lis
     except ValueError:
         return respond(400, {"error": "limit must be an integer between 1 and 100"})
     cursor_text = (qs.get("cursor") or "").strip()
+    q = (qs.get("q") or "").strip()
+    if q:
+        # a search answers from the in-memory index (search_index): every row, newest first,
+        # paged by offset with a "q:<offset>" cursor. If the index cannot be built the bounded
+        # page read below still answers.
+        offset = 0
+        if cursor_text:
+            if not (cursor_text.startswith("q:") and cursor_text[2:].isdigit()):
+                return respond(400, {"error": "bad cursor"})
+            offset = int(cursor_text[2:])
+        try:
+            found, more = search_index.search(q, sources, since=since, limit=limit, offset=offset)
+            return found, (f"q:{offset + limit}" if more else None), limit
+        except Exception:  # noqa: BLE001 - the index is an optimisation, never the only answer
+            log.exception("search index unavailable; reading pages instead")
     cursor = None
     if cursor_text:
         try:
             cursor = notices_query.decode_cursor(cursor_text, sources=sources, since=since)
         except notices_query.BadCursor:
             return respond(400, {"error": "bad cursor"})
-    q = (qs.get("q") or "").strip()
-    # a search reads index pages of Q_PAGE rows however small the page asked for, so a rare
-    # term is looked for across thousands of rows rather than the five the palette wants back
+    # the fallback search reads index pages of Q_PAGE rows however small the page asked for
     page = max(limit, notices_query.Q_PAGE) if q and cursor is None else limit
     page_limit = int(cursor["limit"]) if cursor else page
     notices, next_cursor = notices_query.query_page(sources, since=since, limit=page, cursor=cursor)
     if q:
-        # a filtered page is read on: up to MAX_Q_PAGES index pages, until `limit` matches are
-        # in hand or the listing ends, so a search answers instead of "none on this page"
         notices = [n for n in notices if notices_query.matches_q(n, q)]
         pages = 1
         while len(notices) < limit and next_cursor and pages < notices_query.MAX_Q_PAGES:
@@ -152,10 +173,9 @@ def list_notices(_params: dict, event: dict) -> dict:
 
     Newest first, ``limit`` per page (default 50, max 100), ``next_cursor`` null on the last
     page. ``q`` is a substring match over product, brand, model, notice id and listed batch
-    codes, applied after pagination: the handler reads on through up to ``MAX_Q_PAGES``
-    index pages until it holds a page of matches or the listing ends, and the cursor points
-    past the last page it read. A cursor carries its own page size; the response's ``limit``
-    echoes the size that was used.
+    codes, answered from an in-memory index of every notice (``search_index``, rebuilt every
+    ten minutes) and paged by offset (``next_cursor`` = ``q:<offset>``). Without ``q`` a cursor
+    carries its own page size; the response's ``limit`` echoes the size that was used.
     """
     qs = _query_string(event)
     since = (qs.get("since") or "").strip() or None
@@ -229,6 +249,8 @@ def diff(_params: dict, event: dict) -> dict:
 
 
 # (method, path regex) -> handler. Order matters: first match wins.
+log = logging.getLogger(__name__)
+
 ROUTES: list[tuple[str, re.Pattern[str], Route]] = [
     ("GET", re.compile(r"^/health/?$"), health),
     ("GET", re.compile(r"^/v1/notices/?$"), list_notices),

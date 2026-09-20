@@ -159,28 +159,32 @@ def test_bad_cursor_and_bad_since_are_400(seeded):
     assert status == 400
 
 
-def test_q_reads_on_until_it_has_a_page_of_matches(seeded):
+def test_q_searches_every_row_newest_first(seeded):
     # 39 of the 239 July rows match (JUL-2026-200..238); all share one published_at, and
-    # DynamoDB does not order ties, so only the contract is asserted: every returned row
-    # matches, a search keeps reading pages (up to MAX_Q_PAGES) instead of answering with
-    # whatever one page happened to hold, and the cursor never repeats a match.
+    # DynamoDB does not order ties, so only the contract is asserted: every match, exactly
+    # once, from the whole listing rather than whatever one page happened to hold.
     status, body = _get("/v1/notices", {"source": "cdsco_nsq", "q": "product jul-2026-2"})
     assert status == 200
     assert body["q"] == "product jul-2026-2"
-    assert body["count"] == len(body["notices"]) == 39 and body["limit"] == 100  # Q_PAGE
+    assert body["count"] == len(body["notices"]) == 39 and body["limit"] == 50
+    assert body["next_cursor"] is None
     assert all("JUL-2026-2" in n["product"] for n in body["notices"])
+    # a small page pages by offset, and following the cursor finds every match once
+    status, body = _get("/v1/notices", {"source": "cdsco_nsq", "q": "jul-2026-2", "limit": 5})
+    assert status == 200 and body["count"] == 5 and body["next_cursor"] == "q:5"
     seen = [n["pk"] for n in body["notices"]]
     cursor = body["next_cursor"]
     while cursor:
-        _, nxt = _get("/v1/notices", {"source": "cdsco_nsq", "q": "jul-2026-2", "cursor": cursor})
+        _, nxt = _get(
+            "/v1/notices", {"source": "cdsco_nsq", "q": "jul-2026-2", "limit": 5, "cursor": cursor}
+        )
         seen.extend(n["pk"] for n in nxt["notices"])
         cursor = nxt["next_cursor"]
     assert len(seen) == len(set(seen)) == 39
-    # a small page keeps reading until it is full: five matches, and a cursor to the rest
-    status, body = _get("/v1/notices", {"source": "cdsco_nsq", "q": "jul-2026-2", "limit": 5})
-    assert status == 200 and body["count"] >= 5 and body["next_cursor"]
     status, body = _get("/v1/notices", {"q": "NOTHING-MATCHES-THIS"})
-    assert status == 200 and body["count"] == 0
+    assert status == 200 and body["count"] == 0 and body["next_cursor"] is None
+    status, body = _get("/v1/notices", {"q": "jul-2026-2", "cursor": "q:abc"})
+    assert status == 400
 
 
 def test_q_matches_a_listed_batch_code(seeded):
