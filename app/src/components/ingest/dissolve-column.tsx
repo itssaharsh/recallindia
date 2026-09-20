@@ -86,27 +86,32 @@ export const DissolveColumn = memo(
       );
 
       return (
-        <div className="ingest-layer flex min-h-0 min-w-0 flex-col border border-line bg-surface-1">
-          <div className="flex items-end justify-between gap-3 border-b border-line px-4 py-3">
-            <div className="min-w-0">
-              <p className="m-0 text-xs text-ink-muted">{title}</p>
-              <p className="m-0 text-xs text-ink-muted">
+        <div className="ingest-layer flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-line bg-surface-1 shadow-1">
+          <div className="flex items-end justify-between gap-3 border-b border-line px-5 pt-5 pb-4">
+            {/* no aria-live: 55 updates in a few seconds would flood a screen reader; the banner
+                after Publish announces the result */}
+            <p className="m-0 flex items-baseline gap-2.5">
+              {/* written directly while rows land; React only ever renders its first "0" */}
+              <span
+                ref={counter}
+                className="font-display text-[64px] leading-[0.85] font-extrabold tracking-[-0.04em] text-cobalt tabular-nums"
+              >
+                0
+              </span>
+              <span className="font-display text-[24px] leading-none font-extrabold tracking-[-0.02em] text-ink">notices</span>
+            </p>
+            <div className="min-w-0 text-right">
+              <p className="m-0 font-display text-[18px] leading-tight font-bold text-ink tabular-nums">
                 {rowsIn !== null ? `${fmtCount(rowsIn)} rows read` : "rows read: —"}
+              </p>
+              <p className="m-0 mt-0.5 text-[13px] text-ink-muted">
+                {title}
                 {mergedLines > 0 ? ` · ${mergedLines} continuation line${mergedLines === 1 ? "" : "s"} merged` : ""}
               </p>
             </div>
-            {/* no aria-live: 55 updates in a few seconds would flood a screen reader; the banner
-                after Publish announces the result */}
-            <p className="m-0 flex items-baseline gap-2">
-              {/* written directly while rows land; React only ever renders its first "0" */}
-              <span ref={counter} className="font-display text-5xl leading-none font-semibold text-ink tabular-nums">
-                0
-              </span>
-              <span className="text-sm text-ink-muted">notices</span>
-            </p>
           </div>
           <div ref={list} className={`relative min-h-0 flex-1 ${settled ? "overflow-y-auto" : "overflow-hidden"}`}>
-            <p ref={emptyNote} className="m-0 flex h-full items-center justify-center px-6 text-center text-[13px] text-ink-muted">
+            <p ref={emptyNote} className="m-0 flex h-full min-h-40 items-center justify-center px-8 text-center text-[14px] leading-relaxed text-ink-muted">
               {empty}
             </p>
             {/* landing: rows are appended here directly (React renders no children into it) */}

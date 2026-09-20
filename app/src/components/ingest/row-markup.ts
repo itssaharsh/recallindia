@@ -6,11 +6,11 @@ import type { RowNotice } from "@/lib/ingest";
 export const ROW_GRID =
   "grid h-10 w-full grid-cols-[4rem_minmax(0,1fr)_6.5rem] items-center gap-3 px-4 text-left text-[13px] 2xl:grid-cols-[4rem_minmax(0,1.3fr)_6.5rem_minmax(0,1fr)]";
 export const ROW_CHIP =
-  "inline-flex h-5 w-fit items-center rounded-sm border border-line px-1.5 font-mono text-[10.5px] tracking-wider text-muted uppercase";
+  "inline-flex h-5 w-fit items-center rounded-xs bg-cat-medicine-soft px-1.5 text-[10.5px] font-bold tracking-wider text-cobalt uppercase";
 export const ROW_CELLS = [
   "truncate text-ink",
-  "truncate font-mono text-[12.5px] text-ink",
-  "hidden truncate text-muted 2xl:block",
+  "w-fit max-w-full truncate rounded-xs bg-surface-2 px-1.5 py-0.5 font-mono text-[12.5px] text-ink",
+  "hidden truncate text-ink-muted 2xl:block",
 ] as const;
 
 /** product · batch (+N more) · failed test */

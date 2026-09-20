@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ArrowUpRight, CheckCircle2, Play } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CheckCircle2, History, Play } from "lucide-react";
 import { useReducedMotion } from "motion/react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -8,7 +8,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { useAppState } from "@/components/shell/app-state";
-import { Button } from "@/components/ui/button";
 import { apiGet, apiPost } from "@/lib/api";
 import {
   IDLE_STATE,
@@ -249,27 +248,43 @@ export function IngestView() {
   const title = useMemo(() => `CDSCO NSQ ${month}`, [month]);
 
   return (
-    <section aria-labelledby="ingest-title" className="flex flex-col gap-4 px-5 py-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 id="ingest-title" className="m-0 font-display text-2xl leading-tight font-semibold text-ink md:text-3xl">
-            A CDSCO alert PDF, becoming the feed
+    <section aria-labelledby="ingest-title" className="flex flex-col gap-5 pt-7 pb-12">
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+        <div className="min-w-0">
+          <h1
+            id="ingest-title"
+            className="m-0 font-display text-[40px] leading-[1.06] font-extrabold tracking-[-0.03em] text-ink max-md:text-[30px]"
+          >
+            Watch a PDF become the feed
           </h1>
-          <p className="mt-1 mb-0 text-sm text-ink-muted">
-            {title} · the regulator&apos;s monthly list of drugs that failed quality tests, read row by row
+          <p className="mt-2 mb-0 max-w-[760px] text-[16px] leading-normal text-ink-muted">
+            {play.pages
+              ? `${title} is a ${play.pages}-page PDF. Textract reads its tables, and every row becomes a notice.`
+              : `${title} is the regulator's monthly list of drugs that failed quality tests. Textract reads its tables, and every row becomes a notice.`}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {runId && (
-            <span className="font-mono text-xs text-ink-muted">
-              {mode === "replay" ? "replay of " : ""}
-              {runId}
-              {mode === "replay" && speed !== 1 ? ` · ×${speed}` : ""}
+            <span className="inline-flex h-10 min-w-0 items-center gap-2 rounded-pill bg-cobalt-soft px-4 text-[14px] text-ink-muted">
+              <History aria-hidden className="size-4 shrink-0 text-cobalt" />
+              <span className="font-semibold text-cobalt">{mode === "replay" ? "Replay" : "Live run"}</span>
+              <span className="truncate font-mono text-[12px]">{runId}</span>
             </span>
           )}
-          <Button variant="outline" onClick={start} disabled={busy} title={demo ? "Demo data: plays the recorded run" : undefined}>
-            <Play aria-hidden /> {starting ? "Starting…" : busy && mode === "live" ? "Running…" : "Run ingest"}
-          </Button>
+          {mode === "replay" && speed !== 1 && (
+            <span className="grid h-10 min-w-10 place-items-center rounded-pill border border-line bg-surface-1 px-3 font-mono text-[13px] text-ink">
+              {speed}×
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={start}
+            disabled={busy}
+            title={demo ? "Demo data: plays the recorded run" : undefined}
+            className="inline-flex h-11 items-center gap-2 rounded-pill bg-cobalt px-5 text-[15px] font-semibold text-on-cobalt transition-colors hover:bg-cobalt-hover active:bg-cobalt-press disabled:cursor-default disabled:opacity-50"
+          >
+            <Play aria-hidden className="size-4" /> {starting ? "Starting…" : busy && mode === "live" ? "Running…" : "Run ingest"}
+          </button>
         </div>
       </div>
 
@@ -278,19 +293,19 @@ export function IngestView() {
       {error && (
         <p
           role="alert"
-          className="m-0 flex items-center gap-2 border border-danger/60 bg-danger px-3 py-2 text-[13px] text-ink"
+          className="m-0 flex items-center gap-2.5 rounded-md border border-warning/30 bg-warning-soft px-4 py-3 text-[14px] text-warning"
         >
-          <AlertTriangle aria-hidden className="size-4 text-danger" /> {error}
+          <AlertTriangle aria-hidden className="size-4 shrink-0" /> {error}
         </p>
       )}
       {play.status === "SUCCEEDED" && phase === "done" && (
         <div
           role="status"
-          className="ingest-fade-in flex flex-wrap items-center gap-x-3 gap-y-2 border border-line bg-surface-1 px-4 py-3"
+          className="ingest-fade-in flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-line bg-surface-1 px-5 py-4 shadow-1"
         >
           <CheckCircle2 aria-hidden className="size-5 text-success" />
           <p className="m-0 text-sm text-ink">
-            <span className="font-display text-lg font-semibold">{play.noticesOut ?? "—"} notices</span>
+            <span className="font-display text-[20px] font-extrabold tracking-[-0.01em]">{play.noticesOut ?? "—"} notices</span>
             <span className="text-ink-muted"> · </span>
             {methodLabel(play.method)}
             <span className="text-ink-muted"> · </span>CDSCO NSQ {month}
@@ -300,19 +315,19 @@ export function IngestView() {
           <Link
             prefetch={false}
             href={href("/feed/?source=cdsco_nsq")}
-            className="ml-auto inline-flex h-8 items-center gap-1 rounded-sm border border-line px-3 text-[13px] text-primary hover:bg-surface-2"
+            className="ml-auto inline-flex h-10 items-center gap-1.5 rounded-pill border border-line-strong bg-surface-1 px-4 text-[14px] font-semibold text-ink hover:bg-surface-2"
           >
             Open in feed <ArrowUpRight aria-hidden className="size-3.5" />
           </Link>
         </div>
       )}
       {failedStep && isTerminal(play.status) && (
-        <p role="alert" className="m-0 border border-danger/60 bg-danger px-3 py-2 text-[13px] text-ink">
+        <p role="alert" className="m-0 rounded-md border border-warning/30 bg-warning-soft px-4 py-3 text-[14px] text-warning">
           The run stopped at {failedStep.name}: {play.error ?? "see the step above"}. Nothing new was published.
         </p>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <PdfStage
           handle={stage}
           url={pdfUrl}

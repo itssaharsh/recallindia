@@ -19,6 +19,16 @@ function initialMode(): "pdf" | "poster" {
   return new URLSearchParams(window.location.search).get("pdf") === "poster" ? "poster" : "pdf";
 }
 
+/** "CDSCO_NSQ_june25.pdf": the file's own name, for the viewer toolbar. */
+function fileNameOf(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    return decodeURIComponent(new URL(url, "https://x.invalid").pathname.split("/").pop() ?? "") || null;
+  } catch {
+    return null;
+  }
+}
+
 /** The committed pre-render of the same page: /ingest/<pdf name>-p<n>.png. */
 function posterBaseOf(url: string | null): string | null {
   if (!url) return null;
@@ -254,7 +264,36 @@ export function PdfStage({
   }, [page, doc]);
 
   return (
-    <figure className="m-0 flex min-w-0 flex-col gap-2">
+    <figure className="m-0 flex min-w-0 flex-col overflow-hidden rounded-md border border-line bg-surface-1 shadow-1">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-4 py-2.5">
+        <span className="inline-flex min-w-0 items-center gap-2 font-mono text-[13px] text-ink">
+          <FileText aria-hidden className="size-4 shrink-0 text-ink-muted" strokeWidth={1.75} />
+          <span className="truncate">{fileNameOf(url) ?? "No PDF yet"}</span>
+        </span>
+        <div role="group" aria-label="Page" className="flex items-center gap-1">
+          {Array.from({ length: Math.max(shownPages, 0) }, (_, i) => (
+            <button
+              key={i}
+              type="button"
+              aria-pressed={page === i + 1}
+              disabled={locked}
+              onClick={() => onPage(i + 1)}
+              className={`h-7 min-w-7 rounded-xs border px-1.5 font-mono text-xs disabled:cursor-default ${
+                page === i + 1
+                  ? "border-cobalt bg-cobalt-soft text-cobalt"
+                  : "border-line text-ink-muted hover:bg-surface-2 hover:text-ink"
+              }`}
+            >
+              {i + 1}
+            </button>
+          ))}
+          {shownPages > 0 && (
+            <span className="ml-1.5 text-[13px] font-semibold text-ink">
+              Page {page} of {shownPages}
+            </span>
+          )}
+        </div>
+      </div>
       <div ref={box} className="ingest-layer relative min-h-40 overflow-hidden bg-surface-1">
         {!url && <PagePlaceholder text="The alert PDF appears here when a run fetches it" />}
         {url && mode === "pdf" && <PdfErrorBoundary onError={fallBack}>{doc}</PdfErrorBoundary>}
@@ -284,31 +323,9 @@ export function PdfStage({
         )}
         {url && mode === "poster" && !posterBase && <PagePlaceholder text="This page has no pre-rendered copy" />}
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div role="group" aria-label="Page" className="flex items-center gap-1">
-          <span className="mr-1 text-xs text-ink-muted">Page</span>
-          {Array.from({ length: Math.max(shownPages, 0) }, (_, i) => (
-            <button
-              key={i}
-              type="button"
-              aria-pressed={page === i + 1}
-              disabled={locked}
-              onClick={() => onPage(i + 1)}
-              className={`h-7 min-w-7 rounded-sm border px-1.5 font-mono text-xs disabled:cursor-default ${
-                page === i + 1
-                  ? "border-primary bg-surface-2 text-ink"
-                  : "border-line text-ink-muted hover:bg-surface-2 hover:text-ink"
-              }`}
-            >
-              {i + 1}
-            </button>
-          ))}
-          {shownPages > 0 && <span className="ml-1 font-mono text-xs text-ink-muted">/ {shownPages}</span>}
-        </div>
-        <figcaption className="text-xs text-ink-muted">
-          {mode === "poster" ? `Showing a pre-rendered copy of page ${page}` : caption}
-        </figcaption>
-      </div>
+      <figcaption className="border-t border-line px-4 py-2 text-xs text-ink-muted">
+        {mode === "poster" ? `Showing a pre-rendered copy of page ${page}` : caption}
+      </figcaption>
     </figure>
   );
 }
