@@ -160,24 +160,50 @@ def own_household(api) -> dict[str, str]:
     return copies
 
 
-def check_all(api, timeout: int, copies: dict[str, str] | None = None) -> list[dict]:
+def wait_for_copy(api, copies: dict[str, str], timeout: int) -> set[str]:
+    """Wait for the checks the copy started itself; returns the item ids that never finished.
+
+    ``POST /households`` starts one check per copied item (Map, MaxConcurrency 3). Re-checking
+    them here would double every execution, so the validator watches the wall fill instead --
+    the same thing a visitor sees -- and only starts a check for an item that never did.
+    """
+    wanted = set(copies.values())
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        status, listing = api.call("GET", "/items")
+        rows = {str(r["item_id"]): r for r in listing.get("items", [])} if status == 200 else {}
+        pending = {i for i in wanted if not rows.get(i, {}).get("last_checked_at")}
+        if not pending:
+            return set()
+        time.sleep(2)
+    return pending
+
+
+def check_all(api, timeout: int, copies: dict[str, str] | None = None,
+              recheck: set[str] | None = None) -> list[dict]:  # fmt: skip
     rows: list[dict] = []
     for entry in demo_world.DEMO_ITEMS:
         item_id = (copies or {}).get(entry["item_id"], entry["item_id"])
         quoted = urllib.parse.quote(item_id, safe="")
         row = {"item_id": entry["item_id"], "copy_id": item_id, "name": entry["name"],
                "expected": entry["expected"]}  # fmt: skip
-        status, started = api.call("POST", f"/items/{quoted}/check")
-        if status not in (200, 202):
-            row.update(decision="ERROR", detail=f"check -> HTTP {status}: {started.get('error')}")
-            rows.append(row)
-            continue
-        row["execution"] = api.wait(started, timeout)
+        if recheck is None or item_id in recheck:
+            status, started = api.call("POST", f"/items/{quoted}/check")
+            if status not in (200, 202):
+                row.update(
+                    decision="ERROR", detail=f"check -> HTTP {status}: {started.get('error')}"
+                )
+                rows.append(row)
+                continue
+            row["execution"] = api.wait(started, timeout)
+        else:
+            row["execution"] = "COPY"  # the household copy checked it
         status, item = api.call("GET", f"/items/{quoted}")
         case = item.get("case") or {}
         row.update(
             decision=case.get("decision") or ("clear" if item.get("status") == "clear" else "?"),
             item_status=item.get("status"),
+            case_status=case.get("status"),
             verifier=case.get("verifier"),
             sold_after_notice=case.get("sold_after_notice"),
             reason=case.get("reason") or "",
@@ -194,7 +220,7 @@ def assess(rows: list[dict]) -> list[str]:
     for r in rows:
         if r.get("decision") in ("ERROR", "?"):
             problems.append(f"{r['item_id']}: {r.get('detail') or 'no decision recorded'}")
-        elif r.get("execution") not in (None, "SUCCEEDED", WAITING):
+        elif r.get("execution") not in (None, "COPY", "SUCCEEDED", WAITING):
             problems.append(f"{r['item_id']}: execution {r['execution']}")
 
     vehicle = by_id[demo_world.VEHICLE["item_id"]]
@@ -206,9 +232,15 @@ def assess(rows: list[dict]) -> list[str]:
             f"expected exactly 1 alert (demo-alert), got {[r['item_id'] for r in alerts]}"
         )
     for r in alerts:
-        # an alert must stop at the human gate (WaitForApproval), never run on to a claim
-        if r.get("execution") not in (None, WAITING):
-            problems.append(f"{r['item_id']}: alert execution {r.get('execution')!r}, not waiting")
+        # an alert must stop at the human gate (WaitForApproval), never run on to a letter
+        waiting = r.get("execution") in (None, WAITING) or (
+            r.get("case_status") == "waiting_approval"
+        )
+        if not waiting:
+            problems.append(
+                f"{r['item_id']}: alert is {r.get('case_status')!r} "
+                f"(execution {r.get('execution')!r}), not waiting for approval"
+            )
         if r.get("verifier") != "deterministic":
             problems.append(
                 f"{r['item_id']}: verifier is {r.get('verifier')!r}, not 'deterministic'"
@@ -278,7 +310,10 @@ def main(argv: list[str] | None = None) -> int:
 
     t0 = time.monotonic()
     copies = own_household(api)
-    rows = check_all(api, args.timeout, copies)
+    late = wait_for_copy(api, copies, args.timeout)
+    if late:
+        print(f"validate: {len(late)} item(s) the copy did not check; checking them here")
+    rows = check_all(api, args.timeout, copies, late)
     print_table(rows)
     problems = assess(rows)
     counts = {

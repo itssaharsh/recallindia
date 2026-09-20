@@ -8,6 +8,11 @@ OUTPUT_ENV = {
     "NoticesTableName": "NOTICES_TABLE",
     "ItemsTableName": "ITEMS_TABLE",
     "CasesTableName": "CASES_TABLE",
+    # a script that seals evidence or writes a letter needs the buckets and the signing key
+    "RawBucketName": "RAW_BUCKET",
+    "EvidenceBucketName": "EVIDENCE_BUCKET",
+    "ClaimsBucketName": "CLAIMS_BUCKET",
+    "SigningKeyId": "KMS_KEY_ID",
 }
 
 
@@ -34,5 +39,7 @@ def configure_live(stack: str, profile: str, region: str = "ap-south-1") -> dict
     if missing:
         raise SetupError(f"stack {stack!r} has no output(s): {', '.join(missing)}")
     for key, env in OUTPUT_ENV.items():
-        os.environ[env] = outputs[key]
+        if outputs.get(key):
+            os.environ[env] = outputs[key]
+    os.environ.setdefault("KMS_KEY_ALIAS", "alias/recallindia-signing")
     return outputs

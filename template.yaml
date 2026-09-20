@@ -468,6 +468,36 @@ Resources:
             ApiId: !Ref HttpApi
             Method: GET
             Path: "/events"
+        ItemPatch:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: PATCH
+            Path: "/items/{id}"
+        CreateHousehold:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: POST
+            Path: "/households"
+        ResetHousehold:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: POST
+            Path: "/households/{id}/reset"
+        GetHousehold:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: "/households/{id}"
+        ListCases:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: "/cases"
         CheckItem:
           Type: HttpApi
           Properties:
