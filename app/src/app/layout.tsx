@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { Doto, IBM_Plex_Mono, Schibsted_Grotesk } from "next/font/google";
 import { preconnect } from "react-dom";
 
 import { AppStateProvider } from "@/components/shell/app-state";
@@ -9,20 +8,9 @@ import { SoundProvider } from "@/components/shell/sound";
 import { TopBar } from "@/components/shell/top-bar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { API_URL } from "@/lib/api";
+import { fontVariables } from "@/lib/fonts";
 
 import "./globals.css";
-
-// Schibsted Grotesk (a newspaper publisher's grotesk) is the voice: display 800, headings 700,
-// body 400. IBM Plex Mono is the supporting role: hashes, ids, log lines, curl. Doto (dot-matrix,
-// 900) appears only inside a foil chip -- a batch code, never a word (DESIGN.md).
-const display = Schibsted_Grotesk({
-  subsets: ["latin"],
-  weight: ["400", "600", "700", "800"],
-  variable: "--ff-display",
-  display: "swap",
-});
-const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--ff-mono", display: "swap" });
-const foil = Doto({ subsets: ["latin"], weight: ["900"], variable: "--ff-foil", display: "swap" });
 
 export const metadata: Metadata = {
   title: { default: "Feed · RecallIndia", template: "%s · RecallIndia" },
@@ -47,7 +35,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   // HTML instead of after hydration (anonymous = the credential-less CORS fetches reuse it)
   if (API_URL) preconnect(API_URL, { crossOrigin: "anonymous" });
   return (
-    <html lang="en" className={`${display.variable} ${mono.variable} ${foil.variable}`}>
+    <html lang="en" className={fontVariables}>
       <body>
         <a
           href="#main"

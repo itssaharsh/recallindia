@@ -97,7 +97,7 @@ export function ShowWork({
         <div id="case-work" className="grid gap-8 pt-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
           <div className="min-w-0 space-y-5">
             <div className="space-y-2">
-              <h3 className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">Verification chain</h3>
+              <h3 className="text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase">Verification chain</h3>
               <ol className="list-none space-y-1.5 p-0">
                 {CHAIN.map((name) => {
                   const step = steps?.find((s) => s.name === name);
@@ -107,7 +107,7 @@ export function ShowWork({
                       <span aria-hidden className={`w-3 shrink-0 font-mono ${TONE[state]}`}>
                         {GLYPH[state]}
                       </span>
-                      <span className={state === "failed" ? "text-danger" : state === "done" ? "text-ink" : "text-muted"}>
+                      <span className={state === "failed" ? "text-danger" : state === "done" ? "text-ink" : "text-ink-muted"}>
                         {chainCopy(name, c, item, notice, step)}
                         <span className="sr-only"> ({STATE_WORD[state]})</span>
                       </span>
@@ -117,7 +117,7 @@ export function ShowWork({
               </ol>
             </div>
             <div className="space-y-2">
-              <h3 className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">
+              <h3 className="text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase">
                 Verifier reasoning{c.verifier ? ` · ${c.verifier}` : ""}
                 {typeof c.confidence === "number" ? ` · confidence ${c.confidence}` : ""}
               </h3>
@@ -125,35 +125,35 @@ export function ShowWork({
                 {c.reasoning || c.reason}
               </p>
               {c.verifier !== "bedrock" && (
-                <p className="text-xs text-muted">Rules decide: no language model is in the decision path.</p>
+                <p className="text-xs text-ink-muted">Rules decide: no language model is in the decision path.</p>
               )}
             </div>
             {c.execution_arn && (
               <div className="space-y-1">
-                <h3 className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">Step Functions execution</h3>
+                <h3 className="text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase">Step Functions execution</h3>
                 <p className="font-mono text-[12px] text-ink [overflow-wrap:anywhere]">{c.execution_arn}</p>
               </div>
             )}
           </div>
           <div className="min-w-0 space-y-2">
-            <h3 className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">Audit trail</h3>
+            <h3 className="text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase">Audit trail</h3>
             <ol className="list-none border-t border-line p-0 font-mono text-[12px]">
               {(c.audit ?? []).map((a, i) => {
                 const detail = detailText(a.detail);
                 return (
                   <li key={`${a.ts}-${a.event}-${i}`} className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-3 border-b border-line py-1.5 sm:grid-cols-[4.5rem_11rem_minmax(0,1fr)]">
-                    <span className="text-muted" title={a.ts}>
+                    <span className="text-ink-muted" title={a.ts}>
                       {a.ts.slice(11, 19)}
                     </span>
                     <span className="text-ink">{a.event}</span>
-                    <span className="col-span-2 break-words text-muted sm:col-span-1" title={detail.length > 160 ? detail : undefined}>
+                    <span className="col-span-2 break-words text-ink-muted sm:col-span-1" title={detail.length > 160 ? detail : undefined}>
                       {clip(detail)}
                     </span>
                   </li>
                 );
               })}
             </ol>
-            <p className="text-xs text-muted">Times in UTC. Every entry is appended by the step that did the work.</p>
+            <p className="text-xs text-ink-muted">Times in UTC. Every entry is appended by the step that did the work.</p>
           </div>
         </div>
       )}

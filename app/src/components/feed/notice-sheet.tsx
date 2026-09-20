@@ -14,7 +14,7 @@ import type { Notice } from "@/lib/types";
 function Field({ label, children, mono }: { label: string; children: React.ReactNode; mono?: boolean }) {
   return (
     <div className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-3 border-b border-line py-2 text-[13px]">
-      <dt className="text-muted">{label}</dt>
+      <dt className="text-ink-muted">{label}</dt>
       <dd className={`m-0 text-ink ${mono ? "font-mono text-[12.5px]" : ""}`}>{children}</dd>
     </div>
   );
@@ -50,11 +50,11 @@ export function NoticeSheet({ notice, onClose }: { notice: Notice | null; onClos
             <SheetHeader className="gap-2 border-b border-line p-5 pr-12">
               <div className="flex flex-wrap items-center gap-2">
                 <SourceChip notice={notice} tooltip={false} />
-                <span className="text-xs text-muted">{noticeRef(notice).replace(/^\S+\s/, "")}</span>
-                <span className="text-xs text-muted">· {fmtDay(notice.published_at)}</span>
+                <span className="text-xs text-ink-muted">{noticeRef(notice).replace(/^\S+\s/, "")}</span>
+                <span className="text-xs text-ink-muted">· {fmtDay(notice.published_at)}</span>
               </div>
               <SheetTitle className="font-display text-xl leading-snug font-semibold text-ink">{notice.product || notice.title}</SheetTitle>
-              <SheetDescription className="text-[13px] text-muted">{notice.title}</SheetDescription>
+              <SheetDescription className="text-[13px] text-ink-muted">{notice.title}</SheetDescription>
             </SheetHeader>
             <div className="space-y-5 p-5">
               <dl className="m-0">

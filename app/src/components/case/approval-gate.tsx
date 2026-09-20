@@ -84,7 +84,7 @@ export function ApprovalGate({
       </p>
       {demoReadOnly ? (
         <div className="space-y-2.5">
-          <p className="text-[13px] leading-relaxed text-muted">
+          <p className="text-[13px] leading-relaxed text-ink-muted">
             This is the demo household&apos;s case, already approved. Make your own copy to approve one yourself.
           </p>
           <Button variant="outline" onClick={onMakeCopy}>
@@ -102,12 +102,12 @@ export function ApprovalGate({
               type="button"
               onClick={onReject}
               disabled={busy !== null}
-              className="rounded-sm px-2 py-1 text-sm text-muted hover:text-ink disabled:opacity-50"
+              className="rounded-sm px-2 py-1 text-sm text-ink-muted hover:text-ink disabled:opacity-50"
             >
               {busy === "reject" ? "Rejecting…" : "Reject"}
             </button>
           </div>
-          <p className="text-[13px] text-muted">
+          <p className="text-[13px] text-ink-muted">
             Sealing {snapshotNoun(notice)} and writing to {addressee(c, item)} takes a few seconds.
           </p>
         </>

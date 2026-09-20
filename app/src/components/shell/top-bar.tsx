@@ -22,30 +22,30 @@ export function TopBar() {
             {/* each figure stays on one line with its label; the groups wrap on a phone */}
             <span className="whitespace-nowrap">
               <Num value={fmtCount(stats.total)} className="font-display text-2xl leading-none font-semibold text-ink" />{" "}
-              <span className="text-sm text-muted">notices</span>
+              <span className="text-sm text-ink-muted">notices</span>
             </span>
-            <span aria-hidden className="text-muted">
+            <span aria-hidden className="text-ink-muted">
               ·
             </span>
             <span className="text-sm whitespace-nowrap">
-              <span className="text-ink">{stats.sources_count}</span> <span className="text-muted">sources</span>
+              <span className="text-ink">{stats.sources_count}</span> <span className="text-ink-muted">sources</span>
             </span>
-            <span aria-hidden className="text-muted">
+            <span aria-hidden className="text-ink-muted">
               ·
             </span>
             <span className="text-sm whitespace-nowrap">
-              <span className="text-muted">last poll</span> <span className="font-mono text-ink">{fmtTime(stats.last_poll_at)} IST</span>
+              <span className="text-ink-muted">last poll</span> <span className="font-mono text-ink">{fmtTime(stats.last_poll_at)} IST</span>
             </span>
           </>
         ) : statsError ? (
-          <span className="text-sm text-muted">Counts unavailable: {statsError}</span>
+          <span className="text-sm text-ink-muted">Counts unavailable: {statsError}</span>
         ) : (
           <span className="inline-block h-6 w-72 bg-surface-1" aria-label="Loading counts" />
         )}
       </p>
       <div className="ml-auto flex items-center gap-2">
         {demo && (
-          <span className="rounded-sm border border-line px-2 py-0.5 font-mono text-[11px] tracking-wider text-muted uppercase">
+          <span className="rounded-sm border border-line px-2 py-0.5 font-mono text-[11px] tracking-wider text-ink-muted uppercase">
             Demo data · read-only
           </span>
         )}

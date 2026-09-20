@@ -7,11 +7,11 @@ import type { StepState } from "@/lib/types";
 // bare spinner). Failed is a red ●, skipped a struck-through ○.
 const GLYPH: Record<StepState, string> = { pending: "○", running: "◐", done: "●", failed: "●", skipped: "○" };
 const GLYPH_TONE: Record<StepState, string> = {
-  pending: "text-muted",
+  pending: "text-ink-muted",
   running: "text-primary",
   done: "text-ink",
   failed: "text-danger",
-  skipped: "text-muted",
+  skipped: "text-ink-muted",
 };
 const WORD: Record<StepState, string> = {
   pending: "to do",
@@ -24,7 +24,7 @@ const WORD: Record<StepState, string> = {
 export function MethodChip({ method }: { method: string }) {
   return (
     <span
-      className="inline-flex h-5 items-center rounded-sm border border-line px-1.5 font-mono text-[10.5px] text-muted"
+      className="inline-flex h-5 items-center rounded-sm border border-line px-1.5 font-mono text-[10.5px] text-ink-muted"
       title="How the tables were read"
     >
       {method}
@@ -47,12 +47,12 @@ export const IngestChecklist = memo(function IngestChecklist({ store }: { store:
             <span aria-hidden className={`w-3 shrink-0 font-mono text-sm ${GLYPH_TONE[step.state]}`}>
               {GLYPH[step.state]}
             </span>
-            <span className={`truncate text-[13px] font-medium ${step.state === "pending" ? "text-muted" : "text-ink"}`}>
+            <span className={`truncate text-[13px] font-medium ${step.state === "pending" ? "text-ink-muted" : "text-ink"}`}>
               {STEP_LABEL[step.name]}
             </span>
-            <span className="ml-auto shrink-0 font-mono text-[11px] text-muted tabular-nums">{fmtSeconds(step.ms)}</span>
+            <span className="ml-auto shrink-0 font-mono text-[11px] text-ink-muted tabular-nums">{fmtSeconds(step.ms)}</span>
           </div>
-          <p className={`m-0 text-xs leading-snug ${step.state === "failed" ? "text-danger" : "text-muted"}`}>
+          <p className={`m-0 text-xs leading-snug ${step.state === "failed" ? "text-danger" : "text-ink-muted"}`}>
             {step.name === "Extract" && play.method && (
               <>
                 <MethodChip method={play.method} />{" "}

@@ -50,7 +50,7 @@ export function SourceExcerpt({
         ))}
       </blockquote>
       {caption && (
-        <figcaption className={`mt-1.5 text-xs ${onDanger ? "text-accent-ink/90" : "text-muted"}`}>{caption}</figcaption>
+        <figcaption className={`mt-1.5 text-xs ${onDanger ? "text-accent-ink/90" : "text-ink-muted"}`}>{caption}</figcaption>
       )}
     </figure>
   );

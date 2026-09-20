@@ -47,7 +47,7 @@ const STEPS: PipelineStep[] = [
 function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
   return (
     <section aria-labelledby={id} className="space-y-4 border-t border-line pt-8">
-      <h2 id={id} className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">
+      <h2 id={id} className="text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase">
         {title}
       </h2>
       {children}
@@ -62,7 +62,7 @@ export function KitView() {
     <div className="mx-auto max-w-5xl space-y-8 px-6 py-8">
       <header className="space-y-2">
         <h1 className="font-display text-[40px] leading-[1.1] font-extrabold tracking-[-0.03em] text-ink">Kit</h1>
-        <p className="text-[15px] text-muted">
+        <p className="text-[15px] text-ink-muted">
           Gazette &amp; Foil: every token and component, in every state. Not in the nav, not indexed.
         </p>
       </header>
@@ -77,13 +77,13 @@ export function KitView() {
               <div className="flex items-center justify-center rounded-md border border-line bg-ink p-4 text-canvas">
                 <Mark size={size} />
               </div>
-              <p className="font-mono text-[11px] text-muted">{size}px</p>
+              <p className="font-mono text-[11px] text-ink-muted">{size}px</p>
             </div>
           ))}
           <div className="space-y-3">
             <Logo height={24} className="text-ink" />
             <Logo height={20} className="text-ink" />
-            <p className="font-mono text-[11px] text-muted">lockup 24 (rail) · 20 (mobile bar)</p>
+            <p className="font-mono text-[11px] text-ink-muted">lockup 24 (rail) · 20 (mobile bar)</p>
           </div>
         </div>
       </Section>
@@ -103,7 +103,7 @@ export function KitView() {
         <ul className="list-none space-y-4 p-0">
           {TYPE.map((t) => (
             <li key={t.name} className="grid gap-1 border-b border-line pb-3 md:grid-cols-[8rem_minmax(0,1fr)] md:items-baseline">
-              <span className="font-mono text-[11px] text-muted">{t.name}</span>
+              <span className="font-mono text-[11px] text-ink-muted">{t.name}</span>
               <span className={`${t.className} text-ink`}>{t.sample}</span>
             </li>
           ))}
@@ -116,11 +116,11 @@ export function KitView() {
           <FoilChip code={listed} size="lg" />
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
-              <span className="w-12 text-[12px] text-muted">Yours</span>
+              <span className="w-12 text-[12px] text-ink-muted">Yours</span>
               <FoilChip code={yours} diff={diffIndexes(yours, listed)} />
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-12 text-[12px] text-muted">Listed</span>
+              <span className="w-12 text-[12px] text-ink-muted">Listed</span>
               <FoilChip code={listed} diff={diffIndexes(yours, listed)} />
             </div>
           </div>
@@ -145,7 +145,7 @@ export function KitView() {
         <div className="flex flex-wrap items-center gap-2">
           {[
             ["CLEAR", "bg-success-soft text-success"],
-            ["CHECKING", "bg-surface-2 text-muted"],
+            ["CHECKING", "bg-surface-2 text-ink-muted"],
             ["NEEDS YOU", "bg-warning-soft text-warning"],
             ["NOT ON THE NOTICE", "bg-success-soft text-success"],
             ["ON A NOTICE", "bg-danger-soft text-danger"],

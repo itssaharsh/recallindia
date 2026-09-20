@@ -105,7 +105,7 @@ export function ClaimLetterPreview({
         </div>
       </div>
       <article className="max-w-[640px] border border-line bg-surface-1 px-8 py-8 text-[13px] leading-relaxed text-ink md:px-10">
-        <p className="text-muted">{fmtDay(c.claim_created_at)}</p>
+        <p className="text-ink-muted">{fmtDay(c.claim_created_at)}</p>
         <p className="mt-4">To: {item?.bought_from || `The ${c.claim_addressee ?? "seller"}`}</p>
         {subject && <p className="mt-4 font-semibold">{subject}</p>}
         {paragraphs.map((p, i) => (
@@ -113,7 +113,7 @@ export function ClaimLetterPreview({
             {p}
           </p>
         ))}
-        <p className="mt-4 text-muted">The rest of the letter is in the PDF.</p>
+        <p className="mt-4 text-ink-muted">The rest of the letter is in the PDF.</p>
       </article>
       {error && <p className="text-[13px] text-warning">The letter couldn&apos;t be opened ({error}). Try again.</p>}
     </section>

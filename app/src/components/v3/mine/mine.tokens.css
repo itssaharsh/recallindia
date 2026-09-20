@@ -1,0 +1,58 @@
+/* ==========================================================================
+   /mine tokens (spec/mine.md §4). Import once, after globals.tokens.css:
+       @import "./globals.tokens.css";
+       @import "../components/v3/mine/mine.tokens.css";
+   Only the values the /mine components need beyond the shared theme.
+   The category tint and paper already ship in globals.tokens.css
+   (--cat-*-tint and --cat-*-soft, where "soft" is the tile paper).
+   ========================================================================== */
+:root {
+  /* NoticeQuote */
+  --quote-bg: #FFF8F7;
+  --quote-line: #F3D3CF;
+  --quote-mark: #FAD9D5;          /* <mark> behind ink, 13.1:1 */
+
+  /* RangeBar */
+  --range-fill: #F4C9C4;          /* listed range, with a 1.5px inset --danger edge */
+
+  /* Alert band (white text on --danger is 6.95:1) */
+  --band-muted: #FFD9D6;          /* "Published 01 Jul 2026" on the band, 5.34:1 */
+  --band-muted-2: #FFE3E0;        /* second line of the source at 390, 5.73:1 */
+
+  /* HouseholdStrip print line and FilterBar */
+  --print-ink: #1B3563;           /* 9.1:1 on foil */
+  --filter-on-count: #C9D3E3;     /* count on the ink (active) filter pill, 11.4:1 */
+
+  /* ScanConfirm */
+  --photo-table: #E7E2D9;         /* letterbox behind the photo */
+  --scrim-sheet: rgb(11 27 51 / 0.5);
+
+  /* Pills in the household strip */
+  --pill-red: #B3121E;            /* = --danger; the landing's red pill */
+}
+
+@theme inline {
+  --color-quote-bg: var(--quote-bg);
+  --color-quote-line: var(--quote-line);
+  --color-quote-mark: var(--quote-mark);
+  --color-range-fill: var(--range-fill);
+  --color-band-muted: var(--band-muted);
+  --color-band-muted-2: var(--band-muted-2);
+  --color-print-ink: var(--print-ink);
+  --color-filter-on-count: var(--filter-on-count);
+  --color-photo-table: var(--photo-table);
+  --color-scrim-sheet: var(--scrim-sheet);
+
+  /* the only coloured shadow in the app: a red-tinted lift under alert cards */
+  --shadow-alert: 0 2px 4px rgb(11 27 51 / 0.05), 0 22px 44px -20px rgb(179 18 30 / 0.45);
+  /* the household foil strip */
+  --shadow-strip: inset 0 1px 0 rgb(255 255 255 / 0.8), inset 0 0 0 1px rgb(11 27 51 / 0.12), 0 2px 4px rgb(11 27 51 / 0.06), 0 18px 34px -16px rgb(11 27 51 / 0.35);
+  /* recessed pocket and pills */
+  --shadow-pocket: inset 0 2px 4px rgb(11 27 51 / 0.22), inset 0 -1px 0 rgb(255 255 255 / 0.9), 0 1px 0 rgb(255 255 255 / 0.7);
+  --shadow-pill: 0 1px 2px rgb(11 27 51 / 0.28), inset 0 -2px 0 rgb(11 27 51 / 0.07);
+  --shadow-pill-red: 0 1px 2px rgb(120 0 10 / 0.45), inset 0 -3px 0 rgb(90 0 8 / 0.25), 0 0 0 3px rgb(179 18 30 / 0.14);
+  /* the Add sheet rises from the bottom edge */
+  --shadow-sheet: 0 -2px 6px rgb(11 27 51 / 0.08), 0 -30px 60px -20px rgb(11 27 51 / 0.45);
+  /* FoilChip `selected` rings (ScanConfirm Batch field) */
+  --shadow-foil-selected: inset 0 1px 0 rgb(255 255 255 / 0.7), inset 0 0 0 1px rgb(11 27 51 / 0.14), 0 0 0 3px var(--cobalt-soft), 0 0 0 4.5px var(--cobalt);
+}

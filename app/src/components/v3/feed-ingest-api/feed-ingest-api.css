@@ -1,0 +1,97 @@
+/* ==========================================================================
+   /feed, /ingest, /api · derived tokens (spec/feed-ingest-api.md §0.1)
+   Import once, after the shared tokens:
+       @import "./globals.tokens.css";
+       @import "../components/v3/feed-ingest-api/feed-ingest-api.css";
+   Components never write a hex value; they use the utilities generated below
+   (bg-src, text-src-ink, bg-src-bg, bg-wash, border-danger-edge, …).
+   ========================================================================== */
+
+:root {
+  /* Source identity = the category ramps from /mine. -ink is new: text on the -bg tint (all AA). */
+  --src-cdsco-c: var(--cat-medicine);    --src-cdsco-ink: #0A58C2;   --src-cdsco-t: var(--cat-medicine-tint);    --src-cdsco-bg: var(--cat-medicine-soft);
+  --src-cpsc-c: var(--cat-appliance);    --src-cpsc-ink: #0B6E55;    --src-cpsc-t: var(--cat-appliance-tint);    --src-cpsc-bg: var(--cat-appliance-soft);
+  --src-nhtsa-c: var(--cat-vehicle);     --src-nhtsa-ink: #9A4A00;   --src-nhtsa-t: var(--cat-vehicle-tint);     --src-nhtsa-bg: var(--cat-vehicle-soft);
+  --src-openfda-c: var(--cat-other);     --src-openfda-ink: #5B4E7A; --src-openfda-t: var(--cat-other-tint);     --src-openfda-bg: var(--cat-other-soft);
+
+  /* Surfaces and lines used only by these three screens */
+  --wash: #F7F9FD;               /* group headers, row hover, load-more footer, ContentBar, API response column */
+  --cobalt-wash: #F0F5FD;        /* selected row, newest landed row, raw-row Result cell */
+  --cobalt-tint: #EEF4FD;        /* PDF row fill while reading, JSON line hover */
+  --cobalt-edge: #B9CFF0;        /* newest landed row border */
+  --cobalt-caption: #3A5A8C;     /* chart caption and axis labels on the CDSCO tint */
+  --ink-on-tint: #34496B;        /* alert-header sub-line on the CDSCO tint */
+  --ink-on-cobalt-soft: #2A4570; /* open endpoint description, ReplayChip detail */
+  --bar-past: #AFC8EE;           /* past months in the CDSCO bars */
+  --danger-edge: #F3CFCB;        /* HouseholdMatchBanner border */
+  --desk: #E4EBF4;               /* PDF desk */
+  --raw-edge: #C9D3E1;           /* "As published" snippet outline */
+  --raw-rule: #DCE3EC;           /* its inner rules */
+  --raw-num: #F3F6FA;            /* its row-number cell */
+  --raw-ink: #1D2B44;            /* its text */
+  --gutter-ink: #76839A;         /* JSON line numbers (3.8:1 on white) */
+  --on-ink-muted: #C9D3E3;       /* count inside a selected (ink) filter pill */
+  --scrim-sheet: rgb(11 27 51 / 0.34);
+  --scroll-thumb: rgb(11 27 51 / 0.16);  /* the sheet body's 4 px thumb */
+  --shadow-sheet: 0 2px 6px rgb(11 27 51 / 0.1), -24px 0 60px -20px rgb(11 27 51 / 0.45);
+  --shadow-ghost: 0 4px 8px rgb(10 88 194 / 0.12), 0 24px 44px -14px rgb(11 27 51 / 0.45);
+  --shadow-page: 0 1px 2px rgb(11 27 51 / 0.12), 0 8px 24px -10px rgb(11 27 51 / 0.25);
+}
+
+/* One attribute picks the source ramp; bg-src / text-src-ink / bg-src-bg / bg-src-tint read it. */
+[data-source="cdsco_nsq"] { --src-c: var(--src-cdsco-c); --src-ink: var(--src-cdsco-ink); --src-t: var(--src-cdsco-t); --src-bg: var(--src-cdsco-bg); }
+[data-source="cpsc"]      { --src-c: var(--src-cpsc-c);  --src-ink: var(--src-cpsc-ink);  --src-t: var(--src-cpsc-t);  --src-bg: var(--src-cpsc-bg); }
+[data-source="nhtsa"]     { --src-c: var(--src-nhtsa-c); --src-ink: var(--src-nhtsa-ink); --src-t: var(--src-nhtsa-t); --src-bg: var(--src-nhtsa-bg); }
+[data-source="openfda"]   { --src-c: var(--src-openfda-c); --src-ink: var(--src-openfda-ink); --src-t: var(--src-openfda-t); --src-bg: var(--src-openfda-bg); }
+/* Alert tone for an illustration (the strip's last pocket turns red on the match banner) */
+[data-tone="alert"] { --il-pocket: var(--danger); --il-pocket-stroke: var(--danger); }
+
+@theme inline {
+  --color-src: var(--src-c);
+  --color-src-ink: var(--src-ink);
+  --color-src-tint: var(--src-t);
+  --color-src-bg: var(--src-bg);
+  --color-wash: var(--wash);
+  --color-cobalt-wash: var(--cobalt-wash);
+  --color-cobalt-tint: var(--cobalt-tint);
+  --color-cobalt-edge: var(--cobalt-edge);
+  --color-cobalt-caption: var(--cobalt-caption);
+  --color-ink-on-tint: var(--ink-on-tint);
+  --color-ink-on-cobalt-soft: var(--ink-on-cobalt-soft);
+  --color-bar-past: var(--bar-past);
+  --color-danger-edge: var(--danger-edge);
+  --color-desk: var(--desk);
+  --color-raw-edge: var(--raw-edge);
+  --color-raw-rule: var(--raw-rule);
+  --color-raw-num: var(--raw-num);
+  --color-raw-ink: var(--raw-ink);
+  --color-gutter-ink: var(--gutter-ink);
+  --color-on-ink-muted: var(--on-ink-muted);
+  --color-scrim-sheet: var(--scrim-sheet);
+  --color-scroll-thumb: var(--scroll-thumb);
+  --shadow-sheet: 0 2px 6px rgb(11 27 51 / 0.1), -24px 0 60px -20px rgb(11 27 51 / 0.45);
+  --shadow-ghost: 0 4px 8px rgb(10 88 194 / 0.12), 0 24px 44px -14px rgb(11 27 51 / 0.45);
+  --shadow-page: 0 1px 2px rgb(11 27 51 / 0.12), 0 8px 24px -10px rgb(11 27 51 / 0.25);
+  --animate-ring: spin 1.1s linear infinite;
+  --animate-row-pulse: row-pulse 1.2s var(--ease-in-out) infinite;
+}
+
+@keyframes row-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+/* The PDF stand-in (kit / video only): the real page is drawn by react-pdf. */
+.fia-pdf-standin { font-family: Arial, "Liberation Sans", Helvetica, sans-serif; }
+
+/* PDF stand-in table (imitates the CDSCO PDF, so it is allowed its own greys) */
+.fia-pdf-standin table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 10.5px; line-height: 1.28; color: #161616; }
+.fia-pdf-standin th, .fia-pdf-standin td { border: 1px solid #3a3a3a; padding: 5px; vertical-align: top; text-align: left; overflow-wrap: anywhere; }
+.fia-pdf-standin th { background: #DADADA; font-weight: 700; font-size: 10px; line-height: 1.2; vertical-align: middle; }
+.fia-pdf-standin td:first-child { text-align: center; }
+.fia-pdf-standin col:nth-child(1) { width: 34px; }
+.fia-pdf-standin col:nth-child(2) { width: 17%; }
+.fia-pdf-standin col:nth-child(3) { width: 78px; }
+.fia-pdf-standin col:nth-child(4), .fia-pdf-standin col:nth-child(5) { width: 56px; }
+.fia-pdf-standin col:nth-child(6) { width: 27%; }
+.fia-pdf-standin col:nth-child(7) { width: 21%; }
+.fia-pdf-standin col:nth-child(8) { width: 62px; }
+.fia-pdf-standin .fia-title { margin: 0 0 12px; text-align: center; font-weight: 700; font-size: 12px; text-transform: uppercase; }
+.fia-pdf-standin .fia-foot { margin: 8px 0 0; text-align: center; font-size: 9.5px; color: #666; }

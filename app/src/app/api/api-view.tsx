@@ -56,7 +56,7 @@ function CopyButton({ text }: { text: string }) {
           setCopied(false);
         }
       }}
-      className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-line-strong bg-surface-1 text-muted hover:bg-surface-2 hover:text-ink"
+      className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-line-strong bg-surface-1 text-ink-muted hover:bg-surface-2 hover:text-ink"
     >
       {copied ? <Check aria-hidden className="size-4 text-success" /> : <Copy aria-hidden className="size-4" />}
     </button>
@@ -110,14 +110,14 @@ export function ApiView() {
         <h1 className="font-display text-[40px] leading-[1.1] font-extrabold tracking-[-0.03em] text-ink">
           Public API
         </h1>
-        <p className="max-w-2xl text-[18px] text-muted">
+        <p className="max-w-2xl text-[18px] text-ink-muted">
           Every notice on the feed, as JSON. No key needed, CORS open, and the same request works from a terminal.
         </p>
       </header>
 
       <div className="grid min-w-0 gap-10 lg:grid-cols-[440px_minmax(0,1fr)]">
         <section aria-labelledby="endpoints" className="min-w-0 space-y-5">
-          <h2 id="endpoints" className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">
+          <h2 id="endpoints" className="text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase">
             Endpoints
           </h2>
           {ENDPOINTS.map((ep) => (
@@ -125,18 +125,18 @@ export function ApiView() {
               <p className="font-mono text-[14px] text-ink [overflow-wrap:anywhere]">
                 <span className="text-success">{ep.method}</span> {ep.path}
               </p>
-              <p className="text-[14px] text-muted">{ep.what}</p>
+              <p className="text-[14px] text-ink-muted">{ep.what}</p>
               {ep.params.length > 0 && (
                 <dl className="space-y-1">
                   {ep.params.map(([name, example]) => (
                     <div key={name} className="grid grid-cols-[6rem_minmax(0,1fr)] gap-2 text-[13px]">
                       <dt className="font-mono text-ink">{name}</dt>
-                      <dd className="text-muted">{example}</dd>
+                      <dd className="text-ink-muted">{example}</dd>
                     </div>
                   ))}
                 </dl>
               )}
-              <p className="text-[13px] text-muted">
+              <p className="text-[13px] text-ink-muted">
                 Returns <span className="font-mono text-ink">{ep.returns}</span>
               </p>
             </article>
@@ -144,11 +144,11 @@ export function ApiView() {
         </section>
 
         <section aria-labelledby="console" className="min-w-0 space-y-4">
-          <h2 id="console" className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">
+          <h2 id="console" className="text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase">
             Try it
           </h2>
           <div className="flex flex-wrap items-end gap-3">
-            <label className="space-y-1 text-[13px] text-muted">
+            <label className="space-y-1 text-[13px] text-ink-muted">
               <span className="block">Source</span>
               <select
                 value={source}
@@ -163,7 +163,7 @@ export function ApiView() {
                 ))}
               </select>
             </label>
-            <label className="space-y-1 text-[13px] text-muted">
+            <label className="space-y-1 text-[13px] text-ink-muted">
               <span className="block">Published since</span>
               <input
                 type="date"
@@ -172,7 +172,7 @@ export function ApiView() {
                 className="h-10 rounded-md border border-line-strong bg-surface-1 px-3 text-[15px] text-ink"
               />
             </label>
-            <label className="min-w-40 flex-1 space-y-1 text-[13px] text-muted">
+            <label className="min-w-40 flex-1 space-y-1 text-[13px] text-ink-muted">
               <span className="block">Search</span>
               <input
                 value={q}
@@ -197,7 +197,7 @@ export function ApiView() {
             <CopyButton text={curl} />
           </div>
 
-          <p className="text-[13px] text-muted" role="status">
+          <p className="text-[13px] text-ink-muted" role="status">
             {state === "running" && "Requesting…"}
             {state !== "running" && result && (
               <>
@@ -221,7 +221,7 @@ export function ApiView() {
       </div>
 
       <section aria-labelledby="sources" className="min-w-0 space-y-3">
-        <h2 id="sources" className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">
+        <h2 id="sources" className="text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase">
           Sources
         </h2>
         {/* the table keeps its columns; on a phone it scrolls rather than squeezing them */}
@@ -229,7 +229,7 @@ export function ApiView() {
           <div role="table" className="min-w-[720px] border-t border-line text-[14px]">
             <div
               role="row"
-              className="grid grid-cols-[1fr_7rem_7rem_9rem_minmax(0,1fr)] gap-3 border-b border-line bg-surface-1 px-3 py-2 text-[12px] font-bold tracking-[0.08em] text-muted uppercase"
+              className="grid grid-cols-[1fr_7rem_7rem_9rem_minmax(0,1fr)] gap-3 border-b border-line bg-surface-1 px-3 py-2 text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase"
             >
               <span role="columnheader">Source</span>
               <span role="columnheader">Notices</span>
@@ -257,10 +257,10 @@ export function ApiView() {
                 >
                   {s.health}
                 </span>
-                <span role="cell" className="text-muted">
+                <span role="cell" className="text-ink-muted">
                   {s.polls_every}
                 </span>
-                <span role="cell" className="text-muted">
+                <span role="cell" className="text-ink-muted">
                   {s.last_success_at ? `${fmtWhen(s.last_success_at)} IST` : "—"}
                 </span>
               </div>

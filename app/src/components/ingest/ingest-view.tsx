@@ -255,13 +255,13 @@ export function IngestView() {
           <h1 id="ingest-title" className="m-0 font-display text-2xl leading-tight font-semibold text-ink md:text-3xl">
             A CDSCO alert PDF, becoming the feed
           </h1>
-          <p className="mt-1 mb-0 text-sm text-muted">
+          <p className="mt-1 mb-0 text-sm text-ink-muted">
             {title} · the regulator&apos;s monthly list of drugs that failed quality tests, read row by row
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {runId && (
-            <span className="font-mono text-xs text-muted">
+            <span className="font-mono text-xs text-ink-muted">
               {mode === "replay" ? "replay of " : ""}
               {runId}
               {mode === "replay" && speed !== 1 ? ` · ×${speed}` : ""}
@@ -291,10 +291,10 @@ export function IngestView() {
           <CheckCircle2 aria-hidden className="size-5 text-success" />
           <p className="m-0 text-sm text-ink">
             <span className="font-display text-lg font-semibold">{play.noticesOut ?? "—"} notices</span>
-            <span className="text-muted"> · </span>
+            <span className="text-ink-muted"> · </span>
             {methodLabel(play.method)}
-            <span className="text-muted"> · </span>CDSCO NSQ {month}
-            <span className="text-muted"> · </span>
+            <span className="text-ink-muted"> · </span>CDSCO NSQ {month}
+            <span className="text-ink-muted"> · </span>
             {play.newSinceLast ?? "—"} new since last run
           </p>
           <Link

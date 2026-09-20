@@ -50,7 +50,7 @@ export function Rail() {
               href={href(path)}
               aria-current={on ? "page" : undefined}
               className={`hidden items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors md:flex ${
-                on ? "bg-surface-1 text-ink" : "text-muted hover:bg-surface-2 hover:text-ink"
+                on ? "bg-surface-1 text-ink" : "text-ink-muted hover:bg-surface-2 hover:text-ink"
               }`}
             >
               <Icon aria-hidden className="size-5 shrink-0" strokeWidth={1.75} />
@@ -77,7 +77,7 @@ export function Rail() {
               href={href(path)}
               aria-current={on ? "page" : undefined}
               className={`flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[12px] ${
-                on ? "text-ink" : "text-muted"
+                on ? "text-ink" : "text-ink-muted"
               }`}
             >
               <Icon aria-hidden className="size-5" strokeWidth={1.75} />

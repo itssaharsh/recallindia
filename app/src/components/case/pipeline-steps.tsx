@@ -10,7 +10,7 @@ const DOT: Record<PipelineStep["state"], string> = {
 };
 
 const LABEL: Record<PipelineStep["state"], string> = {
-  pending: "text-muted",
+  pending: "text-ink-muted",
   running: "text-ink",
   done: "text-ink",
   failed: "text-warning",
@@ -46,7 +46,7 @@ export function PipelineSteps({ steps, orientation = "vertical" }: { steps: Pipe
             <span className="sr-only"> ({WORD[step.state]})</span>
           </span>
           {step.state === "done" && (
-            <span className="font-mono text-[11px] text-muted">
+            <span className="font-mono text-[11px] text-ink-muted">
               {step.seconds !== null && step.seconds >= 0.1 ? `${step.seconds.toFixed(1)} s` : "—"}
             </span>
           )}

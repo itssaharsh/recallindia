@@ -3,7 +3,7 @@ const TONE = {
   hold: "text-warning",
   dismissed: "text-warning",
   clear: "text-success",
-  unchecked: "text-muted",
+  unchecked: "text-ink-muted",
   checking: "text-primary",
 } as const;
 

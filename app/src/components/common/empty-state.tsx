@@ -22,9 +22,9 @@ export function EmptyState({
 }) {
   return (
     <div role={tone === "error" ? "alert" : "status"} className="mx-auto flex max-w-lg flex-col items-start gap-3 px-5 py-16">
-      <Icon aria-hidden className={`size-8 ${tone === "error" ? "text-danger" : "text-muted"}`} />
+      <Icon aria-hidden className={`size-8 ${tone === "error" ? "text-danger" : "text-ink-muted"}`} />
       <h2 className="font-display text-xl font-semibold text-ink">{what}</h2>
-      <p className="text-sm leading-relaxed text-muted">{why}</p>
+      <p className="text-sm leading-relaxed text-ink-muted">{why}</p>
       {action && <div className="pt-1">{action}</div>}
     </div>
   );

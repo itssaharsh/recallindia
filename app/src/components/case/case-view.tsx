@@ -47,7 +47,7 @@ function caseIdFromLocation(): string | null {
 const TONE: Record<"hold" | "clear" | "muted", string> = {
   hold: "text-warning",
   clear: "text-success",
-  muted: "text-muted",
+  muted: "text-ink-muted",
 };
 
 function StatusChip({ c }: { c: Case }) {
@@ -68,7 +68,7 @@ function StatusChip({ c }: { c: Case }) {
 function Field({ label, children, mono }: { label: string; children: React.ReactNode; mono?: boolean }) {
   return (
     <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-3 border-b border-line py-2 text-[13px]">
-      <dt className="text-muted">{label}</dt>
+      <dt className="text-ink-muted">{label}</dt>
       <dd className={`min-w-0 text-ink ${mono ? "font-mono text-[12.5px]" : ""}`}>{children}</dd>
     </div>
   );
@@ -231,10 +231,10 @@ export function CaseView() {
       <nav aria-label="Case" className="mb-5 flex items-center justify-between gap-3">
         <Link
           href={href("/mine/")}
-          className="inline-flex items-center gap-1 rounded-sm text-[13px] text-muted hover:text-ink"
+          className="inline-flex items-center gap-1 rounded-sm text-[13px] text-ink-muted hover:text-ink"
         >
           <ArrowLeft aria-hidden className="size-3.5" /> My things
-          {item?.name ? <span className="text-muted"> / {item.name}</span> : null}
+          {item?.name ? <span className="text-ink-muted"> / {item.name}</span> : null}
         </Link>
         <StatusChip c={c} />
       </nav>
@@ -242,8 +242,8 @@ export function CaseView() {
       <header className="space-y-3 border-b border-line pb-6">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           {notice && <SourceChip notice={notice} />}
-          {c.created_at && <span className="text-xs text-muted">case opened {fmtDay(c.created_at)}</span>}
-          <span className="font-mono text-[11px] break-all text-muted">{c.case_id}</span>
+          {c.created_at && <span className="text-xs text-ink-muted">case opened {fmtDay(c.created_at)}</span>}
+          <span className="font-mono text-[11px] break-all text-ink-muted">{c.case_id}</span>
         </div>
         <h1
           id="case-title"
@@ -251,7 +251,7 @@ export function CaseView() {
         >
           {outcomeLine(c, item, notice)}
         </h1>
-        {subLine && <p className="max-w-2xl text-[15px] text-muted">{subLine}</p>}
+        {subLine && <p className="max-w-2xl text-[15px] text-ink-muted">{subLine}</p>}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           {chipCode && <FoilChip code={chipCode} size="lg" />}
           {dates && (
@@ -259,7 +259,7 @@ export function CaseView() {
               {dates}
               {c.sold_after_notice && (
                 <>
-                  <span className="text-muted"> → </span>
+                  <span className="text-ink-muted"> → </span>
                   <strong className="font-bold text-ink">sold after notice</strong>
                 </>
               )}
@@ -272,7 +272,7 @@ export function CaseView() {
         <div className="min-w-0 space-y-8">
           <section aria-labelledby="notice-heading" className="min-w-0 space-y-4">
             <div className="space-y-1">
-              <h2 id="notice-heading" className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">
+              <h2 id="notice-heading" className="text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase">
                 The notice
               </h2>
               {notice && (
@@ -315,7 +315,7 @@ export function CaseView() {
                 {notice.lab && <Field label="Tested by">{notice.lab}</Field>}
                 <Field label="Remedy">
                   {notice.remedy || (
-                    <span className="text-muted">
+                    <span className="text-ink-muted">
                       Not stated by the source: the letter asks for a refund or a replacement
                     </span>
                   )}
@@ -329,7 +329,7 @@ export function CaseView() {
             )}
             {c.range_check && (
               <div className="space-y-2">
-                <h3 className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">
+                <h3 className="text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase">
                   Your {unit} against the list
                 </h3>
                 <RangeBar check={c.range_check} />
@@ -378,7 +378,7 @@ export function CaseView() {
               <p className="text-[14px] leading-relaxed text-ink">
                 {c.decision === "dismiss" ? "Dismissed" : "On hold"}: {c.reason}.
               </p>
-              <p className="text-[13px] leading-relaxed text-muted">
+              <p className="text-[13px] leading-relaxed text-ink-muted">
                 {c.decision === "dismiss"
                   ? `The notice is about the same product, but it does not list your ${unit}. There is nothing to approve.`
                   : "A rule needs one more detail before it can decide. Add it on My things and check the item again."}
@@ -391,7 +391,7 @@ export function CaseView() {
           <aside aria-labelledby="case-file" className="min-w-0 xl:sticky xl:top-6 xl:self-start">
             <div className="space-y-4 rounded-md border border-line bg-surface-1 p-4">
               <div className="flex items-center justify-between gap-2">
-                <h2 id="case-file" className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">
+                <h2 id="case-file" className="text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase">
                   Case file
                 </h2>
                 <StatusChip c={c} />
@@ -399,15 +399,15 @@ export function CaseView() {
               <PipelineSteps steps={steps} />
               <dl className="space-y-1.5 border-t border-line pt-3 text-[12px]">
                 <div className="flex justify-between gap-3">
-                  <dt className="text-muted">Item</dt>
+                  <dt className="text-ink-muted">Item</dt>
                   <dd className="min-w-0 truncate text-ink">{item?.name ?? c.item_id}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-muted">Notice</dt>
+                  <dt className="text-ink-muted">Notice</dt>
                   <dd className="min-w-0 truncate font-mono text-ink">{notice?.notice_id ?? c.notice_id}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-muted">Source</dt>
+                  <dt className="text-ink-muted">Source</dt>
                   <dd className="text-ink">{notice ? sourceLabel(notice.source) : "—"}</dd>
                 </div>
               </dl>

@@ -89,8 +89,8 @@ export const DissolveColumn = memo(
         <div className="ingest-layer flex min-h-0 min-w-0 flex-col border border-line bg-surface-1">
           <div className="flex items-end justify-between gap-3 border-b border-line px-4 py-3">
             <div className="min-w-0">
-              <p className="m-0 text-xs text-muted">{title}</p>
-              <p className="m-0 text-xs text-muted">
+              <p className="m-0 text-xs text-ink-muted">{title}</p>
+              <p className="m-0 text-xs text-ink-muted">
                 {rowsIn !== null ? `${fmtCount(rowsIn)} rows read` : "rows read: —"}
                 {mergedLines > 0 ? ` · ${mergedLines} continuation line${mergedLines === 1 ? "" : "s"} merged` : ""}
               </p>
@@ -102,11 +102,11 @@ export const DissolveColumn = memo(
               <span ref={counter} className="font-display text-5xl leading-none font-semibold text-ink tabular-nums">
                 0
               </span>
-              <span className="text-sm text-muted">notices</span>
+              <span className="text-sm text-ink-muted">notices</span>
             </p>
           </div>
           <div ref={list} className={`relative min-h-0 flex-1 ${settled ? "overflow-y-auto" : "overflow-hidden"}`}>
-            <p ref={emptyNote} className="m-0 flex h-full items-center justify-center px-6 text-center text-[13px] text-muted">
+            <p ref={emptyNote} className="m-0 flex h-full items-center justify-center px-6 text-center text-[13px] text-ink-muted">
               {empty}
             </p>
             {/* landing: rows are appended here directly (React renders no children into it) */}

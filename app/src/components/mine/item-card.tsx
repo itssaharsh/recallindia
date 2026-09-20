@@ -32,7 +32,7 @@ const TAG: Record<Face, { label: string; tone: string }> = {
   hold: { label: "Needs you", tone: "text-warning" },
   dismissed: { label: "Not on the notice", tone: "text-success" },
   clear: { label: "Clear", tone: "text-success" },
-  unchecked: { label: "Not checked", tone: "text-muted" },
+  unchecked: { label: "Not checked", tone: "text-ink-muted" },
 };
 
 function FaceLabel({ face }: { face: Face }) {
@@ -128,10 +128,10 @@ export function ItemCard({
   const back = (
     <div className="flex h-full flex-col gap-3 p-4">
       <div className="flex items-start justify-between gap-3">
-        <p className="m-0 text-[13px] text-muted">
+        <p className="m-0 text-[13px] text-ink-muted">
           Checking <span className="text-ink">{item.name}</span>
         </p>
-        <span className="inline-flex shrink-0 items-center gap-1.5 text-[12px] font-bold tracking-[0.08em] text-muted uppercase">
+        <span className="inline-flex shrink-0 items-center gap-1.5 text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase">
           <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-primary" />
           Checking
         </span>
@@ -220,7 +220,7 @@ function Front({
           <h3 className={`truncate font-display text-[20px] leading-tight font-bold ${onRed ? "text-accent-ink" : "text-ink"}`}>
             {item.name}
           </h3>
-          <p className={`truncate text-[13px] ${onRed ? "text-accent-ink/85" : "text-muted"}`}>
+          <p className={`truncate text-[13px] ${onRed ? "text-accent-ink/85" : "text-ink-muted"}`}>
             {[item.brand, item.purchase_date ? `bought ${fmtDay(item.purchase_date)}` : null].filter(Boolean).join(" · ") ||
               item.kind}
           </p>
@@ -260,11 +260,11 @@ function Front({
           {c.range_check?.yours && c.range_check.listed ? (
             <div className="space-y-1.5">
               <div className="flex items-center gap-2">
-                <span className="w-12 text-[12px] text-muted">Yours</span>
+                <span className="w-12 text-[12px] text-ink-muted">Yours</span>
                 <FoilChip code={c.range_check.yours} diff={diffIndexes(c.range_check.yours, closest(c.range_check))} />
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-12 text-[12px] text-muted">Listed</span>
+                <span className="w-12 text-[12px] text-ink-muted">Listed</span>
                 <FoilChip code={closest(c.range_check)} diff={diffIndexes(c.range_check.yours, closest(c.range_check))} />
               </div>
             </div>
@@ -272,7 +272,7 @@ function Front({
             <p className="text-[13px] text-ink">{sentence(c.reason)}</p>
           )}
           {notice && (
-            <p className="text-[13px] text-muted">
+            <p className="text-[13px] text-ink-muted">
               Same {item.kind === "medicine" ? "medicine and maker" : "product"} as {noticeRef(notice)}, different{" "}
               {unitWord(item)}. Dismissed.
             </p>
@@ -288,12 +288,12 @@ function Front({
       )}
 
       {face === "clear" && (
-        <p className="text-[13px] text-muted">
+        <p className="text-[13px] text-ink-muted">
           No match in {sources} sources as of {fmtWhen(item.last_checked_at)}.
         </p>
       )}
 
-      {face === "unchecked" && <p className="text-[13px] text-muted">Not checked against the notices yet.</p>}
+      {face === "unchecked" && <p className="text-[13px] text-ink-muted">Not checked against the notices yet.</p>}
 
       <div className="mt-auto flex items-center justify-end gap-2 pt-1">
         {c?.case_id && (
@@ -315,7 +315,7 @@ function Front({
             className={`inline-flex h-9 items-center rounded-md px-3 text-[13px] font-medium disabled:opacity-50 ${
               onRed
                 ? "border border-accent-ink/60 text-accent-ink hover:bg-accent-ink/10"
-                : "text-muted hover:bg-surface-2 hover:text-ink"
+                : "text-ink-muted hover:bg-surface-2 hover:text-ink"
             }`}
           >
             {face === "unchecked" ? "Check" : "Check again"}

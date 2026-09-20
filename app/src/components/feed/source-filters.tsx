@@ -26,13 +26,13 @@ export function SourceFilters({
 }) {
   const chip = (on: boolean) =>
     `inline-flex h-8 items-center gap-2 rounded-sm border px-2.5 text-[13px] transition-colors ${
-      on ? "border-primary bg-surface-2 text-ink" : "border-line text-muted hover:bg-surface-2 hover:text-ink"
+      on ? "border-primary bg-surface-2 text-ink" : "border-line text-ink-muted hover:bg-surface-2 hover:text-ink"
     }`;
   return (
     <div role="group" aria-label="Filter by source" className="flex flex-wrap items-center gap-2">
       <button type="button" aria-pressed={value === null} onClick={() => onChange(null)} className={chip(value === null)}>
         All
-        {stats && <span className="font-mono text-xs text-muted">{fmtCount(stats.total)}</span>}
+        {stats && <span className="font-mono text-xs text-ink-muted">{fmtCount(stats.total)}</span>}
       </button>
       {stats?.sources.map((s) => (
         <button
@@ -45,7 +45,7 @@ export function SourceFilters({
         >
           <span aria-hidden className={`size-2 rounded-full ${DOT[s.health]}`} />
           <span>{s.label}</span>
-          <span className="font-mono text-xs text-muted">{fmtCount(s.count)}</span>
+          <span className="font-mono text-xs text-ink-muted">{fmtCount(s.count)}</span>
           <span className={s.health === "healthy" ? "sr-only" : "text-xs text-warning"}>{healthText(s)}</span>
         </button>
       ))}

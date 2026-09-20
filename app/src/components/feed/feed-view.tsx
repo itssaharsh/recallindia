@@ -163,7 +163,7 @@ export function FeedView() {
               "Notices"
             )}
           </h1>
-          <p className="text-[16px] text-muted md:text-[18px]">
+          <p className="text-[16px] text-ink-muted md:text-[18px]">
             from CDSCO, CPSC, NHTSA and openFDA
             {stats?.last_poll_at ? ` · last poll ${fmtWhen(stats.last_poll_at)} IST` : ""}
             {shown ? ` · showing ${shown.label} only` : ""}
@@ -231,7 +231,7 @@ export function FeedView() {
               <FeedRow key={n.pk} notice={n} fresh={fresh.current.has(n.pk)} onOpen={setOpen} />
             ))}
           </ul>
-          <div className="flex items-center gap-3 px-5 py-4 text-sm text-muted">
+          <div className="flex items-center gap-3 px-5 py-4 text-sm text-ink-muted">
             <span className="font-mono text-xs">
               {fmtCount(rows.length)} shown{shown ? ` of ${fmtCount(shown.count)}` : stats ? ` of ${fmtCount(stats.total)}` : ""}
             </span>

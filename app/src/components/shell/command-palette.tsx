@@ -104,15 +104,15 @@ export function CommandPalette() {
       <div className="w-full max-w-[640px] overflow-hidden rounded-lg border border-line bg-surface-1 shadow-[var(--shadow-2)]">
         <Command.Input
           placeholder="Search pages, sources, cases…"
-          className="h-12 w-full border-b border-line bg-surface-1 px-4 text-[15px] text-ink outline-none placeholder:text-muted"
+          className="h-12 w-full border-b border-line bg-surface-1 px-4 text-[15px] text-ink outline-none placeholder:text-ink-muted"
         />
         <Command.List className="max-h-[50vh] overflow-y-auto p-2">
-          <Command.Empty className="px-3 py-6 text-center text-[14px] text-muted">Nothing matches that.</Command.Empty>
+          <Command.Empty className="px-3 py-6 text-center text-[14px] text-ink-muted">Nothing matches that.</Command.Empty>
           {rows.map(({ group, items }) => (
             <Command.Group
               key={group}
               heading={group}
-              className="px-1 py-1 text-[12px] font-bold tracking-[0.08em] text-muted uppercase [&_[cmdk-group-items]]:mt-1"
+              className="px-1 py-1 text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase [&_[cmdk-group-items]]:mt-1"
             >
               {items.map((row) => (
                 <Command.Item
@@ -123,7 +123,7 @@ export function CommandPalette() {
                 >
                   {row.label}
                   {row.hint && (
-                    <kbd className="rounded-sm bg-surface-2 px-1.5 py-0.5 font-mono text-[12px] text-muted">{row.hint}</kbd>
+                    <kbd className="rounded-sm bg-surface-2 px-1.5 py-0.5 font-mono text-[12px] text-ink-muted">{row.hint}</kbd>
                   )}
                 </Command.Item>
               ))}
@@ -141,7 +141,7 @@ export function CommandHint({ className }: { className?: string }) {
     <button
       type="button"
       onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }))}
-      className={`inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted hover:bg-surface-2 hover:text-ink ${className ?? ""}`}
+      className={`inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-ink-muted hover:bg-surface-2 hover:text-ink ${className ?? ""}`}
     >
       Search or jump
       <kbd className="rounded-sm bg-surface-2 px-1.5 py-0.5 font-mono text-[11px]">⌘K</kbd>

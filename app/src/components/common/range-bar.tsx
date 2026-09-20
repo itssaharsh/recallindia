@@ -68,7 +68,7 @@ export function RangeBar({ check, onDanger = false }: { check: RangeCheck; onDan
           <span
             key={b}
             className={`truncate rounded-sm bg-surface-1 px-1.5 py-0.5 font-mono text-[13px] ${
-              hit && eq(b, yours) ? `text-ink outline-2 ${outline}` : "text-muted"
+              hit && eq(b, yours) ? `text-ink outline-2 ${outline}` : "text-ink-muted"
             }`}
           >
             {b}

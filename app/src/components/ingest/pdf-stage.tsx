@@ -286,7 +286,7 @@ export function PdfStage({
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div role="group" aria-label="Page" className="flex items-center gap-1">
-          <span className="mr-1 text-xs text-muted">Page</span>
+          <span className="mr-1 text-xs text-ink-muted">Page</span>
           {Array.from({ length: Math.max(shownPages, 0) }, (_, i) => (
             <button
               key={i}
@@ -297,15 +297,15 @@ export function PdfStage({
               className={`h-7 min-w-7 rounded-sm border px-1.5 font-mono text-xs disabled:cursor-default ${
                 page === i + 1
                   ? "border-primary bg-surface-2 text-ink"
-                  : "border-line text-muted hover:bg-surface-2 hover:text-ink"
+                  : "border-line text-ink-muted hover:bg-surface-2 hover:text-ink"
               }`}
             >
               {i + 1}
             </button>
           ))}
-          {shownPages > 0 && <span className="ml-1 font-mono text-xs text-muted">/ {shownPages}</span>}
+          {shownPages > 0 && <span className="ml-1 font-mono text-xs text-ink-muted">/ {shownPages}</span>}
         </div>
-        <figcaption className="text-xs text-muted">
+        <figcaption className="text-xs text-ink-muted">
           {mode === "poster" ? `Showing a pre-rendered copy of page ${page}` : caption}
         </figcaption>
       </div>

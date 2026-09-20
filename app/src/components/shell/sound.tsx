@@ -95,7 +95,7 @@ export function SoundToggle({ className }: { className?: string }) {
       title={ctx.on ? "Sound on" : "Sound off"}
       aria-label={ctx.on ? "Sound on" : "Sound off"}
       aria-pressed={ctx.on}
-      className={`inline-flex size-8 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-ink ${className ?? ""}`}
+      className={`inline-flex size-8 items-center justify-center rounded-md text-ink-muted hover:bg-surface-2 hover:text-ink ${className ?? ""}`}
     >
       <Icon aria-hidden className="size-4" />
     </button>

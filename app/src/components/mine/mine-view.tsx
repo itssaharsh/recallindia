@@ -139,7 +139,7 @@ export function MineView() {
             )}
           </h1>
           {items !== null && (
-            <p className="mt-2 text-[16px] text-muted">
+            <p className="mt-2 text-[16px] text-ink-muted">
               {items.length} {items.length === 1 ? "thing" : "things"} · checked against {sources} sources ·{" "}
               {fmtWhen(lastChecked)} IST
               {onHold > 0 ? ` · ${onHold} need${onHold === 1 ? "s" : ""} a detail to confirm` : ""}
@@ -163,7 +163,7 @@ export function MineView() {
               type="button"
               aria-pressed={filter === f.id}
               onClick={() => setFilter(f.id)}
-              className={`h-8 rounded-sm border px-2.5 text-[13px] ${filter === f.id ? "border-primary bg-surface-2 text-ink" : "border-line text-muted hover:bg-surface-2 hover:text-ink"}`}
+              className={`h-8 rounded-sm border px-2.5 text-[13px] ${filter === f.id ? "border-primary bg-surface-2 text-ink" : "border-line text-ink-muted hover:bg-surface-2 hover:text-ink"}`}
             >
               {f.label}
             </button>

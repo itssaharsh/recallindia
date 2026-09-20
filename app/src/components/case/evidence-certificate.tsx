@@ -16,7 +16,7 @@ const CAPTION =
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <>
-      <dt className="text-muted">{label}</dt>
+      <dt className="text-ink-muted">{label}</dt>
       <dd className="min-w-0 text-ink [overflow-wrap:anywhere]">{children}</dd>
     </>
   );
@@ -60,10 +60,10 @@ export function EvidenceCertificate({ caseId, evidence, demo }: { caseId: string
     <figure>
       <section aria-labelledby="certificate-title" className="border border-line bg-surface-1 font-mono">
         <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-line px-4 py-2.5">
-          <h2 id="certificate-title" className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">
+          <h2 id="certificate-title" className="text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase">
             Evidence certificate
           </h2>
-          <span className="text-[11px] text-muted">{caseId}</span>
+          <span className="text-[11px] text-ink-muted">{caseId}</span>
         </header>
         <div className="grid gap-5 p-4 md:grid-cols-[minmax(0,1fr)_15rem]">
           <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-[12px] leading-snug sm:grid-cols-[8rem_minmax(0,1fr)]">
@@ -78,7 +78,7 @@ export function EvidenceCertificate({ caseId, evidence, demo }: { caseId: string
               {evidence.snapshot_s3_key}
               {evidence.snapshot_bytes ? ` · ${fmtBytes(evidence.snapshot_bytes)}` : ""}
               {evidence.snapshot_kind && (
-                <span className="mt-0.5 block font-sans text-[12px] text-muted">{SNAPSHOT_KIND[evidence.snapshot_kind] ?? evidence.snapshot_kind}</span>
+                <span className="mt-0.5 block font-sans text-[12px] text-ink-muted">{SNAPSHOT_KIND[evidence.snapshot_kind] ?? evidence.snapshot_kind}</span>
               )}
             </Row>
             {evidence.snapshot_version_id && <Row label="Version">{evidence.snapshot_version_id}</Row>}
@@ -87,7 +87,7 @@ export function EvidenceCertificate({ caseId, evidence, demo }: { caseId: string
             <div className="flex min-h-[152px] items-center justify-center">
               <Seal state={error || !result ? "pending" : result.valid ? "verified" : "invalid"} />
             </div>
-            <p className="min-h-10 text-center text-[11px] leading-snug text-muted">
+            <p className="min-h-10 text-center text-[11px] leading-snug text-ink-muted">
               {error
                 ? `Couldn't reach KMS to verify (${error}). Try again.`
                 : !result
@@ -116,10 +116,10 @@ export function EvidenceCertificate({ caseId, evidence, demo }: { caseId: string
               {(result.byte_after ?? 0).toString(16).padStart(2, "0")}
             </p>
             <p className="mt-1 break-all text-ink">
-              Recomputed: {result.recomputed_sha256} <span className="font-sans text-muted">does not match</span>
+              Recomputed: {result.recomputed_sha256} <span className="font-sans text-ink-muted">does not match</span>
             </p>
             {result.demo_control && (
-              <p className="mt-1 font-sans text-muted">
+              <p className="mt-1 font-sans text-ink-muted">
                 <span className="text-warning">Demo control</span>: one byte of the downloaded copy was flipped in memory. The
                 stored snapshot is untouched.
               </p>
@@ -127,7 +127,7 @@ export function EvidenceCertificate({ caseId, evidence, demo }: { caseId: string
           </div>
         )}
       </section>
-      <figcaption className="mt-2 text-xs text-muted">{CAPTION}</figcaption>
+      <figcaption className="mt-2 text-xs text-ink-muted">{CAPTION}</figcaption>
     </figure>
   );
 }
@@ -137,10 +137,10 @@ export function CertificatePlaceholder({ why }: { why: string }) {
   return (
     <figure>
       <section aria-label="Evidence certificate" className="border border-dashed border-line px-4 py-3.5 font-mono">
-        <p className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">Evidence certificate</p>
-        <p className="mt-1.5 font-sans text-[13px] text-muted">{why}</p>
+        <p className="text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase">Evidence certificate</p>
+        <p className="mt-1.5 font-sans text-[13px] text-ink-muted">{why}</p>
       </section>
-      <figcaption className="mt-2 text-xs text-muted">{CAPTION}</figcaption>
+      <figcaption className="mt-2 text-xs text-ink-muted">{CAPTION}</figcaption>
     </figure>
   );
 }

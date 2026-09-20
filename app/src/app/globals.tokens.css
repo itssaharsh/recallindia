@@ -1,0 +1,309 @@
+/* ==========================================================================
+   RecallIndia v3 · "Cobalt & Foil" · design tokens
+   Source of truth: DESIGN.md (same folder tree) and /v3/mock/base.css.
+   Use in app/globals.css:
+       @import "tailwindcss";
+       @import "tw-animate-css";          (if shadcn added it)
+       @import "./globals.tokens.css";
+   Light only. The landing hero is cobalt; every app screen is canvas + white cards.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Raw tokens (:root). Never use a hex value in a component; use these.
+   -------------------------------------------------------------------------- */
+:root {
+  color-scheme: light;
+
+  /* brand: cobalt, OKLCH hue 259 (medicine-box blue, not violet) */
+  --cobalt: #0A58C2;            /* primary actions, active tab, links, focus ring, landing hero */
+  --cobalt-hover: #0045AE;      /* primary button hover only */
+  --cobalt-press: #00329A;      /* primary button pressed only */
+  --cobalt-soft: #DDE7F8;       /* active tab, selected filter, info chip, palette active row */
+  --on-cobalt: #FFFFFF;         /* text and icons on cobalt (6.6:1) */
+  --on-cobalt-muted: #CFDEF6;   /* secondary text on cobalt (4.8:1), never below 14px */
+  --on-cobalt-line: rgb(255 255 255 / 0.34); /* 1px outlines on cobalt (outline button, live pill) */
+
+  /* surfaces */
+  --canvas: #F4F7FC;            /* app page background */
+  --surface-1: #FFFFFF;         /* cards, nav, sheets, inputs, palette */
+  --surface-2: #EAF0F8;         /* hover fill, skeleton blocks, kbd, segmented track */
+  --line: #DDE4EE;              /* decorative 1px dividers and card borders */
+  --line-strong: #838FA0;       /* input and checkbox borders (3.3:1 on white) */
+
+  /* text */
+  --ink: #0B1B33;               /* all body text and headings (16:1 on canvas) */
+  --ink-muted: #4A5872;         /* secondary text, metadata, helper text, inactive tabs (6.7:1) */
+  --ink-subtle: #65718A;        /* input placeholders only (4.9:1 on white) */
+
+  /* signals */
+  --danger: #B3121E;            /* only: alert faces/badges, INVALID seal, source down, logo pocket, red pill */
+  --danger-hover: #990013;      /* danger button hover */
+  --danger-press: #7E000C;      /* danger button pressed */
+  --danger-soft: #FBEAE8;       /* alert chip face, alert quote panel */
+  --success: #127A55;           /* no-match chip text, VERIFIED seal, healthy source */
+  --success-soft: #E9F1ED;      /* no-match chip face */
+  --warning: #8F5500;           /* near-miss, waiting for you, degraded source */
+  --warning-soft: #F2EAE2;      /* near-miss chip face */
+  --live: #3DDC84;              /* the live dot on cobalt only (landing pill, OG) */
+
+  /* categories: glyphs, dots and illustration fills only (3:1+ as non-text); never text */
+  --cat-medicine: #0A58C2;  --cat-medicine-soft: #E4EDFB;  --cat-medicine-tint: #BCD2F3;
+  --cat-vehicle: #C25E00;   --cat-vehicle-soft: #FCEBDB;   --cat-vehicle-tint: #F4CDA8;
+  --cat-appliance: #0E8A6A; --cat-appliance-soft: #DFF3EB; --cat-appliance-tint: #B2E0D0;
+  --cat-other: #6A5C8A;     --cat-other-soft: #EDE9F4;     --cat-other-tint: #D3CBE3;
+
+  /* foil: the only gradient in the app (plus one radial glow behind the landing 3D strip) */
+  --foil-hi: #F1F2F1;
+  --foil-mid: #DDE0DE;
+  --foil-lo: #C9CDCB;
+  --foil-end: #E6E8E7;
+  --foil: linear-gradient(180deg, var(--foil-hi) 0%, var(--foil-mid) 46%, var(--foil-lo) 54%, var(--foil-end) 100%);
+  --foil-edge: inset 0 1px 0 rgb(255 255 255 / 0.7), inset 0 0 0 1px rgb(11 27 51 / 0.14);
+  --hero-glow: radial-gradient(closest-side, rgb(255 255 255 / 0.17), rgb(255 255 255 / 0.07) 55%, rgb(255 255 255 / 0));
+
+  /* radius */
+  --r-xs: 6px;      /* kbd, tooltip */
+  --r-sm: 8px;      /* inputs, foil chips, skeleton lines */
+  --r-md: 14px;     /* cards, toasts, empty-state panels, annotation chips */
+  --r-lg: 22px;     /* sheets, palette, feature panels, phone frames */
+  --r-pill: 999px;  /* buttons, chips, tabs, household pill, filters */
+
+  /* elevation: two-layer, tinted with ink */
+  --shadow-1: 0 1px 2px rgb(11 27 51 / 0.06), 0 1px 3px rgb(11 27 51 / 0.08);             /* cards at rest */
+  --shadow-2: 0 2px 4px rgb(11 27 51 / 0.06), 0 18px 40px -12px rgb(11 27 51 / 0.22);     /* hovered card, alert card, toast */
+  --shadow-3: 0 4px 8px rgb(11 27 51 / 0.08), 0 32px 64px -16px rgb(11 27 51 / 0.32);     /* palette, sheet */
+  --shadow-onblue: 0 2px 4px rgb(0 26 70 / 0.10), 0 18px 40px -12px rgb(0 26 70 / 0.45);  /* chips over cobalt */
+  --overlay: rgb(11 27 51 / 0.40);                                                        /* palette and sheet scrim */
+
+  /* focus */
+  --focus-ring: 0 0 0 2px var(--surface-1), 0 0 0 4px var(--cobalt);    /* on light */
+  --focus-ring-onblue: 0 0 0 2px var(--cobalt), 0 0 0 4px var(--on-cobalt); /* on cobalt */
+
+  /* layout */
+  --nav-h: 64px;            /* desktop app nav */
+  --topbar-h: 56px;         /* mobile top bar */
+  --tabbar-h: 64px;         /* mobile bottom tab bar, plus env(safe-area-inset-bottom) */
+  --gutter: 32px;           /* app side padding at >= 1024px */
+  --gutter-mobile: 16px;    /* side padding below 640px */
+  --content-app: 1472px;    /* app content max width */
+  --content-landing: 1344px;/* landing content max width */
+  --touch: 44px;            /* minimum hit target */
+
+  /* motion: "Fluid". Springs with bounce <= 0.1, 250-400 ms. Motion only answers state changes. */
+  --dur-press: 120ms;       /* press in (scale .97) */
+  --dur-fast: 180ms;        /* hover colour, tooltip, exits */
+  --dur-base: 250ms;        /* chips, tabs, toggles, toast in, palette in */
+  --dur-flip: 320ms;        /* card face flip, household pill state change */
+  --dur-slow: 400ms;        /* sheets, foil-chip morph, pipeline step, seal stamp */
+  --stagger: 40ms;          /* list items in the one load sequence per page */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);      /* enters and hovers */
+  --ease-in: cubic-bezier(0.55, 0, 0.75, 0.2);     /* exits (use --dur-fast) */
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);   /* position swaps, progress bars */
+  /* spring, damping ratio 0.9 (framer bounce 0.1), settles at t = 1; use with --dur-base..--dur-slow */
+  --ease-spring: linear(0, 0.0307, 0.1048, 0.2015, 0.3065, 0.4107, 0.5084, 0.5967, 0.674, 0.7403, 0.7959, 0.8418, 0.8791, 0.909, 0.9326, 0.951, 0.9651, 0.9758, 0.9838, 0.9896, 0.9938, 0.9967, 0.9987, 1, 1.0008, 1.0013, 1.0015, 1.0015, 1.0015, 1.0013, 1.0012, 1.001, 1);
+  --press-scale: 0.97;
+  --lift: -2px;             /* hovered card translateY */
+  /* framer-motion twins (lib/motion.ts):
+       spring      = { type: "spring", bounce: 0.1, duration: 0.4 }
+       springFast  = { type: "spring", bounce: 0.1, duration: 0.25 }
+       fade        = { duration: 0.18, ease: [0.22, 1, 0.36, 1] }        */
+
+  /* ------------------------------------------------------------------------
+     2. shadcn/ui variables, mapped onto the tokens above
+     ------------------------------------------------------------------------ */
+  --background: var(--canvas);
+  --foreground: var(--ink);
+  --card: var(--surface-1);
+  --card-foreground: var(--ink);
+  --popover: var(--surface-1);
+  --popover-foreground: var(--ink);
+  --primary: var(--cobalt);
+  --primary-foreground: var(--on-cobalt);
+  --secondary: var(--surface-1);          /* secondary button = white + 1px line */
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--ink-muted);
+  --accent: var(--surface-2);             /* shadcn "accent" is the hover surface, not a brand colour */
+  --accent-foreground: var(--ink);
+  --destructive: var(--danger);
+  --destructive-foreground: var(--on-cobalt);
+  --border: var(--line);
+  --input: var(--line-strong);
+  --ring: var(--cobalt);
+  --radius: 14px;
+  --chart-1: var(--cat-medicine);
+  --chart-2: var(--cat-vehicle);
+  --chart-3: var(--cat-appliance);
+  --chart-4: var(--cat-other);
+  --chart-5: var(--ink-muted);
+}
+
+/* --------------------------------------------------------------------------
+   3. Tailwind 4 theme. `inline` so utilities read the live variables.
+   The default palette is removed: there is no indigo-*, violet-*, purple-* utility to reach for.
+   -------------------------------------------------------------------------- */
+@theme inline {
+  --color-*: initial;
+  --color-white: #FFFFFF;
+  --color-black: #000000;
+
+  --color-cobalt: var(--cobalt);
+  --color-cobalt-hover: var(--cobalt-hover);
+  --color-cobalt-press: var(--cobalt-press);
+  --color-cobalt-soft: var(--cobalt-soft);
+  --color-on-cobalt: var(--on-cobalt);
+  --color-on-cobalt-muted: var(--on-cobalt-muted);
+  --color-on-cobalt-line: var(--on-cobalt-line);
+  --color-canvas: var(--canvas);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-subtle: var(--ink-subtle);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-press: var(--danger-press);
+  --color-danger-soft: var(--danger-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-live: var(--live);
+  --color-cat-medicine: var(--cat-medicine);
+  --color-cat-medicine-soft: var(--cat-medicine-soft);
+  --color-cat-medicine-tint: var(--cat-medicine-tint);
+  --color-cat-vehicle: var(--cat-vehicle);
+  --color-cat-vehicle-soft: var(--cat-vehicle-soft);
+  --color-cat-vehicle-tint: var(--cat-vehicle-tint);
+  --color-cat-appliance: var(--cat-appliance);
+  --color-cat-appliance-soft: var(--cat-appliance-soft);
+  --color-cat-appliance-tint: var(--cat-appliance-tint);
+  --color-cat-other: var(--cat-other);
+  --color-cat-other-soft: var(--cat-other-soft);
+  --color-cat-other-tint: var(--cat-other-tint);
+  --color-foil-hi: var(--foil-hi);
+  --color-foil-lo: var(--foil-lo);
+  --color-overlay: var(--overlay);
+
+  /* shadcn names, so generated components keep working */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* fonts: variables come from lib/fonts.ts (next/font/google) */
+  --font-display: var(--font-funnel-display), "Funnel Display", ui-sans-serif, sans-serif;
+  --font-sans: var(--font-onest), "Onest", ui-sans-serif, system-ui, sans-serif;
+  --font-foil: var(--font-doto), "Doto", ui-monospace, monospace;
+  --font-mono: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, monospace;
+
+  /* type scale (text-display-xl etc. set size, leading, tracking and weight together) */
+  --text-display-xl: 68px;  --text-display-xl--line-height: 1;    --text-display-xl--letter-spacing: -0.037em; --text-display-xl--font-weight: 800;
+  --text-display-lg: 54px;  --text-display-lg--line-height: 1.02; --text-display-lg--letter-spacing: -0.035em; --text-display-lg--font-weight: 800;
+  --text-headline-lg: 40px; --text-headline-lg--line-height: 1.06; --text-headline-lg--letter-spacing: -0.03em; --text-headline-lg--font-weight: 800;
+  --text-headline-md: 28px; --text-headline-md--line-height: 1.14; --text-headline-md--letter-spacing: -0.02em; --text-headline-md--font-weight: 700;
+  --text-stat: 32px;        --text-stat--line-height: 1;          --text-stat--letter-spacing: -0.02em;      --text-stat--font-weight: 800;
+  --text-title: 20px;       --text-title--line-height: 1.25;      --text-title--letter-spacing: -0.01em;     --text-title--font-weight: 700;
+  --text-body-lg: 18px;     --text-body-lg--line-height: 1.55;
+  --text-body-md: 16px;     --text-body-md--line-height: 1.55;
+  --text-body-sm: 14px;     --text-body-sm--line-height: 1.45;
+  --text-label-md: 15px;    --text-label-md--line-height: 1;      --text-label-md--font-weight: 600;
+  --text-label-sm: 13px;    --text-label-sm--line-height: 1;      --text-label-sm--font-weight: 600;
+  --text-chip: 12px;        --text-chip--line-height: 1;          --text-chip--letter-spacing: 0.02em;       --text-chip--font-weight: 600;
+  --text-caps: 12px;        --text-caps--line-height: 1;          --text-caps--letter-spacing: 0.08em;       --text-caps--font-weight: 700;
+  --text-foil-lg: 36px;     --text-foil-lg--line-height: 1;       --text-foil-lg--letter-spacing: 0.06em;    --text-foil-lg--font-weight: 900;
+  --text-foil-md: 22px;     --text-foil-md--line-height: 1;       --text-foil-md--letter-spacing: 0.06em;    --text-foil-md--font-weight: 900;
+  --text-foil-sm: 17px;     --text-foil-sm--line-height: 1;       --text-foil-sm--letter-spacing: 0.08em;    --text-foil-sm--font-weight: 900;
+  --text-mono-md: 14px;     --text-mono-md--line-height: 1.45;
+  --text-mono-sm: 12px;     --text-mono-sm--line-height: 1.4;
+
+  /* radius: shadcn's calc(var(--radius) ± n) ladder is replaced by the fixed scale */
+  --radius-xs: var(--r-xs);
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-xl: var(--r-lg);
+  --radius-pill: var(--r-pill);
+
+  /* elevation */
+  /* literal copies of the :root values (a theme key must not reference its own name) */
+  --shadow-1: 0 1px 2px rgb(11 27 51 / 0.06), 0 1px 3px rgb(11 27 51 / 0.08);
+  --shadow-2: 0 2px 4px rgb(11 27 51 / 0.06), 0 18px 40px -12px rgb(11 27 51 / 0.22);
+  --shadow-3: 0 4px 8px rgb(11 27 51 / 0.08), 0 32px 64px -16px rgb(11 27 51 / 0.32);
+  --shadow-onblue: 0 2px 4px rgb(0 26 70 / 0.10), 0 18px 40px -12px rgb(0 26 70 / 0.45);
+
+  /* motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.55, 0, 0.75, 0.2);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: linear(0, 0.0307, 0.1048, 0.2015, 0.3065, 0.4107, 0.5084, 0.5967, 0.674, 0.7403, 0.7959, 0.8418, 0.8791, 0.909, 0.9326, 0.951, 0.9651, 0.9758, 0.9838, 0.9896, 0.9938, 0.9967, 0.9987, 1, 1.0008, 1.0013, 1.0015, 1.0015, 1.0015, 1.0013, 1.0012, 1.001, 1);
+  --animate-skeleton: skeleton 1.4s var(--ease-in-out) infinite;   /* opacity only: no gradient sweep */
+  --animate-spin: spin 0.9s linear infinite;
+  --animate-pulse-dot: pulse-dot 1.6s var(--ease-in-out) infinite;
+
+  /* layout */
+  --spacing: 4px;
+  --container-app: var(--content-app);
+  --container-landing: var(--content-landing);
+  --container-palette: 640px;
+  --container-sheet: 560px;
+}
+
+@keyframes skeleton { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+@keyframes spin { to { rotate: 360deg; } }
+@keyframes pulse-dot { 0%, 100% { box-shadow: 0 0 0 0 rgb(179 18 30 / 0.28); } 50% { box-shadow: 0 0 0 6px rgb(179 18 30 / 0); } }
+
+/* --------------------------------------------------------------------------
+   4. Base
+   -------------------------------------------------------------------------- */
+@layer base {
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 { font-family: var(--font-display); font-weight: 800; letter-spacing: -0.03em; line-height: 1.05; text-wrap: balance; }
+  :where(time, .num, td, [data-num]) { font-variant-numeric: tabular-nums; }
+  ::selection { background: var(--cobalt-soft); color: var(--ink); }
+  :focus-visible { outline: none; box-shadow: var(--focus-ring); }
+  :where([data-surface="cobalt"]) :focus-visible { box-shadow: var(--focus-ring-onblue); }
+  * { border-color: var(--border); }
+}
+
+/* Reduced motion: keep opacity (and colour) changes only. Transforms, springs, spinners and the skeleton pulse stop (skeletons stay as static surface-2 blocks). */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-property: opacity, color, background-color, border-color, box-shadow !important;
+    transition-duration: var(--dur-fast) !important;
+    transition-timing-function: linear !important;
+  }
+}

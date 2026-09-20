@@ -30,14 +30,14 @@ export function OgCanvas() {
     >
       <div className="flex items-start justify-between">
         <Logo height={40} className="text-ink" />
-        <span className="rounded-sm bg-surface-1 px-3 py-1.5 font-mono text-[15px] text-muted">Live on AWS</span>
+        <span className="rounded-sm bg-surface-1 px-3 py-1.5 font-mono text-[15px] text-ink-muted">Live on AWS</span>
       </div>
 
       <div className="space-y-5">
         <h1 className="max-w-[760px] font-display text-[62px] leading-[1.04] font-extrabold tracking-[-0.03em] text-ink">
           India publishes recalls as PDFs nobody reads.
         </h1>
-        <p className="max-w-[720px] text-[24px] leading-snug text-muted">
+        <p className="max-w-[720px] text-[24px] leading-snug text-ink-muted">
           RecallIndia turns them into a feed, and tells you the day something you own is on it.
         </p>
       </div>
@@ -51,7 +51,7 @@ export function OgCanvas() {
             <span className="text-[15px] opacity-90">failed CDSCO quality test, July 2026 alert, row 12</span>
           </div>
         </div>
-        <p className="pb-2 text-right font-mono text-[17px] text-muted">
+        <p className="pb-2 text-right font-mono text-[17px] text-ink-muted">
           {stats ? `${fmtCount(stats.total)} notices` : "live notices"}
           {sources ? (
             <>

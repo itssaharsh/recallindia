@@ -45,7 +45,7 @@ export function AddItemSheet({
       >
         <SheetHeader className="border-b border-line p-5 pr-12">
           <SheetTitle className="font-display text-xl font-semibold text-ink">Add something you own</SheetTitle>
-          <SheetDescription className="text-[13px] text-muted">
+          <SheetDescription className="text-[13px] text-ink-muted">
             It is checked against every notice as soon as it is added.
             {demo && " Demo data is read-only: adding runs on the live API."}
           </SheetDescription>
@@ -110,7 +110,7 @@ function ScanPhoto({ src, words, batch }: { src: string; words: OcrWord[]; batch
           />
         ))}
       </div>
-      <figcaption className="flex flex-wrap items-center gap-2 text-[13px] text-muted">
+      <figcaption className="flex flex-wrap items-center gap-2 text-[13px] text-ink-muted">
         Textract read {words.length} lines.
         {batch ? (
           <>
@@ -207,7 +207,7 @@ function ScanTab({ demo, onDone }: { demo: boolean; onDone: (items: Item[]) => v
     const flagged = uncertain.has(key) || (ocr?.missing ?? []).includes(key);
     return (
       <div className="space-y-1">
-        <Label htmlFor={`scan-${key}`} className="text-xs text-muted">
+        <Label htmlFor={`scan-${key}`} className="text-xs text-ink-muted">
           {label}
         </Label>
         <Input
@@ -232,7 +232,7 @@ function ScanTab({ demo, onDone }: { demo: boolean; onDone: (items: Item[]) => v
   const busy = step === "uploading" || step === "reading" || step === "saving";
   return (
     <div className="space-y-4">
-      <p className="m-0 text-[13px] text-muted">
+      <p className="m-0 text-[13px] text-ink-muted">
         Photograph the back of the strip so the batch stamp is in the picture (it is often printed along one edge).
       </p>
       <label className={`inline-flex ${busy || demo ? "pointer-events-none opacity-50" : ""}`}>
@@ -285,7 +285,7 @@ function ScanTab({ demo, onDone }: { demo: boolean; onDone: (items: Item[]) => v
             {field("exp_date", "Exp (YYYY-MM)", true)}
             {field("purchase_date", "Bought on (optional)", true, "date")}
           </div>
-          <details className="text-xs text-muted">
+          <details className="text-xs text-ink-muted">
             <summary className="cursor-pointer">What Textract read ({ocr.lines.length} lines)</summary>
             <ul className="mt-2 max-h-40 list-none space-y-0.5 overflow-y-auto p-0 font-mono">
               {ocr.lines.map((line, i) => (
@@ -311,11 +311,11 @@ function Step({ state, children }: { state: "pending" | "running" | "done"; chil
     <li className="flex gap-2.5">
       <span
         aria-hidden
-        className={`w-3 font-mono ${state === "running" ? "text-primary" : state === "done" ? "text-ink" : "text-muted"}`}
+        className={`w-3 font-mono ${state === "running" ? "text-primary" : state === "done" ? "text-ink" : "text-ink-muted"}`}
       >
         {glyph}
       </span>
-      <span className={state === "pending" ? "text-muted" : "text-ink"}>{children}</span>
+      <span className={state === "pending" ? "text-ink-muted" : "text-ink"}>{children}</span>
     </li>
   );
 }
@@ -375,7 +375,7 @@ function PasteTab({ demo, onDone }: { demo: boolean; onDone: (items: Item[]) => 
   return (
     <div className="space-y-4">
       <div className="space-y-1">
-        <Label htmlFor="paste-lines" className="text-xs text-muted">
+        <Label htmlFor="paste-lines" className="text-xs text-ink-muted">
           One product per line: from an order history, a bill, or typed
         </Label>
         <Textarea
@@ -406,7 +406,7 @@ function PasteTab({ demo, onDone }: { demo: boolean; onDone: (items: Item[]) => 
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 text-[13px]">
                     <p className="m-0 truncate text-ink">{r.name || "—"}</p>
-                    <p className="m-0 truncate text-xs text-muted">
+                    <p className="m-0 truncate text-xs text-ink-muted">
                       {r.kind}
                       {r.why?.[0] ? ` · ${r.why[0]}` : ""}
                     </p>
@@ -509,7 +509,7 @@ function VehicleTab({ demo, onDone }: { demo: boolean; onDone: (items: Item[]) =
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1">
-          <Label htmlFor="v-make" className="text-xs text-muted">
+          <Label htmlFor="v-make" className="text-xs text-ink-muted">
             Make
           </Label>
           <Input id="v-make" list="v-makes" value={f.make} onChange={(e) => setF({ ...f, make: e.target.value })} />
@@ -520,7 +520,7 @@ function VehicleTab({ demo, onDone }: { demo: boolean; onDone: (items: Item[]) =
           </datalist>
         </div>
         <div className="space-y-1">
-          <Label htmlFor="v-model" className="text-xs text-muted">
+          <Label htmlFor="v-model" className="text-xs text-ink-muted">
             Model
           </Label>
           <Input
@@ -531,7 +531,7 @@ function VehicleTab({ demo, onDone }: { demo: boolean; onDone: (items: Item[]) =
           />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="v-year" className="text-xs text-muted">
+          <Label htmlFor="v-year" className="text-xs text-ink-muted">
             Model year
           </Label>
           <Input
@@ -544,7 +544,7 @@ function VehicleTab({ demo, onDone }: { demo: boolean; onDone: (items: Item[]) =
           />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="v-reg" className="text-xs text-muted">
+          <Label htmlFor="v-reg" className="text-xs text-ink-muted">
             Registration (optional)
           </Label>
           <Input
@@ -556,7 +556,7 @@ function VehicleTab({ demo, onDone }: { demo: boolean; onDone: (items: Item[]) =
           />
         </div>
       </div>
-      <p className="m-0 text-xs text-muted">Checked against NHTSA campaigns for the same make, model and year.</p>
+      <p className="m-0 text-xs text-ink-muted">Checked against NHTSA campaigns for the same make, model and year.</p>
       {error && (
         <p role="alert" className="m-0 text-[13px] text-danger">
           {error}

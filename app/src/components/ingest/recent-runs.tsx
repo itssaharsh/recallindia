@@ -24,7 +24,7 @@ export const RecentRuns = memo(function RecentRuns({
   return (
     <section aria-labelledby="runs-title" className="flex flex-col gap-2">
       <h2 id="runs-title" className="m-0 flex items-center gap-2 text-sm font-medium text-ink">
-        <History aria-hidden className="size-4 text-muted" /> Recent runs
+        <History aria-hidden className="size-4 text-ink-muted" /> Recent runs
       </h2>
       {error && <p className="m-0 text-xs text-danger">Could not list runs: {error}</p>}
       {!error && runs === null && (
@@ -35,7 +35,7 @@ export const RecentRuns = memo(function RecentRuns({
         </ul>
       )}
       {runs && runs.length === 0 && (
-        <p className="m-0 text-xs text-muted">No runs yet: &ldquo;Run ingest&rdquo; starts the first one.</p>
+        <p className="m-0 text-xs text-ink-muted">No runs yet: &ldquo;Run ingest&rdquo; starts the first one.</p>
       )}
       {runs && runs.length > 0 && (
         <ul className="m-0 list-none border-t border-line p-0">
@@ -46,12 +46,12 @@ export const RecentRuns = memo(function RecentRuns({
                 r.run_id === active ? "bg-surface-1" : ""
               }`}
             >
-              <span className="truncate font-mono text-muted">{r.run_id}</span>
+              <span className="truncate font-mono text-ink-muted">{r.run_id}</span>
               <span className="hidden text-ink sm:block">{monthLabel(r.month) || "—"}</span>
               <span className="hidden sm:block">
-                {r.method ? <MethodChip method={r.method} /> : <span className="text-muted">—</span>}
+                {r.method ? <MethodChip method={r.method} /> : <span className="text-ink-muted">—</span>}
               </span>
-              <span className="hidden truncate text-muted sm:block">
+              <span className="hidden truncate text-ink-muted sm:block">
                 {r.rows_in ?? "—"} rows → {r.notices_out ?? "—"} notices · {r.new ?? "—"} new · {fmtSeconds(r.duration_ms) || "—"}{" "}
                 · {fmtWhen(r.started_at)}
                 {r.status !== "SUCCEEDED" ? ` · ${r.status.toLowerCase()}` : ""}
@@ -65,7 +65,7 @@ export const RecentRuns = memo(function RecentRuns({
                   <Play aria-hidden className="size-3.5" /> Replay
                 </Link>
               ) : (
-                <span className="px-2 text-muted">{r.status.toLowerCase()}</span>
+                <span className="px-2 text-ink-muted">{r.status.toLowerCase()}</span>
               )}
             </li>
           ))}

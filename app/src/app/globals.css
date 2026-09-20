@@ -1,163 +1,24 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "./globals.tokens.css";
+@import "../components/v3/mine/mine.tokens.css";
+@import "../components/v3/feed-ingest-api/feed-ingest-api.css";
 
 /*
- * RecallIndia tokens -- DESIGN.md (Gazette & Foil) is binding. Two objects: the gazette (a
- * printed public notice: ruled tables, newsprint) and the foil (the back of a medicine strip,
- * where the batch code is dot-printed).
- *
- * Light only. The source world is paper, and light surfaces keep their detail after YouTube
- * compression, where dark gradients band. The v1 dark petrol ledger is retired; petrol survives
- * as the accent, which in code is --primary (shadcn already owns --accent for hover surfaces).
- *
- * The shadcn 5-edit fix:
- *  1. neutral palette -> the newsprint ladder (canvas -> surface-1 -> surface-2)
- *  2. radius off the default -> 0 / 2 / 6 / 10, and records stay 0
- *  3. font tokens -> Schibsted Grotesk / IBM Plex Mono / Doto (the foil chip only)
- *  4. one accent -> petrol #0B5D7A; the only red is "something you own is affected"
- *  5. one signature token shadcn does not ship -> --foil-hi/--foil-lo, the brushed foil chip
- *
- * Contrast (WCAG 2, measured on their usual background): ink 15.0:1 on canvas, ink-muted 6.2:1,
- * primary 6.3:1, line-strong 3.35:1 (a border, not text), accent-ink 6.95:1 on primary, and the
- * text-on-soft-tint pairs 4.7-5.0:1.
+ * RecallIndia v3 "Cobalt & Foil". The token block lives in globals.tokens.css (DESIGN.md is
+ * binding); what follows is the handful of names and rules the v2 screens still reach for, kept
+ * until every route is v3 — and kept after that, because a route can revert to its v2 page.
  */
-
-:root {
-  /* DESIGN.md colours, verbatim */
-  --canvas: #eceeea;
-  --surface-1: #f8f9f6;
-  --surface-2: #e1e4de;
-  --line: #c3c8c0;
-  --line-strong: #7f8b85;
-  --ink: #0e1b23;
-  --ink-muted: #4a5962;
-  --primary: #0b5d7a;
-  --primary-hover: #004c65;
-  --primary-press: #003b4f;
-  --primary-foreground: #f8f9f6;
-  --accent-soft: #d2dcdc;
-  --mark: #cfdcdf;
-  --success: #1b6b45;
-  --success-soft: #d3ded5;
-  --warning: #7a5200;
-  --warning-soft: #dedacf;
-  --danger: #b3121e;
-  --danger-hover: #990013;
-  --danger-soft: #e9d7d1;
-  /* the one gradient in the product: brushed foil behind a dot-matrix batch code */
-  --foil-hi: #f1f2f1;
-  --foil-lo: #c9cdcb;
-
-  /* shadcn roles mapped onto the ladder */
-  --background: var(--canvas);
-  --foreground: var(--ink);
-  --card: var(--surface-1);
-  --card-foreground: var(--ink);
-  --popover: var(--surface-1);
-  --popover-foreground: var(--ink);
-  --secondary: var(--surface-1);
-  --secondary-foreground: var(--ink);
-  --muted: var(--surface-2);
-  --muted-foreground: var(--ink-muted);
-  --accent: var(--surface-2);
-  --accent-foreground: var(--ink);
-  --destructive: var(--danger);
-  --border: var(--line);
-  --input: var(--line-strong);
-  --ring: var(--primary);
-  --radius: 6px;
-
-  /* motion (UI-SPEC §6): one set of easings and durations for every transition */
-  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
-  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
-  --ease-enter: cubic-bezier(0.05, 0.7, 0.1, 1);
-  --ease-exit: cubic-bezier(0.3, 0, 0.8, 0.15);
-  --dur-press: 120ms;
-  --dur-hover: 150ms;
-  --dur-pop: 200ms;
-  --dur-modal: 280ms;
-  --dur-exit: 150ms;
-  --dur-drawer: 450ms;
-
-  /* the only two shadows: floating layers, tinted with ink. Cards on the canvas get none. */
-  --shadow-1: 0 1px 0 rgb(14 27 35 / 0.06), 0 1px 3px rgb(14 27 35 / 0.08);
-  --shadow-2: 0 2px 4px rgb(14 27 35 / 0.06), 0 12px 32px -8px rgb(14 27 35 / 0.2);
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  /* --color-muted is the muted TEXT colour (text-muted); surfaces are bg-surface-* */
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-
-  /* semantic classes: bg-canvas, bg-surface-1, text-ink, text-muted, border-line, bg-mark ... */
-  --color-canvas: var(--canvas);
-  --color-surface-1: var(--surface-1);
-  --color-surface-2: var(--surface-2);
-  --color-line: var(--line);
-  --color-line-strong: var(--line-strong);
-  --color-ink: var(--ink);
-  --color-muted: var(--ink-muted);
-  --color-accent-soft: var(--accent-soft);
-  --color-accent-ink: var(--primary-foreground);
-  --color-mark: var(--mark);
-  --color-success: var(--success);
-  --color-success-soft: var(--success-soft);
-  --color-warning: var(--warning);
-  --color-warning-soft: var(--warning-soft);
-  --color-danger: var(--danger);
-  --color-danger-hover: var(--danger-hover);
-  --color-danger-soft: var(--danger-soft);
-  --color-foil-hi: var(--foil-hi);
-  --color-foil-lo: var(--foil-lo);
-
-  --font-sans: var(--ff-display), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--ff-mono), ui-monospace, "SFMono-Regular", monospace;
-  --font-display: var(--ff-display), ui-sans-serif, sans-serif;
-  --font-heading: var(--font-display);
-  /* the foil chip only: a batch code, never a word (DESIGN.md typography) */
-  --font-foil: var(--ff-foil), var(--font-mono);
-
-  /* the radius scale is real: records 0, chips 2, buttons/cards 6, sheets 10 */
-  --radius-none: 0px;
-  --radius-sm: 2px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
-  --radius-xl: 10px;
-
-  --shadow-pop: var(--shadow-1);
-  --shadow-layer: var(--shadow-2);
+  --color-accent-soft: var(--cobalt-soft);
+  --color-accent-ink: var(--on-cobalt);
+  --color-mark: var(--cobalt-soft);
 }
 
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  html {
-    @apply font-sans;
-    color-scheme: light;
-  }
-  body {
-    @apply bg-background text-foreground antialiased;
-  }
-  /* Schibsted's tabular set widens "," and "." too, so prose set in it reads "4 ,868" and
-     "flagged it .". Tabular numerals go on the things that align or tick, never on a sentence. */
+  /* Funnel Display's tabular set widens "," and "." too, so prose set in it reads "4 ,868".
+     Tabular numerals go on the things that align or tick, never on a sentence. */
   .tnum {
     font-variant-numeric: tabular-nums;
   }
@@ -165,27 +26,8 @@
   .font-mono {
     font-variant-numeric: tabular-nums;
   }
-  ::selection {
-    background: var(--accent-soft);
-    color: var(--ink);
-  }
-  :focus-visible {
-    outline: 2px solid var(--primary);
-    outline-offset: 2px;
-  }
   * {
     scrollbar-color: var(--line-strong) transparent;
-  }
-}
-
-/* Motion only on state change (DESIGN.md); anything CSS-driven collapses for reduced motion.
-   The named animations run through motion/react and use useReducedMotion themselves. */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
   }
 }
 

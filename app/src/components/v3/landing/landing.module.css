@@ -1,0 +1,231 @@
+/*
+ * Landing geometry that would be unreadable as utility classes (landing.md §1.2, §2.6, §5.3, §9, §11).
+ * Colours, radii and shadows come from globals.tokens.css variables. Breakpoints: phone ≤ 700,
+ * tablet 701–1199 (the phone order in a 640 px column), desktop ≥ 1200.
+ */
+
+/* ---------- page gutter + content width (--gut, --sheet-radius are landing-only tokens) ---------- */
+.root {
+  --gut: 16px;
+  --sheet-radius: 24px;
+  /* illustration-only inks (not app tokens): the red band's secondary text (mine.md), the CPSC source
+     ink used on /feed, and the greys of the government PDF page */
+  --band-muted: #FFD9D6;
+  --src-cpsc-ink: #0B6E55;
+  --pdf-ink: #28344A;
+  --pdf-muted: #5A6475;
+  --pdf-faint: #7B8595;
+  --pdf-rule: #8A94A3;
+  --unit-mark: #A9C0E6;
+  --paper-ink: #2F3C52;
+  --paper-rule: #C9D0DA;
+  overflow-x: clip;
+}
+@media (min-width: 1200px) {
+  .root {
+    --gut: max(40px, calc((100vw - 1344px) / 2));
+    --sheet-radius: 36px;
+  }
+}
+.wrap {
+  width: min(1344px, calc(100% - 2 * var(--gut)));
+  margin-inline: auto;
+}
+@media (min-width: 701px) and (max-width: 1199px) {
+  .wrap { width: min(640px, calc(100% - 64px)); }
+}
+
+/* ---------- cobalt top + the canvas sheet that curls over it ---------- */
+.top { background: var(--cobalt); padding-bottom: var(--sheet-radius); }
+.sheet {
+  position: relative;
+  margin-top: calc(-1 * var(--sheet-radius));
+  border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
+  background: var(--canvas);
+}
+.footer {
+  position: relative;
+  margin-top: calc(-1 * var(--sheet-radius));
+  border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
+  background: var(--cobalt);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* ---------- hero ---------- */
+.hero {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  min-height: 844px;
+  padding-bottom: 28px;
+}
+/* the one soft glow: behind the strip. Stacked layouts hang it off the hero. */
+.hero::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: -240px;
+  top: 470px;
+  width: 870px;
+  height: 520px;
+  background: var(--hero-glow);
+}
+@media (min-width: 701px) and (max-width: 1199px) {
+  .hero { min-height: 0; padding-bottom: 40px; }
+}
+@media (min-width: 1200px) {
+  .hero { height: 790px; min-height: 0; padding-bottom: 0; }
+  .hero::before { display: none; }
+}
+
+/* 3D stage: 420 × 315 bleeding right on phones, 688 × 516 on tablets, --sw wide on desktop */
+.stage {
+  position: relative;
+  z-index: 1;
+  left: -18px;
+  width: 420px;
+  height: 315px;
+  margin: 0 0 -10px;
+}
+@media (min-width: 701px) and (max-width: 1199px) {
+  .stage { left: -24px; width: 688px; height: 516px; margin-bottom: -8px; }
+}
+@media (min-width: 1200px) {
+  .stage {
+    --sw: clamp(620px, 58.33vw, 896px);
+    position: absolute;
+    left: calc(100% - var(--sw) * 0.797);
+    top: calc(104px + (672px - var(--sw) * 0.75) / 2);
+    width: var(--sw);
+    height: calc(var(--sw) * 0.75);
+    margin: 0;
+  }
+  .stage::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    left: -12%;
+    top: -9.5%;
+    width: 116%;
+    height: 122%;
+    background: var(--hero-glow);
+  }
+}
+
+/* ---------- How it works: one 1344 × 760 piece, scaled by --k from 1200 to 1439 ---------- */
+@media (min-width: 1200px) {
+  .flowFit { height: calc(760px * var(--k, 1)); }
+  .flow {
+    position: relative;
+    width: 1344px;
+    height: 760px;
+    transform: scale(var(--k, 1));
+    transform-origin: 0 0;
+  }
+}
+.lane {
+  position: absolute;
+  left: -44px;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+/* stacked connectors: 2 px dashed cobalt with a 12 × 8 arrowhead */
+.vconn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 64px;
+}
+.vconn::before { content: ""; flex: 1; border-left: 2px dashed var(--cobalt); opacity: 0.9; }
+.vconn::after {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 8px solid var(--cobalt);
+}
+.vconnLabel { height: 88px; }
+@media (min-width: 1200px) {
+  .vconn { display: none; }
+}
+
+/* the tracer dot (10 px cobalt, 3 px white ring), centred on the point the rAF loop translates it to */
+.tracer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: var(--cobalt);
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* ---------- MiniPdf table: fixed layout, nothing may clip (landing.md §12.6) ---------- */
+.pdfTable { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.pdfTable th {
+  padding: 5px 4px;
+  border-block: 1px solid #C9D0DA;
+  background: #F3F5F8;
+  text-align: left;
+  font: 700 7.5px/1.1 var(--font-sans);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #5A6475;
+}
+.pdfTable td {
+  height: 24px;
+  padding: 0 4px;
+  border-bottom: 1px solid #E6EAF0;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  font: 400 8px/1.2 var(--font-sans);
+  color: #3B4658;
+}
+.pdfTable td > i { display: block; height: 5px; border-radius: 3px; background: #DCE1E8; }
+.pdfTable tr.hit td { color: var(--ink); font-weight: 600; font-size: 8.5px; }
+.pdfTable tr.hit td:first-child { position: relative; overflow: visible; }
+/* phones drop Manufacturer and Tested by; tablets and desktop show all six */
+@media (max-width: 700px) {
+  .pdfTable .wide { display: none; }
+}
+.pdfCard { container-type: inline-size; }
+/* the row-12 box spans the table + 6 px each side (10 px in from the paper) */
+.hitBox {
+  position: absolute;
+  left: -6px;
+  top: -2px;
+  width: calc(100cqw + 12px);
+  height: 28px;
+  border: 2px solid var(--cobalt);
+  border-radius: 5px;
+  background: rgb(10 88 194 / 0.07);
+  pointer-events: none;
+}
+
+/* ---------- ScanHint photo ----------
+   assets/scan-strip.webp is the light strip render cropped to the part every layout shows
+   (the old 1260 × 945 background at −160, −405 on desktop and −176, −408 stacked), so it is 9 KB. */
+.scan {
+  background-color: #E9EDF2;
+  background-repeat: no-repeat;
+  background-size: 656px 178px;
+  background-position: -16px -3px;
+}
+@media (min-width: 1200px) {
+  .scan { background-position: 0 0; }
+}
+.scan::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgb(11 27 51 / 0) 55%, rgb(11 27 51 / 0.3));
+}

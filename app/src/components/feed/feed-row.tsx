@@ -34,8 +34,8 @@ export const FeedRow = memo(function FeedRow({
       <SourceChip notice={notice} />
       <span className="truncate text-ink">{notice.product || notice.title}</span>
       <span className="truncate font-mono text-[12.5px] text-ink">{noticeIdentifier(notice)}</span>
-      <span className="hidden truncate text-muted md:block">{notice.hazard_or_failed_test || "—"}</span>
-      <span className="hidden text-right text-xs text-muted md:block">{fmtDay(notice.published_at)}</span>
+      <span className="hidden truncate text-ink-muted md:block">{notice.hazard_or_failed_test || "—"}</span>
+      <span className="hidden text-right text-xs text-ink-muted md:block">{fmtDay(notice.published_at)}</span>
     </button>
   );
   return fresh ? <SnapIn>{row}</SnapIn> : <li className={ROW}>{row}</li>;

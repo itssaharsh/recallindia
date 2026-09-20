@@ -37,7 +37,7 @@ export function HouseholdPill({ inline = false }: { inline?: boolean }) {
     <div className="flex items-center gap-2">
       <span
         title={own ? `Your household ${household}` : "The demo household is read-only"}
-        className="inline-flex h-7 items-center gap-1.5 rounded-sm border border-line px-2 text-[12px] text-muted"
+        className="inline-flex h-7 items-center gap-1.5 rounded-sm border border-line px-2 text-[12px] text-ink-muted"
       >
         {busy ? (
           <Loader2 aria-hidden className="size-3.5 animate-spin" />
@@ -52,7 +52,7 @@ export function HouseholdPill({ inline = false }: { inline?: boolean }) {
             type="button"
             onClick={() => resetCopy()}
             disabled={busy}
-            className="rounded-sm px-1.5 py-1 text-[12px] text-muted hover:text-ink disabled:opacity-50"
+            className="rounded-sm px-1.5 py-1 text-[12px] text-ink-muted hover:text-ink disabled:opacity-50"
           >
             Reset
           </button>
@@ -65,7 +65,7 @@ export function HouseholdPill({ inline = false }: { inline?: boolean }) {
         <button
           type="button"
           onClick={useDemoHousehold}
-          className="rounded-sm px-1.5 py-1 text-[12px] text-muted hover:text-ink"
+          className="rounded-sm px-1.5 py-1 text-[12px] text-ink-muted hover:text-ink"
         >
           View the demo
         </button>

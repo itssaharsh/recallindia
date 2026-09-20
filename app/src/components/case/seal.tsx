@@ -29,7 +29,7 @@ export function Seal({ state, size = 144 }: { state: SealState; size?: number })
 
   const word = state === "invalid" ? "INVALID" : "VERIFIED";
   const ring = state === "invalid" ? RING.invalid : RING.verified;
-  const tone = state === "invalid" ? "text-danger" : state === "verified" ? "text-success" : "text-muted";
+  const tone = state === "invalid" ? "text-danger" : state === "verified" ? "text-success" : "text-ink-muted";
 
   useEffect(() => {
     if (state === "pending" || reduce) return;
