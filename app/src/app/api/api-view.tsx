@@ -70,7 +70,12 @@ export function ApiView() {
   const [since, setSince] = useState("2026-07-01");
   const [q, setQ] = useState("");
   const [state, setState] = useState<"idle" | "running" | "ok" | "error">("idle");
-  const [result, setResult] = useState<{ status: number; ms: number; count: number; body: string } | null>(null);
+  const [result, setResult] = useState<{
+    status: number;
+    ms: number;
+    count: number;
+    body: string;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const path = `/v1/notices?${new URLSearchParams(
@@ -100,22 +105,24 @@ export function ApiView() {
   }, [path]);
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-10 px-5 py-8 md:px-8">
+    <div className="mx-auto min-w-0 max-w-[1200px] space-y-10 px-5 py-8 md:px-8">
       <header className="space-y-2">
-        <h1 className="font-display text-[40px] leading-[1.1] font-extrabold tracking-[-0.03em] text-ink">Public API</h1>
+        <h1 className="font-display text-[40px] leading-[1.1] font-extrabold tracking-[-0.03em] text-ink">
+          Public API
+        </h1>
         <p className="max-w-2xl text-[18px] text-muted">
           Every notice on the feed, as JSON. No key needed, CORS open, and the same request works from a terminal.
         </p>
       </header>
 
-      <div className="grid gap-10 lg:grid-cols-[440px_minmax(0,1fr)]">
-        <section aria-labelledby="endpoints" className="space-y-5">
+      <div className="grid min-w-0 gap-10 lg:grid-cols-[440px_minmax(0,1fr)]">
+        <section aria-labelledby="endpoints" className="min-w-0 space-y-5">
           <h2 id="endpoints" className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">
             Endpoints
           </h2>
           {ENDPOINTS.map((ep) => (
             <article key={ep.path} className="space-y-2 border-t border-line pt-4">
-              <p className="font-mono text-[14px] text-ink">
+              <p className="font-mono text-[14px] text-ink [overflow-wrap:anywhere]">
                 <span className="text-success">{ep.method}</span> {ep.path}
               </p>
               <p className="text-[14px] text-muted">{ep.what}</p>
@@ -136,7 +143,7 @@ export function ApiView() {
           ))}
         </section>
 
-        <section aria-labelledby="console" className="space-y-4">
+        <section aria-labelledby="console" className="min-w-0 space-y-4">
           <h2 id="console" className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">
             Try it
           </h2>
@@ -205,37 +212,52 @@ export function ApiView() {
         </section>
       </div>
 
-      <section aria-labelledby="sources" className="space-y-3">
+      <section aria-labelledby="sources" className="min-w-0 space-y-3">
         <h2 id="sources" className="text-[12px] font-bold tracking-[0.08em] text-muted uppercase">
           Sources
         </h2>
-        <div role="table" className="w-full border-t border-line text-[14px]">
-          <div role="row" className="grid grid-cols-[1fr_7rem_7rem_9rem_minmax(0,1fr)] gap-3 border-b border-line bg-surface-1 px-3 py-2 text-[12px] font-bold tracking-[0.08em] text-muted uppercase">
-            <span role="columnheader">Source</span>
-            <span role="columnheader">Notices</span>
-            <span role="columnheader">Health</span>
-            <span role="columnheader">Polls every</span>
-            <span role="columnheader">Last success</span>
-          </div>
-          {(stats?.sources ?? []).map((s) => (
-            <div key={s.source} role="row" className="grid grid-cols-[1fr_7rem_7rem_9rem_minmax(0,1fr)] gap-3 border-b border-line px-3 py-2.5">
-              <span role="cell" className="text-ink">
-                {sourceLabel(s.source)}
-              </span>
-              <span role="cell" className="text-ink">
-                <Num value={fmtCount(s.count)} />
-              </span>
-              <span role="cell" className={s.health === "healthy" ? "text-success" : s.health === "degraded" ? "text-warning" : "text-danger"}>
-                {s.health}
-              </span>
-              <span role="cell" className="text-muted">
-                {s.polls_every}
-              </span>
-              <span role="cell" className="text-muted">
-                {s.last_success_at ? `${fmtWhen(s.last_success_at)} IST` : "—"}
-              </span>
+        {/* the table keeps its columns; on a phone it scrolls rather than squeezing them */}
+        <div className="-mx-5 overflow-x-auto px-5 md:mx-0 md:px-0">
+          <div role="table" className="min-w-[720px] border-t border-line text-[14px]">
+            <div
+              role="row"
+              className="grid grid-cols-[1fr_7rem_7rem_9rem_minmax(0,1fr)] gap-3 border-b border-line bg-surface-1 px-3 py-2 text-[12px] font-bold tracking-[0.08em] text-muted uppercase"
+            >
+              <span role="columnheader">Source</span>
+              <span role="columnheader">Notices</span>
+              <span role="columnheader">Health</span>
+              <span role="columnheader">Polls every</span>
+              <span role="columnheader">Last success</span>
             </div>
-          ))}
+            {(stats?.sources ?? []).map((s) => (
+              <div
+                key={s.source}
+                role="row"
+                className="grid grid-cols-[1fr_7rem_7rem_9rem_minmax(0,1fr)] gap-3 border-b border-line px-3 py-2.5"
+              >
+                <span role="cell" className="text-ink">
+                  {sourceLabel(s.source)}
+                </span>
+                <span role="cell" className="text-ink">
+                  <Num value={fmtCount(s.count)} />
+                </span>
+                <span
+                  role="cell"
+                  className={
+                    s.health === "healthy" ? "text-success" : s.health === "degraded" ? "text-warning" : "text-danger"
+                  }
+                >
+                  {s.health}
+                </span>
+                <span role="cell" className="text-muted">
+                  {s.polls_every}
+                </span>
+                <span role="cell" className="text-muted">
+                  {s.last_success_at ? `${fmtWhen(s.last_success_at)} IST` : "—"}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
     </div>

@@ -64,7 +64,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               </div>
               <div className="flex min-w-0 flex-col">
                 <TopBar />
-                <main id="main" className="flex-1">
+                <main id="main" className="flex-1 pb-20 md:pb-0">
                   {children}
                 </main>
               </div>

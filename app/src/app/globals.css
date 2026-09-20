@@ -189,6 +189,25 @@
   }
 }
 
+/* A finger needs 44 px: every control grows under a coarse pointer, buttons and pills alike. */
+@media (pointer: coarse) {
+  button,
+  [role="button"],
+  a[href],
+  select,
+  input:not([type="checkbox"]):not([type="radio"]),
+  [data-slot="button"] {
+    min-height: 44px;
+  }
+  /* except the ones that are a row of their own, or an icon inside a line of text */
+  [role="row"] a[href],
+  p a[href],
+  figcaption a[href],
+  li a[href]:not([data-tab]) {
+    min-height: 0;
+  }
+}
+
 /* The foil chip: a batch code as it is dot-printed on the back of a strip (C-11). */
 .foil-chip {
   background: linear-gradient(180deg, var(--foil-hi) 0%, #dde0de 46%, var(--foil-lo) 54%, #e6e8e7 100%);
