@@ -251,7 +251,13 @@ def deterministic_verify(item: dict, notice: dict) -> dict:
     vehicle_ok = textmatch.vehicle_matches(item, notice)
     product_ok = score >= PRODUCT_THRESHOLD or vehicle_ok
     ident = _listed_identifier(item, notice)
-    covers = bool(brand_ok and (product_ok or ident is not None))
+    # A photographed strip usually carries no maker, and `brands_match` reads a blank brand as a
+    # mismatch -- which dismissed exact batch hits from the scan. No brand is unknown, not wrong:
+    # the pair then has to be specific on its own, so the product must match AND the notice must
+    # list this exact identifier.
+    covers = bool(brand_ok and (product_ok or ident is not None)) or bool(
+        not brand and product_ok and ident is not None
+    )
 
     if covers and ident is not None:
         confidence = 0.95

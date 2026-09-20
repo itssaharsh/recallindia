@@ -122,14 +122,29 @@ def test_brand_mismatch(no_model) -> None:
     )
 
 
-def test_item_without_brand(no_model) -> None:
+def test_item_without_brand_but_listed_batch(no_model) -> None:
+    """A photographed strip rarely shows its maker: no brand is unknown, not a mismatch. The
+    notice still has to list this exact batch for the same product."""
     out = verify(_item(brand=None), _forgo_notice())
-    assert out["covers_item"] is False
-    assert out["confidence"] == 0.9
+    assert out["covers_item"] is True
+    assert out["confidence"] == 0.95
     assert out["reasoning"].startswith(
         "no brand on the item (notice brand 'Forgo Pharmaceuticals')"
     )
-    assert "brand" in out["reasoning"]
+    assert "batch FT5427 in listed [FT5427]" in out["reasoning"]
+
+
+def test_item_without_brand_and_batch_not_listed(no_model) -> None:
+    """Without a brand, the product alone is never enough: the batch has to be on the list."""
+    out = verify(_item(brand=None, batch="FT5428"), _forgo_notice())
+    assert out["covers_item"] is False
+    assert out["confidence"] == 0.9
+    assert "batch FT5428 not in listed [FT5427]" in out["reasoning"]
+
+
+def test_item_without_brand_and_other_product(no_model) -> None:
+    out = verify(_item(brand=None, name="Cough Syrup 100ml", batch="XX1"), _forgo_notice())
+    assert out["covers_item"] is False
 
 
 def test_brand_match_but_other_product(no_model) -> None:

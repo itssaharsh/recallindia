@@ -314,9 +314,14 @@ export function ScanConfirm({
   const { stage, animated } = useMorph(batchIndex, arrived);
 
   /* draft: filled from the OCR result in render (not an effect), so the first paint already shows the chip */
+  // The batch is the code the reader extracted (`fields.batch`), not the text of the box drawn over
+  // it: this API boxes whole lines, so the highlighted box reads "B.No. FT5427 EXP 09/2027" while
+  // the batch is FT5427. The box still marks where it was found; only the value comes from fields.
+  const batchFromOcr = (o: OcrResult): string | null =>
+    o.fields.batch ?? (batchIndex !== null ? (o.words[batchIndex]?.text ?? null) : null);
   const fromOcr = (d: ScanDraft): ScanDraft =>
     ocr
-      ? { ...d, name: ocr.fields.name ?? d.name, exp: ocr.fields.exp_date ?? d.exp, batch: batchIndex !== null ? ocr.words[batchIndex]!.text : (ocr.fields.batch ?? d.batch) }
+      ? { ...d, name: ocr.fields.name ?? d.name, exp: ocr.fields.exp_date ?? d.exp, batch: batchFromOcr(ocr) ?? d.batch }
       : d;
   const [draft, setDraft] = React.useState<ScanDraft>(() => fromOcr({ name: "", batch: "", exp: "", bought: "", ...initial }));
   const [draftSrc, setDraftSrc] = React.useState<{ ocr: OcrResult | null; batchIndex: number | null }>({ ocr, batchIndex });
