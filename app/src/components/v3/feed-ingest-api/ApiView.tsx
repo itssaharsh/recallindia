@@ -2,7 +2,7 @@
 import * as React from "react";
 import { MotionConfig } from "framer-motion";
 import { Check, Copy } from "lucide-react";
-import { Button } from "../ui";
+import { Button, cn } from "../ui";
 import { EndpointDocs } from "./EndpointDocs";
 import { useCopy } from "./hooks";
 import { SourcesTable } from "./SourcesTable";
@@ -23,6 +23,8 @@ export interface ApiViewProps {
   };
   stats: Stats | null;
   statsState: "loading" | "ready" | "error";
+  /** Render as the page's `<main>` (default) or a `<div>` when the shell already provides `<main>`. */
+  as?: "main" | "div";
   on: {
     requestChange: (next: TryItRequest) => void;
     run: () => void;
@@ -37,9 +39,11 @@ export interface ApiViewProps {
  * Mockups: api-1536.png and api-390.png.
  */
 export function ApiView(p: ApiViewProps) {
+  const Tag = p.as ?? "main";
   return (
     <MotionConfig reducedMotion="user">
-      <main id="main" className="mx-auto w-full max-w-[1536px] px-4 lg:px-8">
+      {/* as="div": the app shell already draws the page gutter and max width on its <main>. */}
+      <Tag id={Tag === "main" ? "main" : undefined} className={cn("mx-auto w-full", Tag === "main" && "max-w-[1536px] px-4 lg:px-8")}>
         <header className="mt-[18px] flex flex-col gap-3 lg:mt-[22px] lg:flex-row lg:items-end lg:gap-6">
           <div className="min-w-0">
             <h1 className="font-display text-[28px] leading-[1.05] font-extrabold tracking-[-.03em] text-ink lg:text-[34px]">The same notices, as an API</h1>
@@ -65,7 +69,7 @@ export function ApiView(p: ApiViewProps) {
         </div>
 
         <SourcesTable stats={p.stats} state={p.statsState} now={p.now} onRetry={p.on.retryStats} />
-      </main>
+      </Tag>
     </MotionConfig>
   );
 }

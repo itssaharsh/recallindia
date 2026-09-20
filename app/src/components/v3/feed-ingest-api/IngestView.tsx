@@ -1,6 +1,7 @@
 "use client";
 import * as React from "react";
 import { MotionConfig } from "framer-motion";
+import { cn } from "../ui";
 import { FlightLayer } from "./FlightLayer";
 import { monthStart } from "./format";
 import { IngestHeader } from "./IngestHeader";
@@ -31,13 +32,15 @@ export interface IngestViewProps {
   pdf?: React.ReactNode;
   /** Done state primary: "/feed?source=cdsco_nsq&since=2025-06-01" */
   feedHref?: string;
+  /** Render as the page's `<main>` (default) or a `<div>` when the shell already provides `<main>`. */
+  as?: "main" | "div";
 }
 
 /**
  * /ingest (spec §2): a real CDSCO PDF read by Textract, every row boxed on the page and flown
  * into the notices list. Mockups: ingest-1536.png and ingest-390.png (?state=dissolving).
  */
-export function IngestView({ run, frame, phase, speed, on, pdf, feedHref }: IngestViewProps) {
+export function IngestView({ run, frame, phase, speed, on, pdf, feedHref, as: Tag = "main" }: IngestViewProps) {
   const workspace = React.useRef<HTMLDivElement>(null);
   const [layoutKey, setLayoutKey] = React.useState(0);
   const onLayout = React.useCallback(() => setLayoutKey((n) => n + 1), []);
@@ -46,7 +49,8 @@ export function IngestView({ run, frame, phase, speed, on, pdf, feedHref }: Inge
 
   return (
     <MotionConfig reducedMotion="user">
-      <main id="main" className="mx-auto w-full max-w-[1536px] px-4 pb-5 lg:px-8">
+      {/* as="div": the app shell already draws the page gutter and max width on its <main>. */}
+      <Tag id={Tag === "main" ? "main" : undefined} className={cn("mx-auto w-full pb-5", Tag === "main" && "max-w-[1536px] px-4 lg:px-8")}>
         <IngestHeader run={run} phase={phase} speed={speed} row={Math.min(run.rows_in, frame.processed + 1)} onToggle={on.toggle} onSpeed={on.speed} />
         <StepChecklist steps={frame.steps} onRetry={on.retryStep} />
 
@@ -64,7 +68,7 @@ export function IngestView({ run, frame, phase, speed, on, pdf, feedHref }: Inge
             return <li key={r.index}>{`Row ${r.row}: ${n.product}${n.batch ? `, batch ${n.batch}` : ""}`}</li>;
           })}
         </ol>
-      </main>
+      </Tag>
     </MotionConfig>
   );
 }

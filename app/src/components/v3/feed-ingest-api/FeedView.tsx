@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import { AnimatePresence, MotionConfig } from "framer-motion";
-import { Button } from "../ui";
+import { Button, cn } from "../ui";
 import { sourceShares } from "./derive";
 import { FilterBar } from "./FilterBar";
 import { fmtTime } from "./format";
@@ -40,6 +40,8 @@ export interface FeedViewProps {
   sheet: Omit<NoticeSheetProps, "onClose" | "onPrev" | "onNext" | "onRetry" | "household" | "match"> | null;
   /** Play the page's one load sequence (first visit only). */
   intro?: boolean;
+  /** Render as the page's `<main>` (default) or a `<div>` when the shell already provides `<main>`. */
+  as?: "main" | "div";
   on: {
     filtersChange: (next: FeedFilters) => void;
     openNotice: (pk: string) => void;
@@ -71,10 +73,12 @@ export function FeedView(p: FeedViewProps) {
   const householdPks = React.useMemo(() => new Set(p.household?.matches.map((m) => m.notice.pk) ?? []), [p.household]);
   const selectedPk = p.sheet?.notice?.pk ?? null;
   const setSource = (source: SourceId) => p.on.filtersChange({ ...filters, source: filters.source === source ? null : source });
+  const Tag = p.as ?? "main";
 
   return (
     <MotionConfig reducedMotion="user">
-      <main id="main" className="mx-auto w-full max-w-[1536px] px-4 lg:px-8">
+      {/* as="div": the app shell already draws the page gutter and max width on its <main>. */}
+      <Tag id={Tag === "main" ? "main" : undefined} className={cn("mx-auto w-full", Tag === "main" && "max-w-[1536px] px-4 lg:px-8")}>
         <section aria-label="Feed summary" className="mt-[18px] grid gap-[18px] lg:mt-[26px] lg:grid-cols-[minmax(0,560fr)_minmax(0,872fr)] lg:gap-10">
           <HeroStat
             state={p.liveState}
@@ -122,7 +126,7 @@ export function FeedView(p: FeedViewProps) {
           onAnyTime={() => p.on.filtersChange({ ...filters, since: null })}
           onRetry={p.on.retry}
         />
-      </main>
+      </Tag>
 
       <AnimatePresence>
         {p.sheet && (
