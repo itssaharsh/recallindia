@@ -272,7 +272,7 @@ function NearMissFace(p: FaceProps) {
   const yours = item.batch ?? "";
   const listed = notice?.batch ?? "";
   const k = diffIndices(yours, listed).k;
-  const noticeHref = item.notice_id ? (p.noticeHref ?? ((id: string) => `/feed?id=${encodeURIComponent(id)}`))(item.notice_id) : undefined;
+  const noticeHref = item.notice_id ? (p.noticeHref ?? ((id: string) => `/feed/?id=${encodeURIComponent(id)}`))(item.notice_id) : undefined;
   return (
     <Card as="article" id={p.domId} tabIndex={-1} aria-labelledby={p.titleId} className={cn("flex h-full flex-col", flashCls(p.flash))}>
       <div className="grid grid-cols-[auto_1fr] items-start gap-x-[18px] gap-y-3 p-4 md:grid-cols-[auto_1fr_auto] md:p-5">

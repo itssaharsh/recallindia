@@ -138,12 +138,12 @@ const BREAKPOINTS: { bp: string; label: string; body: React.ReactNode }[] = [
 ];
 const ROUTES: [string, string][] = [
   ["/", "Landing, cobalt hero"],
-  ["/feed", "Notices feed (moved from /)"],
-  ["/ingest", "PDF becomes rows, replayable"],
-  ["/mine", "My things, demo or yours"],
+  ["/feed/", "Notices feed (moved from /)"],
+  ["/ingest/", "PDF becomes rows, replayable"],
+  ["/mine/", "My things, demo or yours"],
   ["/case/?id=", "One case: gate, letter, seal"],
-  ["/api", "Try-it console and docs"],
-  ["/kit", "This page"],
+  ["/api/", "Try-it console and docs"],
+  ["/kit/", "This page"],
   ["404", "\"This page isn't on any list\""],
 ];
 

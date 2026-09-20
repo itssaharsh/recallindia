@@ -149,8 +149,8 @@ export function EmptyState(props: EmptyStateProps) {
           The link may be old or mistyped. Every notice is still in the feed, and the demo household is one click away.
         </p>
         <div className="mt-5 flex flex-wrap gap-2.5">
-          <Button href={props.feedHref ?? "/feed"}>Open the feed</Button>
-          <Button variant="secondary" href={props.mineHref ?? "/mine"}>Check what you own</Button>
+          <Button href={props.feedHref ?? "/feed/"}>Open the feed</Button>
+          <Button variant="secondary" href={props.mineHref ?? "/mine/"}>Check what you own</Button>
         </div>
         {props.footnote && <p className="mt-3 text-[13px] leading-[1.45] text-ink-muted">{props.footnote}</p>}
       </div>

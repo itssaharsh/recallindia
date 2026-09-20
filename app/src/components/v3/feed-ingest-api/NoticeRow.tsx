@@ -23,7 +23,7 @@ export interface NoticeRowProps {
   introIndex?: number | null;
 }
 
-export const noticeHref = (pk: string): string => `/feed?notice=${encodeURIComponent(pk)}`;
+export const noticeHref = (pk: string): string => `/feed/?notice=${encodeURIComponent(pk)}`;
 
 /**
  * One notice (spec 1.6.3). Grid at ≥ lg: 56 | 1.2fr | 220 | 1.3fr | 120 | 20, 101 px tall.

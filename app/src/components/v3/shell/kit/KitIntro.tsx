@@ -81,7 +81,7 @@ export function KitIntro({ total, sourcesCount, alertCount, thingsCount, batch, 
               </p>
             </div>
             {/* ui/Button has no lg size yet: 54 / 0 26 / 17 px via style (see README) */}
-            <Button variant="onBlue" href="/mine" className="justify-self-start" style={{ height: 54, paddingInline: 26, fontSize: 17 }}>
+            <Button variant="onBlue" href="/mine/" className="justify-self-start" style={{ height: 54, paddingInline: 26, fontSize: 17 }}>
               Check what you own
             </Button>
           </div>

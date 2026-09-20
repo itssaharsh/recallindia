@@ -418,11 +418,11 @@ function Footer(p: NoticeSheetProps & { notice: Notice }) {
   return (
     <footer className="flex shrink-0 gap-2.5 border-t border-line bg-surface-1 px-4 pt-3.5 pb-[18px] lg:px-6">
       {cdsco ? (
-        <Button href={p.scanHref ?? `/mine?add=scan&batch=${encodeURIComponent(n.batches[0] ?? "")}`} icon={<ScanLine aria-hidden className="size-[18px]" />} className="flex-1">
+        <Button href={p.scanHref ?? `/mine/?add=scan&batch=${encodeURIComponent(n.batches[0] ?? "")}`} icon={<ScanLine aria-hidden className="size-[18px]" />} className="flex-1">
           Scan a strip for this batch
         </Button>
       ) : (
-        <Button href={p.addHref ?? "/mine?add=1"} icon={<Plus aria-hidden className="size-[18px]" />} className="flex-1">
+        <Button href={p.addHref ?? "/mine/?add=1"} icon={<Plus aria-hidden className="size-[18px]" />} className="flex-1">
           Add this to my things
         </Button>
       )}

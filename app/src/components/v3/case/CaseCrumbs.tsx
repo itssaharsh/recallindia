@@ -56,7 +56,7 @@ export function crumbChip(state: CaseUiState, verifiedAgainAt?: string | null): 
   }
 }
 
-export function CaseCrumbs({ state, itemName, caseId, createdAt, verifiedAgainAt, backHref = "/mine" }: CaseCrumbsProps) {
+export function CaseCrumbs({ state, itemName, caseId, createdAt, verifiedAgainAt, backHref = "/mine/" }: CaseCrumbsProps) {
   const chip = crumbChip(state, verifiedAgainAt);
   return (
     <nav aria-label="Breadcrumb" className="mt-4 flex min-h-11 items-center gap-3 max-md:mt-3">

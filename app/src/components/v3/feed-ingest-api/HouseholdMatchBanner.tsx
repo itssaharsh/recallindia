@@ -23,7 +23,7 @@ const illustrationFor = (m: HouseholdMatch) =>
  * own is on a notice. Hidden at 0 matches; shows two pills and "+{n−2} more" beyond that.
  * Matches feed-1536.png (56 px pill) and feed-390.png (150 px card).
  */
-export function HouseholdMatchBanner({ check, href = "/mine?filter=alert" }: HouseholdMatchBannerProps) {
+export function HouseholdMatchBanner({ check, href = "/mine/?filter=alert" }: HouseholdMatchBannerProps) {
   if (!check || check.matches.length === 0) return null;
   const n = check.matches.length;
   const lead = n === 1 ? `1 notice matches something in ${check.name}.` : `${n} notices match things in ${check.name}.`;

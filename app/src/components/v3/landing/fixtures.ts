@@ -177,12 +177,12 @@ export const landingStory: LandingStory = {
 }
 
 export const landingLinks: LandingLinks = {
-  mine: '/mine',
-  feed: '/feed',
+  mine: '/mine/',
+  feed: '/feed/',
   // The /feed spec owns these params (feed-ingest-api.md: ?source=cdsco_nsq&month=JUL-2026).
-  feedCdscoMonth: '/feed?source=cdsco_nsq&month=JUL-2026',
+  feedCdscoMonth: '/feed/?source=cdsco_nsq&month=JUL-2026',
   // /ingest autostarts its replay 400 ms after the PDF's first page renders, so no flag is needed.
-  ingest: '/ingest',
-  api: '/api',
+  ingest: '/ingest/',
+  api: '/api/',
   case: '/case/?id=case_demo_ft5427',
 }

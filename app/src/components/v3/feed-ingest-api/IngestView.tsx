@@ -54,7 +54,7 @@ export function IngestView({ run, frame, phase, speed, on, pdf, feedHref }: Inge
           <PdfStage fileName={run.file_name} pages={run.pages} frame={frame} follow={phase !== "idle" || frame.rows.length > 0} onLayout={onLayout} className="h-[300px] lg:h-auto">
             {pdf ?? <PdfStandIn run={run} frame={frame} />}
           </PdfStage>
-          <NoticesPane run={run} frame={frame} speed={speed} feedHref={feedHref ?? `/feed?source=cdsco_nsq&since=${since}`} onReplay={on.restart} />
+          <NoticesPane run={run} frame={frame} speed={speed} feedHref={feedHref ?? `/feed/?source=cdsco_nsq&since=${since}`} onReplay={on.restart} />
           <FlightLayer frame={frame} workspace={workspace} month={run.month} layoutKey={layoutKey} />
         </div>
 

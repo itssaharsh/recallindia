@@ -74,7 +74,7 @@ export function thingToPaletteItem(item: HouseholdItem): PaletteItem {
     detailCompact,
     icon: { type: "category", category: item.kind },
     trailing: c ? { type: "chip", ...c } : undefined,
-    href: item.case_id && (item.face === "alert" || item.face === "needs-you") ? `/case/?id=${encodeURIComponent(item.case_id)}` : `/mine?item=${encodeURIComponent(item.item_id)}`,
+    href: item.case_id && (item.face === "alert" || item.face === "needs-you") ? `/case/?id=${encodeURIComponent(item.case_id)}` : `/mine/?item=${encodeURIComponent(item.item_id)}`,
     keywords: [item.brand, item.batch, item.make, item.model, item.year].filter(Boolean).join(" "),
   };
 }
@@ -102,7 +102,7 @@ export function noticeToPaletteItem(n: NoticeSummary): PaletteItem {
     detail,
     detailCompact,
     icon: { type: "glyph", glyph: "notice", tone: "cobalt" },
-    href: `/feed?notice=${encodeURIComponent(n.pk)}`,
+    href: `/feed/?notice=${encodeURIComponent(n.pk)}`,
     keywords: [n.notice_id, n.brand, n.model, ...(n.batches ?? [])].filter(Boolean).join(" "),
   };
 }
@@ -112,18 +112,18 @@ export function goToItems({ total, household }: { total: number | null; househol
   const count = household.kind === "copying" ? household.total : household.count;
   const whose = household.kind === "yours" ? "Your household" : "Demo household";
   return [
-    { id: "go:feed", group: "goto", title: "Feed", detail: total === null ? "Every notice, newest first" : `${formatCount(total)} notices from 4 regulators`, icon: { type: "glyph", glyph: "feed" }, trailing: { type: "arrow" }, href: "/feed" },
-    { id: "go:ingest", group: "goto", title: "Ingest", detail: "Watch a PDF become the feed", icon: { type: "glyph", glyph: "ingest" }, trailing: { type: "arrow" }, href: "/ingest" },
-    { id: "go:mine", group: "goto", title: "My things", detail: `${whose} · ${count} things`, icon: { type: "glyph", glyph: "things" }, trailing: { type: "arrow" }, href: "/mine" },
-    { id: "go:api", group: "goto", title: "API", detail: "GET /v1/notices, no key", icon: { type: "glyph", glyph: "api" }, trailing: { type: "arrow" }, href: "/api" },
-    { id: "go:kit", group: "goto", title: "Kit", detail: "The tokens and primitives behind every screen", icon: { type: "glyph", glyph: "kit" }, trailing: { type: "arrow" }, href: "/kit" },
+    { id: "go:feed", group: "goto", title: "Feed", detail: total === null ? "Every notice, newest first" : `${formatCount(total)} notices from 4 regulators`, icon: { type: "glyph", glyph: "feed" }, trailing: { type: "arrow" }, href: "/feed/" },
+    { id: "go:ingest", group: "goto", title: "Ingest", detail: "Watch a PDF become the feed", icon: { type: "glyph", glyph: "ingest" }, trailing: { type: "arrow" }, href: "/ingest/" },
+    { id: "go:mine", group: "goto", title: "My things", detail: `${whose} · ${count} things`, icon: { type: "glyph", glyph: "things" }, trailing: { type: "arrow" }, href: "/mine/" },
+    { id: "go:api", group: "goto", title: "API", detail: "GET /v1/notices, no key", icon: { type: "glyph", glyph: "api" }, trailing: { type: "arrow" }, href: "/api/" },
+    { id: "go:kit", group: "goto", title: "Kit", detail: "The tokens and primitives behind every screen", icon: { type: "glyph", glyph: "kit" }, trailing: { type: "arrow" }, href: "/kit/" },
   ];
 }
 
 /** "Actions" rows. "Make my own copy" only while the demo household is showing. */
 export function actionItems({ household }: { household: HouseholdState }): PaletteItem[] {
   const items: PaletteItem[] = [
-    { id: "act:add", group: "actions", title: "Add a thing", detail: "Scan a strip or type a model", icon: { type: "glyph", glyph: "plus" }, trailing: { type: "kbd", label: "A" }, action: "add-thing", href: "/mine?add=1", always: true },
+    { id: "act:add", group: "actions", title: "Add a thing", detail: "Scan a strip or type a model", icon: { type: "glyph", glyph: "plus" }, trailing: { type: "kbd", label: "A" }, action: "add-thing", href: "/mine/?add=1", always: true },
   ];
   if (household.kind === "demo") {
     items.push({ id: "act:copy", group: "actions", title: "Make my own copy", detail: `Copy the ${household.count} demo things to this device`, icon: { type: "glyph", glyph: "house" }, action: "make-copy" });

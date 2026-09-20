@@ -40,7 +40,7 @@ function NoticeCardSpecimen({ notice, category, hover, footer }: { notice: Notic
       <p className="mt-1.5 text-[15px] leading-[1.45] text-ink-muted">{summary}</p>
       <div className="mt-3.5 flex items-center gap-2.5 border-t border-line pt-3">
         {footer}
-        <a href={`/feed?notice=${encodeURIComponent(notice.pk)}`} className="ml-auto inline-flex items-center gap-1.5 rounded-pill text-[14px] font-semibold leading-none text-cobalt">
+        <a href={`/feed/?notice=${encodeURIComponent(notice.pk)}`} className="ml-auto inline-flex items-center gap-1.5 rounded-pill text-[14px] font-semibold leading-none text-cobalt">
           See the notice<ArrowRight size={16} aria-hidden />
         </a>
       </div>

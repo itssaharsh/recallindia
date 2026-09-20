@@ -74,7 +74,7 @@ export function CaseView(props: CaseViewProps) {
   const {
     state, caseRecord, notice, item, household, nearMiss, verify, tamper, verifiedAgainAt, claimPdfUrl, timedOut = false,
     pending = {}, elapsedMs, clientAudit = [], showWorkOpen = false, animateOnMount = true, bandInView: bandInViewProp,
-    sharedLayout = false, backHref = "/mine", highlight, retentionDays = 30, on = {},
+    sharedLayout = false, backHref = "/mine/", highlight, retentionDays = 30, on = {},
   } = props;
 
   const live = useLive();
