@@ -24,10 +24,13 @@ export function SourceExcerpt({
   quote,
   caption,
   compact = false,
+  onDanger = false,
 }: {
   excerpt: string;
   quote?: string | null;
   caption?: React.ReactNode;
+  /** the excerpt keeps its paper panel on the red alert face; only the caption changes */
+  onDanger?: boolean;
   /** a card shows only the matched paragraph (in full: evidence is never clipped); the sheet
    *  shows every paragraph */
   compact?: boolean;
@@ -46,7 +49,9 @@ export function SourceExcerpt({
           </p>
         ))}
       </blockquote>
-      {caption && <figcaption className="mt-1.5 text-xs text-muted">{caption}</figcaption>}
+      {caption && (
+        <figcaption className={`mt-1.5 text-xs ${onDanger ? "text-accent-ink/90" : "text-muted"}`}>{caption}</figcaption>
+      )}
     </figure>
   );
 }

@@ -5,12 +5,11 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { FoilChip, diffIndexes } from "@/components/common/foil-chip";
 import { RangeBar } from "@/components/common/range-bar";
 import { SourceExcerpt } from "@/components/common/source-excerpt";
-import { StatusTag, type Tone } from "@/components/common/status-tag";
 import { useAppState } from "@/components/shell/app-state";
-import { Button } from "@/components/ui/button";
-import { apiGet } from "@/lib/api";
+import { DEMO_HOUSEHOLD, apiGet } from "@/lib/api";
 import { fmtDay, fmtWhen, noticeRef, riskSentence, sourceLabel } from "@/lib/format";
 import { CROSSFADE, FLIP } from "@/lib/motion";
 import type { CheckStatus, CheckStep, Item, Notice } from "@/lib/types";
@@ -27,15 +26,38 @@ export function faceOf(item: Item): Face {
   return item.last_checked_at ? "clear" : "unchecked";
 }
 
-const TAG: Record<Face, { tone: Tone; label: string }> = {
-  alert: { tone: "alert", label: "Alert" },
-  hold: { tone: "hold", label: "Hold" },
-  dismissed: { tone: "dismissed", label: "Dismissed" },
-  clear: { tone: "clear", label: "Clear" },
-  unchecked: { tone: "unchecked", label: "Not checked" },
+// the status word each face carries (the table at the top of UI-SPEC §5)
+const TAG: Record<Face, { label: string; tone: string }> = {
+  alert: { label: "On a notice", tone: "text-accent-ink" },
+  hold: { label: "Needs you", tone: "text-warning" },
+  dismissed: { label: "Not on the notice", tone: "text-success" },
+  clear: { label: "Clear", tone: "text-success" },
+  unchecked: { label: "Not checked", tone: "text-muted" },
 };
 
+function FaceLabel({ face }: { face: Face }) {
+  const tag = TAG[face];
+  return <span className={`shrink-0 text-[12px] font-bold tracking-[0.08em] uppercase ${tag.tone}`}>{tag.label}</span>;
+}
+
 const sentence = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+
+/** "11 days" between the notice and the purchase, for the alert face's last line. */
+function daysAfter(published: string | null | undefined, purchased: string | null | undefined): string {
+  const from = Date.parse(`${String(published).slice(0, 10)}T00:00:00Z`);
+  const to = Date.parse(`${String(purchased).slice(0, 10)}T00:00:00Z`);
+  if (!Number.isFinite(from) || !Number.isFinite(to)) return "after";
+  const days = Math.round((to - from) / 86_400_000);
+  return `${days} day${days === 1 ? "" : "s"}`;
+}
+
+/** The listed code closest to yours, which is the one worth showing under it (C-10 near miss). */
+function closest(check: { listed: string; yours: string }): string {
+  const listed = check.listed.split(/,\s*/).map((s) => s.trim()).filter(Boolean);
+  if (listed.length <= 1) return listed[0] ?? check.listed;
+  const distance = (a: string, b: string) => [...a].filter((ch, i) => ch !== b[i]).length + Math.abs(a.length - b.length);
+  return listed.reduce((best, one) => (distance(one, check.yours) < distance(best, check.yours) ? one : best), listed[0]);
+}
 const unitWord = (item: Item) => (item.batch ? "batch" : item.serial ? "serial" : item.year ? "model year" : "unit");
 
 /** The alert headline. CDSCO: the decision's own first clause ("Failed CDSCO quality test,
@@ -46,11 +68,6 @@ function alertHeadline(noticeKey: string, reasonHead: string): string {
   if (!id || source === "cdsco_nsq") return sentence(reasonHead);
   return `On ${sourceLabel(source)} recall ${id}`;
 }
-const identifier = (item: Item) =>
-  [item.batch && `batch ${item.batch}`, item.serial && `serial ${item.serial}`, item.model && item.kind !== "vehicle" && item.model, item.year && String(item.year)]
-    .filter(Boolean)
-    .join(" · ");
-
 /**
  * One thing the person owns. Front: the answer (alert / hold / dismissed near-miss / clear).
  * Back: the Dynamic Checklist while a check runs. The card flips (rotateY, 400ms spring) only
@@ -96,12 +113,15 @@ export function ItemCard({
   );
 
   const wide = face === "alert" || face === "dismissed";
+  // No coloured side stripes (DESIGN.md): the hold face is tinted, the alert face is fully red.
   const frame = `rounded-md border ${
     face === "alert"
-      ? "border-danger bg-danger shadow-[0_18px_40px_-20px_oklch(0%_0_0_/_0.75)]"
-      : face === "hold" || face === "dismissed"
-        ? "border-line border-l-4 border-l-warning bg-surface-1"
-        : "border-line bg-surface-1"
+      ? "border-danger bg-danger text-accent-ink"
+      : face === "hold"
+        ? "border-transparent bg-warning-soft"
+        : face === "dismissed"
+          ? "border-line-strong bg-surface-1"
+          : "border-line bg-surface-1"
   }`;
 
   const front = <Front item={item} face={face} sources={sources} demo={demo} onCheck={() => onCheck(item)} busy={checking} />;
@@ -111,7 +131,10 @@ export function ItemCard({
         <p className="m-0 text-[13px] text-muted">
           Checking <span className="text-ink">{item.name}</span>
         </p>
-        <StatusTag tone="checking" label="Checking" />
+        <span className="inline-flex shrink-0 items-center gap-1.5 text-[12px] font-bold tracking-[0.08em] text-muted uppercase">
+          <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-primary" />
+          Checking
+        </span>
       </div>
       <Checklist steps={steps} item={item} sources={sources} />
     </div>
@@ -172,7 +195,9 @@ function Front({
   onCheck: () => void;
   busy: boolean;
 }) {
-  const { href } = useAppState();
+  const { href, household } = useAppState();
+  const onRed = face === "alert";
+  const readOnly = demo || household === DEMO_HOUSEHOLD;
   const c = item.case;
   const [notice, setNotice] = useState<Notice | null>(null);
   const needsNotice = (face === "alert" || face === "dismissed") && c?.notice_id;
@@ -187,41 +212,44 @@ function Front({
   }, [needsNotice, c, demo]);
 
   const [headline, detail] = (c?.reason ?? "").split(/;\s*/, 2);
-  const tag = TAG[face];
 
   return (
     <div className="flex h-full flex-col gap-3 p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="m-0 truncate font-display text-base font-semibold text-ink">{item.name}</h3>
-          <p className="m-0 truncate text-xs text-muted">
-            {[item.brand, identifier(item)].filter(Boolean).join(" · ") || item.kind}
+          <h3 className={`truncate font-display text-[20px] leading-tight font-bold ${onRed ? "text-accent-ink" : "text-ink"}`}>
+            {item.name}
+          </h3>
+          <p className={`truncate text-[13px] ${onRed ? "text-accent-ink/85" : "text-muted"}`}>
+            {[item.brand, item.purchase_date ? `bought ${fmtDay(item.purchase_date)}` : null].filter(Boolean).join(" · ") ||
+              item.kind}
           </p>
         </div>
-        <StatusTag tone={tag.tone} label={tag.label} />
+        <FaceLabel face={face} />
       </div>
 
       {face === "alert" && c && (
         <>
-          <p className="m-0 font-display text-[17px] leading-snug font-semibold text-ink">{alertHeadline(c.notice_id, headline)}</p>
-          {c.range_check && <RangeBar check={c.range_check} />}
+          <p className="font-display text-[17px] leading-snug font-bold text-accent-ink">
+            {alertHeadline(c.notice_id, headline)}
+          </p>
+          {item.batch && <FoilChip code={item.batch} />}
+          {c.range_check && <RangeBar check={c.range_check} onDanger />}
           {(notice?.raw_excerpt || c.quoted_sentence) && (
             <SourceExcerpt
               compact
+              onDanger
               excerpt={notice?.raw_excerpt || c.quoted_sentence || ""}
               quote={c.quoted_sentence}
               caption={notice ? `${noticeRef(notice)} · published ${fmtDay(notice.published_at)}` : undefined}
             />
           )}
           {notice && notice.source !== "cdsco_nsq" && riskSentence(notice) && (
-            <p className="m-0 text-[13px] leading-snug text-ink">
-              <span className="text-muted">Risk: </span>
-              {riskSentence(notice)}
-            </p>
+            <p className="text-[13px] leading-snug text-accent-ink">{riskSentence(notice)}</p>
           )}
           {c.sold_after_notice && item.purchase_date && notice && (
-            <p className="m-0 text-[13px] text-ink">
-              Bought {fmtDay(item.purchase_date)}, after the notice of {fmtDay(notice.published_at)}.
+            <p className="text-[13px] text-accent-ink">
+              Bought {fmtDay(item.purchase_date)}, {daysAfter(notice.published_at, item.purchase_date)} after the notice.
             </p>
           )}
         </>
@@ -229,54 +257,70 @@ function Front({
 
       {face === "dismissed" && c && (
         <>
-          <p className="m-0 text-[13px] text-ink">Dismissed: {c.reason}</p>
-          {c.range_check && <RangeBar check={c.range_check} />}
+          {c.range_check?.yours && c.range_check.listed ? (
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="w-12 text-[12px] text-muted">Yours</span>
+                <FoilChip code={c.range_check.yours} diff={diffIndexes(c.range_check.yours, closest(c.range_check))} />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-12 text-[12px] text-muted">Listed</span>
+                <FoilChip code={closest(c.range_check)} diff={diffIndexes(c.range_check.yours, closest(c.range_check))} />
+              </div>
+            </div>
+          ) : (
+            <p className="text-[13px] text-ink">{sentence(c.reason)}</p>
+          )}
           {notice && (
-            <p className="m-0 text-xs text-muted">
-              Same product as the {noticeRef(notice)}; your {unitWord(item)} is not the listed one.
+            <p className="text-[13px] text-muted">
+              Same {item.kind === "medicine" ? "medicine and maker" : "product"} as {noticeRef(notice)}, different{" "}
+              {unitWord(item)}. Dismissed.
             </p>
           )}
         </>
       )}
 
       {face === "hold" && c && (
-        <p className="m-0 text-[13px] text-ink">
+        <p className="text-[13px] text-ink">
           {sentence(headline)}
           {detail ? `; ${detail}` : ""}
         </p>
       )}
 
       {face === "clear" && (
-        <p className="m-0 text-[13px] text-muted">
+        <p className="text-[13px] text-muted">
           No match in {sources} sources as of {fmtWhen(item.last_checked_at)}.
         </p>
       )}
 
-      {face === "unchecked" && <p className="m-0 text-[13px] text-muted">Not checked against the notices yet.</p>}
+      {face === "unchecked" && <p className="text-[13px] text-muted">Not checked against the notices yet.</p>}
 
-      <div className="mt-auto flex items-center justify-between gap-2 pt-1">
-        <span className="min-w-0 truncate font-mono text-[11px] text-muted">
-          {c?.verifier ? `verifier ${c.verifier}${c.confidence ? ` · ${c.confidence}` : ""}` : ""}
-        </span>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {c?.case_id && (
-            <Link
-              href={href(`/case/?id=${encodeURIComponent(c.case_id)}`)}
-              className="inline-flex h-7 items-center gap-1 rounded-sm px-2 text-[13px] whitespace-nowrap text-primary hover:bg-surface-2"
-            >
-              Open case <ArrowUpRight aria-hidden className="size-3.5" />
-            </Link>
-          )}
-          <Button
-            size="sm"
-            variant="ghost"
+      <div className="mt-auto flex items-center justify-end gap-2 pt-1">
+        {c?.case_id && (
+          <Link
+            href={href(`/case/?id=${encodeURIComponent(c.case_id)}`)}
+            className={`inline-flex h-9 items-center gap-1 rounded-md px-3 text-[13px] font-medium whitespace-nowrap ${
+              onRed ? "bg-surface-1 text-ink hover:bg-surface-2" : "text-primary hover:bg-surface-2"
+            }`}
+          >
+            Open case <ArrowUpRight aria-hidden className="size-3.5" />
+          </Link>
+        )}
+        {/* the demo wall is read-only: the button that would change it is not shown at all */}
+        {!readOnly && (
+          <button
+            type="button"
             onClick={onCheck}
-            disabled={busy || demo}
-            title={demo ? "Demo data is read-only: checks run on the live API" : undefined}
+            disabled={busy}
+            className={`inline-flex h-9 items-center rounded-md px-3 text-[13px] font-medium disabled:opacity-50 ${
+              onRed
+                ? "border border-accent-ink/60 text-accent-ink hover:bg-accent-ink/10"
+                : "text-muted hover:bg-surface-2 hover:text-ink"
+            }`}
           >
             {face === "unchecked" ? "Check" : "Check again"}
-          </Button>
-        </div>
+          </button>
+        )}
       </div>
     </div>
   );

@@ -6,18 +6,27 @@ import { CROSSFADE, DRAW } from "@/lib/motion";
 import type { RangeCheck } from "@/lib/types";
 
 /**
- * Where the user's unit falls against what the notice lists.
- *  - batches / serials: the listed values as marks on a track; your value sits on its mark when
- *    it is listed, or past the end of the track when it is not ("FT5428 · not listed");
- *  - model years: a numeric track, the listed span drawn in, your year as a marker
- *    ("2022 · within 2022–2023").
- * The listed span draws in once, on the state change that revealed it (DESIGN.md).
+ * C-12: where the user's unit falls against what the notice lists.
+ *  - discrete (batches, serials): the listed codes as paper chips; yours is outlined in the
+ *    accent when it is listed, and appended as "yours: <code>" when it is not;
+ *  - range (model years, serial spans): a track with the listed span drawn in and your value as
+ *    a marker ("2022 · within 2022–2023").
+ *
+ * `onDanger` is the variant that sits on the red alert face: the chips stay paper, and the
+ * labels and the track turn to that face's own ink.
  */
-export function RangeBar({ check }: { check: RangeCheck }) {
+export function RangeBar({ check, onDanger = false }: { check: RangeCheck; onDanger?: boolean }) {
   const reduce = useReducedMotion();
   const years = parseYears(check);
   const hit = check.inside === true;
-  const tone = check.inside === true ? "bg-primary" : check.inside === false ? "bg-warning" : "bg-line-strong";
+  const textTone = onDanger ? "text-accent-ink" : "text-ink";
+  const trackTone = onDanger ? "bg-accent-ink/30" : "bg-surface-2";
+  const spanTone = onDanger ? "bg-accent-ink" : "bg-line-strong";
+  const markTone = onDanger
+    ? "bg-ink outline-2 outline-surface-1"
+    : check.inside === false
+      ? "bg-warning"
+      : "bg-primary";
   const draw = reduce
     ? { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: CROSSFADE }
     : { initial: { scaleX: 0 }, animate: { scaleX: 1 }, transition: DRAW };
@@ -25,25 +34,18 @@ export function RangeBar({ check }: { check: RangeCheck }) {
   if (years) {
     const { from, to, yours, min, max } = years;
     const pos = (y: number) => `${((y - min) / (max - min)) * 100}%`;
-    const label =
-      check.inside === true
-        ? `${yours} · within ${spanLabel(from, to)}`
-        : `${yours} · outside ${spanLabel(from, to)}`;
+    const label = `${yours} · ${check.inside === true ? "within" : "outside"} ${spanLabel(from, to)}`;
     return (
       <div className="space-y-1.5" role="img" aria-label={`Model year ${label}`}>
-        <div className="relative h-2 bg-surface-2">
+        <div className={`relative h-2 ${trackTone}`}>
           <motion.div
-            className="absolute inset-y-0 origin-left bg-line"
+            className={`absolute inset-y-0 origin-left ${spanTone}`}
             style={{ left: pos(from - 0.5), width: `calc(${pos(to + 0.5)} - ${pos(from - 0.5)})` }}
             {...draw}
           />
-          <span
-            className={`absolute -top-1 h-4 w-0.5 ${tone}`}
-            style={{ left: pos(yours) }}
-            aria-hidden
-          />
+          <span className={`absolute -top-1 h-4 w-0.5 ${markTone}`} style={{ left: pos(yours) }} aria-hidden />
         </div>
-        <p className="font-mono text-xs text-ink">{label}</p>
+        <p className={`font-mono text-xs ${textTone}`}>{label}</p>
       </div>
     );
   }
@@ -54,26 +56,27 @@ export function RangeBar({ check }: { check: RangeCheck }) {
     .filter(Boolean);
   const yours = check.yours || "—";
   const label = hit ? `${yours} · listed` : check.inside === false ? `${yours} · not listed` : `${yours} · not comparable`;
+  const outline = onDanger ? "outline-ink" : "outline-primary";
   return (
-    <div className="space-y-1.5" role="img" aria-label={`${check.kind === "serial" ? "Serial" : "Batch"} ${label}; listed: ${listed.join(", ") || "none"}`}>
-      <div className="flex items-center gap-2">
-        <motion.div className="flex min-w-0 flex-1 origin-left items-center gap-1 bg-surface-2 px-1 py-1" {...draw}>
-          {listed.map((b) => (
-            <span
-              key={b}
-              className={`truncate rounded-sm px-1.5 py-0.5 font-mono text-[11px] ${
-                hit && eq(b, yours) ? "bg-surface-1 text-ink outline-2 outline-primary" : "bg-surface-1 text-muted"
-              }`}
-            >
-              {b}
-            </span>
-          ))}
-        </motion.div>
-        {!hit && (
-          <span className={`shrink-0 rounded-sm px-1.5 py-0.5 font-mono text-[11px] text-accent-ink ${tone}`}>{yours}</span>
-        )}
-      </div>
-      <p className="font-mono text-xs text-ink">{label}</p>
+    <div
+      className="space-y-1.5"
+      role="img"
+      aria-label={`${check.kind === "serial" ? "Serial" : "Batch"} ${label}; listed: ${listed.join(", ") || "none"}`}
+    >
+      <motion.div className="flex min-w-0 flex-wrap items-center gap-1.5" {...draw}>
+        {listed.slice(0, 8).map((b) => (
+          <span
+            key={b}
+            className={`truncate rounded-sm bg-surface-1 px-1.5 py-0.5 font-mono text-[13px] ${
+              hit && eq(b, yours) ? `text-ink outline-2 ${outline}` : "text-muted"
+            }`}
+          >
+            {b}
+          </span>
+        ))}
+        {!hit && <span className={`shrink-0 font-mono text-[13px] ${textTone}`}>yours: {yours}</span>}
+      </motion.div>
+      <p className={`font-mono text-xs ${textTone}`}>{label}</p>
     </div>
   );
 }
