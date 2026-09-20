@@ -24,16 +24,25 @@ export function alertMonth(notice: Notice): string {
   return Number.isFinite(at) ? MONTH_YEAR.format(at) : label;
 }
 
+/** What to call the thing on screen. `make` and `model` are the normalised matching keys
+ *  ("jeep", "compass"), so display text uses the fields the person typed. */
+export function displayThing(item: Item | null): string {
+  const typed = item?.name?.trim();
+  if (typed) return typed;
+  const parts = [item?.brand, item?.model].filter(Boolean).map(String);
+  return parts.join(" ") || "this thing";
+}
+
+/** The maker, as the person wrote it. */
+export const displayMaker = (item: Item | null): string => item?.brand?.trim() || displayThing(item);
+
 /** The one-line answer at the top of the case, in display type (UI-SPEC C-15). */
 export function outcomeLine(c: Case, item: Item | null, notice: Notice | null): string {
   if (c.decision === "alert") {
     const days = daysBetween(notice?.published_at, item?.purchase_date);
     if (item?.kind === "vehicle" && notice) {
-      const what = [item.year, item.make || item.brand, item.model || item.name]
-        .filter(Boolean)
-        .map(String)
-        .join(" ");
-      return `Your ${what || item.name} matches ${sourceLabel(notice.source)} recall ${notice.notice_id} by make, model and year.`;
+      const what = [item.year, displayThing(item)].filter(Boolean).join(" ");
+      return `Your ${what} matches ${sourceLabel(notice.source)} recall ${notice.notice_id} by make, model and year.`;
     }
     if (c.sold_after_notice && days !== null && days >= 0 && notice?.source === "cdsco_nsq") {
       return `You were sold this strip ${days} day${days === 1 ? "" : "s"} after CDSCO flagged it.`;
@@ -41,7 +50,7 @@ export function outcomeLine(c: Case, item: Item | null, notice: Notice | null): 
     if (notice?.source === "cdsco_nsq") {
       return `Your strip's batch is on CDSCO's ${alertMonth(notice)} list of drug samples that failed quality tests.`;
     }
-    if (notice) return `Your ${item?.name ?? "thing"} is on ${sourceLabel(notice.source)} recall ${notice.notice_id}.`;
+    if (notice) return `Your ${displayThing(item)} is on ${sourceLabel(notice.source)} recall ${notice.notice_id}.`;
     return "Your thing is on a notice";
   }
   if (c.decision === "dismiss") {

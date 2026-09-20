@@ -15,6 +15,7 @@ involved. ``seed_demo.py --reset`` calls it, so the id survives a reset.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -100,6 +101,57 @@ def make_case(dynamo, item: dict, notice: dict, now: str) -> dict:
     item["last_check_arn"] = f"seeded:{CASE_ID}"
     dynamo.put("items", item)
     return data
+
+
+def approve_admin(case_id: str, mock: bool, timeout: int = 240) -> str:
+    """Approve a waiting case without going through the API, and return the case's status.
+
+    The demo household is read-only (``demo_read_only``), so a judge cannot answer its cases --
+    and a case left waiting expires 24 h after a reset, which is what a judge would then read.
+    The seed answers them here instead: the same conditional write the API does, then the task
+    token is spent so the state machine itself seals the evidence, writes the letter and verifies
+    the signature (and the paused execution ends).
+    """
+    import time
+
+    from common import approval as gate
+    from common import dynamo
+    from common.notices import now_iso
+
+    case = dynamo.get("cases", case_id)
+    if case is None:
+        raise SystemExit(f"seed_demo_case: no case {case_id!r}")
+    if case.get("status") == "verified":
+        return "verified"
+    try:
+        token = gate.end_wait(
+            case_id, status="approved", at=now_iso(), approver="seed:demo-household"
+        )
+    except gate.TokenGone:
+        return str((dynamo.get("cases", case_id) or {}).get("status") or "")
+
+    if mock or token.startswith("demo-token-"):
+        from matcher import claim, evidence
+
+        evidence.seal(case_id)
+        claim.draft(case_id)
+        evidence.verify(case_id)
+    else:
+        import boto3
+
+        boto3.client("stepfunctions").send_task_success(
+            taskToken=token,
+            output=json.dumps(
+                {"approved": True, "approver": "seed:demo-household", "approved_at": now_iso()}
+            ),
+        )
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            status = str((dynamo.get("cases", case_id) or {}).get("status") or "")
+            if status in ("verified", "error", "rejected", "expired"):
+                break
+            time.sleep(2)
+    return str((dynamo.get("cases", case_id) or {}).get("status") or "")
 
 
 def main(argv: list[str] | None = None) -> int:

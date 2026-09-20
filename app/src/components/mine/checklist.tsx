@@ -1,3 +1,4 @@
+import { displayMaker } from "@/lib/case";
 import type { CheckStep, Item, StepName, StepState } from "@/lib/types";
 
 // ○ pending · ◐ running · ● done (R25: every planned step visible, with its real state).
@@ -38,7 +39,7 @@ function rangeCopy(s: Record<string, unknown>, item: Item, ident: string | null)
 /** Microcopy = action + the specific thing + the rule (R25), filled in from real step results. */
 function copy(step: CheckStep, item: Item, sources: number): string {
   const s = (step.summary ?? {}) as Record<string, unknown>;
-  const who = item.brand || item.make || item.name;
+  const who = displayMaker(item); // never the normalised make ("jeep")
   const ident = identifierOf(item);
   const done = step.state === "done";
   switch (step.name as StepName) {

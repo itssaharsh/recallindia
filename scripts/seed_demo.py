@@ -127,6 +127,23 @@ def seed(mock: bool) -> list[dict]:
     return written
 
 
+def waiting_cases(skip: set[str]) -> list[tuple[str, str]]:
+    """The demo household's cases that are still waiting for a human, as (case_id, item_id)."""
+    from common import dynamo
+    from common.schemas import Case, Item
+
+    out: list[tuple[str, str]] = []
+    for entry in demo_world.DEMO_ITEMS:
+        if entry["item_id"] in skip:
+            continue
+        row = dynamo.get("items", Item.make_pk(entry["item_id"])) or {}
+        case_id = str(row.get("case_id") or "")
+        case = dynamo.get("cases", Case.make_pk(case_id)) if case_id else None
+        if case and case.get("status") == "waiting_approval":
+            out.append((case_id, str(entry["item_id"])))
+    return out
+
+
 def check_seeded(mock: bool, skip: set[str], timeout: int = 240) -> dict[str, int]:
     """Run the matcher over the demo items, so the demo wall shows real outcomes.
 
@@ -247,6 +264,11 @@ def main(argv: list[str] | None = None) -> int:
     if not args.no_check:
         counts = check_seeded(args.mock, skip={seed_demo_case.ITEM_ID})
         print(f"seed_demo: checked the demo items -> {counts}")
+        # a demo case left waiting would read "expired" to whoever opens it tomorrow: finish
+        # every alert the checks raised, the way the FT5427 case is finished
+        for case_id, item_id in waiting_cases(skip={seed_demo_case.ITEM_ID}):
+            status = seed_demo_case.approve_admin(case_id, args.mock)
+            print(f"seed_demo: approved {item_id}'s case {case_id} -> {status}")
     print(
         f"seed_demo: alert notice {alert['notice_pk']} published {alert['published_at']} -> "
         f"purchase_date {alert['purchase_date']} (+{demo_world.PURCHASE_OFFSET_DAYS} days)\n"

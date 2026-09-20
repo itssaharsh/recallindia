@@ -115,7 +115,17 @@ def letter_context(case: dict, item: dict, notice: dict, today: str) -> dict:
         )
     else:
         notice_ref = f"{SHORT_SOURCE.get(source, source.upper())} recall {notice.get('notice_id')}"
-        subject = f"Refund, repair or replacement: {product} ({ident}) is covered by {notice_ref}"
+        if kind == "vehicle":
+            # the vehicle as its owner would write it: "2022 Jeep Compass", never the
+            # normalised matching keys ("jeep", "compass") the index is built on
+            label = " ".join(
+                str(part) for part in (item.get("year"), product) if str(part or "").strip()
+            )
+            subject = f"Free repair under recall {notice.get('notice_id')}: {label}"
+        else:
+            subject = (
+                f"Refund, repair or replacement: {product} ({ident}) is covered by {notice_ref}"
+            )
     remedy_text = str(notice.get("remedy") or "").strip()
     default_remedy = VEHICLE_REMEDY if kind == "vehicle" else DEFAULT_REMEDY
     remedy = (

@@ -4,7 +4,7 @@ import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 
 import { GLYPH, STATE_WORD, TONE } from "@/components/mine/checklist";
-import { alertMonth } from "@/lib/case";
+import { alertMonth, displayThing } from "@/lib/case";
 import { sourceLabel } from "@/lib/format";
 import type { AuditEvent, Case, CheckStep, Item, Notice, StepName, StepState } from "@/lib/types";
 
@@ -24,7 +24,7 @@ function shortRef(notice: Notice | null, c: Case): string {
  *  item's last check is this case's, else from the case record. */
 function chainCopy(name: StepName, c: Case, item: Item | null, notice: Notice | null, step?: CheckStep): string {
   const s = (step?.summary ?? {}) as Record<string, unknown>;
-  const who = item?.brand || item?.make || notice?.brand || item?.name || "the item";
+  const who = item?.brand?.trim() || notice?.brand || displayThing(item);
   const rc = c.range_check;
   switch (name) {
     case "Candidates": {
