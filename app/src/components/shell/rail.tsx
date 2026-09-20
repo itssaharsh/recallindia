@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { Logo } from "@/components/brand/logo";
+import { CommandHint } from "@/components/shell/command-palette";
 import { SoundToggle } from "@/components/shell/sound";
 
 import { useAppState } from "./app-state";
@@ -57,7 +58,8 @@ export function Rail() {
             </Link>
           );
         })}
-        <div className="ml-auto md:mt-auto md:ml-0 md:pt-4">
+        <div className="ml-auto flex items-center gap-1 md:mt-auto md:ml-0 md:flex-col md:items-stretch md:pt-4">
+          <CommandHint className="hidden md:inline-flex" />
           <SoundToggle />
         </div>
       </nav>

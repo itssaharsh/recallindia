@@ -3,6 +3,7 @@ import { Doto, IBM_Plex_Mono, Schibsted_Grotesk } from "next/font/google";
 import { preconnect } from "react-dom";
 
 import { AppStateProvider } from "@/components/shell/app-state";
+import { CommandPalette } from "@/components/shell/command-palette";
 import { Rail } from "@/components/shell/rail";
 import { SoundProvider } from "@/components/shell/sound";
 import { TopBar } from "@/components/shell/top-bar";
@@ -69,6 +70,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
                 </main>
               </div>
             </div>
+              <CommandPalette />
             </TooltipProvider>
           </SoundProvider>
         </AppStateProvider>
