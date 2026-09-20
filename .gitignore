@@ -31,6 +31,14 @@ node_modules/
 
 # note: .secrets.baseline stays tracked (pre-commit detect-secrets reads it)
 
-# the prompt pack arrives as a zip; its contents are committed under recallindia-prompts/
-recallindia-promptss.zip
+# the build prompts and the design pack they arrive in: inputs to the work, not the work
+recallindia-prompts/
+*.zip
+
+# the v3 pack ships its components as a second copy of app/src/components/v3; only the app's copy
+# is the source. The spec, the tokens, the brand files and the mockups stay under docs/v3.
+docs/v3/code/
+
+# the static export
+app/out/
 *.Zone.Identifier

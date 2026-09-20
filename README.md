@@ -2,7 +2,7 @@
 
 **India publishes recalls as PDFs nobody reads. RecallIndia tells you the day something you own is on one.**
 
-- **Live:** https://main.d2jn22qjgettr5.amplifyapp.com
+- **Live:** https://recallindia.d2jn22qjgettr5.amplifyapp.com
 - **Public API:** https://ilbmeuwrt7.execute-api.ap-south-1.amazonaws.com/v1/notices
 - **Video:** _(link to follow)_
 - Built for the WeMakeDevs × AWS **First Commit** hackathon, 17–20 Sep 2026.

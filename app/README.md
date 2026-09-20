@@ -4,17 +4,21 @@ The RecallIndia web app: Next.js 15 (App Router) + TypeScript + Tailwind 4, expo
 files (`output: "export"`) and hosted on Amplify Hosting. Every piece of data is fetched in the
 browser from the HTTP API. There is no SSR and there are no API routes.
 
-Live: https://main.d2jn22qjgettr5.amplifyapp.com. Demo data: add `?demo=1`.
+Live: https://recallindia.d2jn22qjgettr5.amplifyapp.com (the first deployment,
+https://main.d2jn22qjgettr5.amplifyapp.com, serves the same build). The read-only `demo` household
+is what a visitor lands on; `?demo=1` is retired.
 
 ## Routes
 
 | Route | What it is |
 |---|---|
-| `/` | Feed: header counter (`N notices · S sources · last poll hh:mm:ss`), source chips with poller health, 40px ledger rows, "Load 50 more" (cursor), page 1 re-polled every 15 s. Clicking a row opens the notice sheet with the full notice, the source's own words on paper, and links to the source and the PDF. `?source=cdsco_nsq` deep-links a filter. |
-| `/mine/` | Item wall: an outcome line, filters, and item cards. The alert face shows the decision's first clause, a range bar and the quoted source row. The dismissed face (amber edge) shows the exact reason. The clear face shows "No match in N sources as of hh:mm". While a check runs, the card flips to a live checklist. The add sheet has three tabs: Scan strip, Paste lines, Vehicle. |
+| `/` | The landing: the hero strip in three.js over a poster, the live counters from `/v1/stats`, how it works, and the proof band. Outside the `(app)` route group, so it carries its own nav. `?state=` switches the QA states. |
+| `/feed/` | The feed: the counter hero, the CDSCO month chart, the source cards, filters that live in the URL (`?source=&since=&q=`), cursor pages and a 15 s re-poll of page 1. A row opens the notice sheet; `?notice=<pk>` deep-links it; `?replay=poll` replays rows landing. |
+| `/mine/` | The item wall: the outcome line, the household strip, filters and item cards. A card's face is alert, needs-you, near-miss, checking, clear or unchecked. `?add=1` opens the add sheet, `?item=<id>` focuses a card. The demo household is read-only. |
 | `/ingest/` | The PDF-to-feed dissolve (below). `?run=<id>` follows a live run, `?replay=<id>[&speed=2]` replays a stored one. |
-| `/case/` | One finding, start to finish: `/case/?id=<case>`, and on Amplify `/case/<case>` is rewritten to the same page. Sections below. |
-| `/api/` | A designed stub for a later prompt. |
+| `/case/` | One finding, start to finish: `/case/?id=<case>`, and on Amplify `/case/<case>` is rewritten to the same page. The approval gate, the pipeline, the claim letter, the evidence certificate and the tamper test. |
+| `/api/` | The public API: the try-it console against `/v1/*`, the curl line and the source table. |
+| `/kit/` | Every primitive and state in one page (`?state=` switches them). Not linked from the app. |
 | anything else | The designed 404 page, served with a real 404 status. |
 
 ## Run it

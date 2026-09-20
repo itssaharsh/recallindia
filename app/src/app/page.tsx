@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 /**
- * "/" sits outside the (app) route group (docs/v3/code/README §3): no AppShell renders here, and
+ * "/" sits outside the (app) route group (docs/v3/INTEGRATION.md §3): no AppShell renders here, and
  * `LandingView` brings its own <header> nav, <main> and <footer>.
  *
  * This stays a server component so the whole landing — snapshot numbers included — is in the

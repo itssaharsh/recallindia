@@ -6,7 +6,7 @@
 // so `next build` never talks to the API (and CI can build with the API down). The client refresh
 // flips `status` from 'snapshot' to 'live', or to 'stale' when it fails.
 //
-// GET /v1/sources returns 404 (docs/v3/code/README §7), so everything comes from /v1/stats through
+// GET /v1/sources returns 404 (docs/v3/INTEGRATION.md §7), so everything comes from /v1/stats through
 // landing/api-map.ts. Nothing else on this route reads an endpoint of its own.
 
 import { landingDataFromStats, type LandingData, type StatsResponse } from "@/components/v3/landing";
