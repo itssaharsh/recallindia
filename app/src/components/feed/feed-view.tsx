@@ -4,6 +4,7 @@ import { CloudOff, FilterX, Inbox } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { EmptyState } from "@/components/common/empty-state";
+import { Num } from "@/components/common/num";
 import Link from "next/link";
 
 import { useAppState } from "@/components/shell/app-state";
@@ -150,8 +151,17 @@ export function FeedView() {
       <div className="flex flex-col gap-6 border-b border-line px-5 pt-8 pb-4 md:px-8">
         {/* C-02: the hero counter is the proof the feed is live, without the word "live" */}
         <div className="space-y-2">
-          <h1 id="feed-title" className="tnum font-display text-[44px] leading-[1.04] font-extrabold tracking-[-0.03em] text-ink md:text-[64px]">
-            {stats ? `${fmtCount(stats.total)} notices` : "Notices"}
+          <h1
+            id="feed-title"
+            className="font-display text-[44px] leading-[1.04] font-extrabold tracking-[-0.03em] text-ink md:text-[64px]"
+          >
+            {stats ? (
+              <>
+                <Num value={fmtCount(stats.total)} /> notices
+              </>
+            ) : (
+              "Notices"
+            )}
           </h1>
           <p className="text-[16px] text-muted md:text-[18px]">
             from CDSCO, CPSC, NHTSA and openFDA
@@ -169,8 +179,7 @@ export function FeedView() {
         {latest?.month && latest.count ? (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-line bg-surface-1 px-4 py-3">
             <p className="text-[15px] text-ink">
-              <span className="tnum">{fmtCount(latest.count)}</span> drug samples failed CDSCO quality tests in{" "}
-              {latest.month}.
+              <Num value={fmtCount(latest.count)} /> drug samples failed CDSCO quality tests in {latest.month}.
             </p>
             <Link href="/mine/" className="text-[15px] font-medium text-primary hover:underline">
               Check what you own →

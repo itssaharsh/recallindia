@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 
+import { Num } from "@/components/common/num";
 import { fmtCount, fmtTime } from "@/lib/format";
 
 import { useAppState } from "./app-state";
@@ -20,7 +21,7 @@ export function TopBar() {
           <>
             {/* each figure stays on one line with its label; the groups wrap on a phone */}
             <span className="whitespace-nowrap">
-              <span className="tnum font-display text-2xl leading-none font-semibold text-ink">{fmtCount(stats.total)}</span>{" "}
+              <Num value={fmtCount(stats.total)} className="font-display text-2xl leading-none font-semibold text-ink" />{" "}
               <span className="text-sm text-muted">notices</span>
             </span>
             <span aria-hidden className="text-muted">
