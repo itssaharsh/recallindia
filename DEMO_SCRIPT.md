@@ -5,8 +5,8 @@ Source of truth for scope. Shot list, lengths and narration are in `VIDEO.md`; s
 | t | Shot | Route | Must exist |
 |---|---|---|---|
 | 0:00 | Title card with the CDSCO month count from `/v1/stats` | — | slide |
-| 0:10 | A recorded run (2×) of a real CDSCO PDF page left; Textract rows get a box drawn on, lift off and land in the notices pane; counter ticks; 5-step checklist ticks | `/ingest?replay=<run>&speed=2&autoplay=1` | pdf.js fix + poster fallback, dissolve, checklist |
-| 0:40 | Counter hero, source pills with health, new rows landing, one notice in the side sheet | `/` | pollers, `?replay=poll`, NoticeSheet |
+| 0:10 | A recorded run (2×) of a real CDSCO PDF page left; Textract rows get a box drawn on, lift off and land in the notices pane; counter ticks; 5-step checklist ticks | `/ingest/?replay=<run>&speed=2&autoplay=1` | pdf.js fix + poster fallback, dissolve, checklist |
+| 0:40 | Counter hero, source pills with health, new rows landing, one notice in the side sheet | `/feed/` | pollers, `?replay=poll`, NoticeSheet |
 | 0:55 | Photo of a real strip → Textract words draw on → batch flies into the foil chip → check → clear | `/mine` (own household) | scan, FoilChip, checking face |
 | 1:10 | FT5427 card → check again → flips red; quote, foil chip, notice row | `/mine` | matcher, flip, alert face |
 | 1:25 | Step Functions execution paused at WaitForApproval | console | task token |

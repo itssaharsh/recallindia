@@ -2,7 +2,7 @@
 
 ## Recording checklist (after P08-P09-case-and-ui Phase 4 is deployed)
 - OBS, 1920×1080, 30 fps, cursor on, no microphone (Descript adds the voice). Chrome at **125% zoom** (≈1536×790 CSS px, the viewport the QA gate checks). Light theme, the only theme.
-- Record in **your own copy** of the demo household: on `/mine` click `Make my own copy` and wait until all 15 cards finish checking. The demo household itself is read-only.
+- Record in **your own copy** of the demo household: on `/mine/` click `Make my own copy` and wait until all 15 cards finish checking. The demo household itself is read-only.
 - Warm up: open the live URL once, run one `/ingest` replay, open one case.
 - Before generating the voice, replace the month and count in [01] with `cdsco_latest` from `/v1/stats`.
 - One MP4 per clip, named below, 2 s of stillness at the start and end.
@@ -10,9 +10,9 @@
 | # | File | On screen | Length |
 |---|---|---|---|
 | 01 | 01-title.mp4 | Title card (Descript): "{count} drug samples failed CDSCO quality tests in {month}. Nobody told the people who bought them." | 10 s |
-| 02 | 02-ingest.mp4 | `/ingest?replay=<run>&speed=2&autoplay=1`: PDF page left, row boxes drawing on, rows landing right, counter climbing, checklist ticking | 25 s |
-| 03 | 03-feed.mp4 | `/?replay=poll`: counter hero, source pills with health dots, rows landing, one row opened in the side sheet | 13 s |
-| 04a | 04a-scan.mp4 | `/mine` → Add a thing → photo of a real strip → word boxes draw on → batch flies into the foil chip → Check this batch → CLEAR | 15 s |
+| 02 | 02-ingest.mp4 | `/ingest/?replay=<run>&speed=2&autoplay=1`: PDF page left, row boxes drawing on, rows landing right, counter climbing, checklist ticking | 25 s |
+| 03 | 03-feed.mp4 | `/feed/?replay=poll`: counter hero, source pills with health dots, rows landing, one row opened in the side sheet | 13 s |
+| 04a | 04a-scan.mp4 | `/mine/` → Add a thing → photo of a real strip → word boxes draw on → batch flies into the foil chip → Check this batch → CLEAR | 15 s |
 | 04b | 04b-flip.mp4 | the FT5427 card → Check again → checking → flips red; quote, foil chip on red, notice row | 13 s |
 | 04c | 04c-sfn.mp4 | Step Functions console: execution paused at WaitForApproval (cutaway, no paragraph of its own) | 4 s |
 | 05 | 05-case.mp4 | `/case/?id=`: outcome line → notice record → Approve claim letter → pipeline steps → seal fills → letter rises → VERIFIED → Run tamper test → INVALID → Verify again | 27 s |
@@ -20,7 +20,7 @@
 | 05b | 05b-kms.mp4 | KMS console: the asymmetric signing key (cutaway inside 05) | 2 s |
 | 06 | 06-nearmiss.mp4 | the near-miss card: Yours over Listed, one character underlined, dismissed with the reason | 12 s |
 | 07 | 07-vehicle.mp4 | the Jeep Compass card: NHTSA 24V436000, model year inside the range, "confirm with your dealer" line | 10 s |
-| 08 | 08-api.mp4 | `/api`: Run request → curl line → JSON; then the same curl in a terminal | 13 s |
+| 08 | 08-api.mp4 | `/api/`: Run request → curl line → JSON; then the same curl in a terminal | 13 s |
 | 09 | 09-arch.mp4 | Architecture card (one PNG) | 13 s |
 | 10 | 10-cta.mp4 | Live URL + repo card | 5 s |
 
