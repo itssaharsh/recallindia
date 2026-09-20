@@ -101,15 +101,25 @@ export function stripDate(v: string | null | undefined): string | null {
 
 export function stepMs(step: CaseStep | undefined | null): number | null {
   if (!step?.started_at || !step.finished_at) return null;
-  return Math.max(0, new Date(step.finished_at).getTime() - new Date(step.started_at).getTime());
+  const ms = new Date(step.finished_at).getTime() - new Date(step.started_at).getTime();
+  // whole-second stamps written by two Lambdas can land out of order on a fast step: no duration
+  // is honest there, and the row simply shows none.
+  return ms < 0 ? null : ms;
 }
 
-/** Total = verify.finished_at − approve.finished_at (spec C8). */
+/**
+ * Total = the span of the chain: the earliest step start to the latest step finish (spec C8 reads
+ * verify.finished − approve.finished, but each step is stamped by its own Lambda at whole-second
+ * resolution, so on a fast chain verify can be stamped a second before its own start and the
+ * subtraction prints 0.0 s over a second of real work). The span never reads less than the steps.
+ */
 export function pipelineTotalMs(c: CaseRecord | null): number | null {
-  const a = c?.steps.approve.finished_at;
-  const v = c?.steps.verify.finished_at;
-  if (!a || !v) return null;
-  return Math.max(0, new Date(v).getTime() - new Date(a).getTime());
+  if (!c?.steps.approve.finished_at || !c.steps.verify.finished_at) return null;
+  const at = (iso: string | null | undefined) => (iso ? new Date(iso).getTime() : null);
+  const stamps = Object.values(c.steps).flatMap((step) => [at(step?.started_at), at(step?.finished_at)]);
+  const known = stamps.filter((t): t is number => typeof t === "number" && Number.isFinite(t));
+  if (!known.length) return null;
+  return Math.max(0, Math.max(...known) - Math.min(...known));
 }
 
 /** 1 decimal, as a number for NumberFlow */
