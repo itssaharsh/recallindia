@@ -35,7 +35,6 @@ const DOCS: Doc[] = [
   },
   { endpoint: "/v1/notices/{id}", description: <>One notice with its raw row, e.g. {mono("cpsc%2310984")}</>, params: [["id", <>the notice {mono("pk")}, URL-encoded</>]] },
   { endpoint: "/v1/stats", description: "Totals and poller health for each source", params: [] },
-  { endpoint: "/v1/sources", description: "Sources, what they cover and how often they’re polled", params: [] },
 ];
 
 /** Accordion of the four endpoints, one open at a time (spec 3.4). 392 × 520 card at 1536. */

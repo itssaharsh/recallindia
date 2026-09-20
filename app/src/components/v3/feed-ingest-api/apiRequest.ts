@@ -2,7 +2,8 @@
 import { daysBefore } from "./format";
 import type { ApiExample, Endpoint, SourceId, TryItRequest } from "./types";
 
-export const ENDPOINTS: Endpoint[] = ["/v1/notices", "/v1/notices/{id}", "/v1/stats", "/v1/sources"];
+// /v1/sources is not on this API: the source table comes from /v1/stats, so it is not offered here
+export const ENDPOINTS: Endpoint[] = ["/v1/notices", "/v1/notices/{id}", "/v1/stats"];
 
 export interface QueryPart {
   key: string;
