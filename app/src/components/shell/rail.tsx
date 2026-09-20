@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { Logo } from "@/components/brand/logo";
+import { SoundToggle } from "@/components/shell/sound";
 
 import { useAppState } from "./app-state";
 
@@ -51,6 +52,9 @@ export function Rail() {
           </Link>
         );
       })}
+      <div className="ml-auto md:mt-auto md:ml-0 md:pt-4">
+        <SoundToggle />
+      </div>
     </nav>
   );
 }

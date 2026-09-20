@@ -4,6 +4,7 @@ import { preconnect } from "react-dom";
 
 import { AppStateProvider } from "@/components/shell/app-state";
 import { Rail } from "@/components/shell/rail";
+import { SoundProvider } from "@/components/shell/sound";
 import { TopBar } from "@/components/shell/top-bar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { API_URL } from "@/lib/api";
@@ -54,7 +55,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           Skip to content
         </a>
         <AppStateProvider>
-          <TooltipProvider delayDuration={200}>
+          <SoundProvider>
+            <TooltipProvider delayDuration={200}>
             <div className="min-h-dvh md:grid md:grid-cols-[13rem_minmax(0,1fr)]">
               {/* the column carries the rail's surface so it runs the page's full height */}
               <div className="border-b border-line bg-canvas md:border-r md:border-b-0">
@@ -67,7 +69,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
                 </main>
               </div>
             </div>
-          </TooltipProvider>
+            </TooltipProvider>
+          </SoundProvider>
         </AppStateProvider>
       </body>
     </html>

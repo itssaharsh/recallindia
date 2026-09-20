@@ -1,13 +1,13 @@
 "use client";
 
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { apiGet } from "@/lib/api";
 import { SNAPSHOT_KIND, fmtBytes, fmtUtc } from "@/lib/case";
-import { CROSSFADE, STAMP } from "@/lib/motion";
 import type { Evidence, VerifyResult } from "@/lib/types";
+
+import { Seal } from "./seal";
 
 const CAPTION =
   "The snapshot is locked for 30 days (S3 Object Lock) and its SHA-256 is signed with an AWS KMS key. Change one byte and the signature no longer matches.";
@@ -18,31 +18,6 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
       <dt className="text-muted">{label}</dt>
       <dd className="min-w-0 text-ink [overflow-wrap:anywhere]">{children}</dd>
     </>
-  );
-}
-
-/** VERIFIED in clear green / SIGNATURE INVALID in alert red. Every new answer presses the stamp
- *  down again (scale 1.15 -> 1, tilted 6°, 300 ms); reduced motion crossfades. */
-function Stamp({ result, busy }: { result: VerifyResult | null; busy: boolean }) {
-  const reduce = useReducedMotion();
-  const label = !result ? "Verifying" : result.valid ? "Verified" : "Signature invalid";
-  const tone = !result ? "border-line text-muted" : result.valid ? "border-success text-success" : "border-danger text-danger";
-  const press = reduce
-    ? { initial: { opacity: 0, rotate: 6 }, animate: { opacity: 1, rotate: 6 }, transition: CROSSFADE }
-    : { initial: { opacity: 0, scale: 1.15, rotate: 6 }, animate: { opacity: 1, scale: 1, rotate: 6 }, transition: STAMP };
-  return (
-    <div className={`flex min-h-16 items-center justify-center px-2 transition-opacity ${busy ? "opacity-40" : ""}`} aria-live="polite">
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.span
-          key={result ? `${result.valid}-${result.checked_at}` : "pending"}
-          {...press}
-          exit={{ opacity: 0, transition: { duration: 0.08 } }}
-          className={`inline-block border-4 border-double px-3.5 py-1.5 font-mono text-[15px] font-semibold tracking-[0.2em] whitespace-nowrap uppercase ${tone}`}
-        >
-          {label}
-        </motion.span>
-      </AnimatePresence>
-    </div>
   );
 }
 
@@ -108,7 +83,9 @@ export function EvidenceCertificate({ caseId, evidence, demo }: { caseId: string
             {evidence.snapshot_version_id && <Row label="Version">{evidence.snapshot_version_id}</Row>}
           </dl>
           <div className="flex flex-col items-stretch gap-3 border-t border-line pt-4 md:border-t-0 md:border-l md:pt-0 md:pl-5">
-            <Stamp result={error ? null : result} busy={busy} />
+            <div className="flex min-h-[152px] items-center justify-center">
+              <Seal state={error || !result ? "pending" : result.valid ? "verified" : "invalid"} />
+            </div>
             <p className="min-h-10 text-center text-[11px] leading-snug text-muted">
               {error
                 ? `Couldn't reach KMS to verify (${error}). Try again.`
