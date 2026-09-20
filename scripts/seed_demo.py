@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
 import os
 import sys
 from pathlib import Path
@@ -37,6 +38,9 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--mock", action="store_true", help="DEMO_MODE=1: local store, fixtures")
     mode.add_argument("--live", action="store_true", help="the deployed stack's DynamoDB tables")
     p.add_argument("--reset", action="store_true", help="delete items, cases and events first")
+    p.add_argument(
+        "--no-check", action="store_true", help="seed the items but do not run the matcher on them"
+    )
     p.add_argument("--stack", default=os.environ.get("STACK_NAME") or "recallindia")
     p.add_argument("--profile", default=os.environ.get("AWS_PROFILE") or "firstcommit")
     return p
@@ -123,6 +127,82 @@ def seed(mock: bool) -> list[dict]:
     return written
 
 
+def check_seeded(mock: bool, skip: set[str], timeout: int = 240) -> dict[str, int]:
+    """Run the matcher over the demo items, so the demo wall shows real outcomes.
+
+    The demo household is read-only through the API (``demo_read_only``), so this is the admin
+    path: the executions are started directly on the MatchStateMachine, three at a time. The item
+    that carries the fixed demo case (``case_demo_ft5427``) is skipped -- it was sealed by
+    ``seed_demo_case`` and re-checking it would point the item at a new, unapproved case.
+    """
+    import time
+
+    from common import dynamo
+    from common.notices import now_iso
+    from common.schemas import Item
+
+    entries = [e for e in demo_world.DEMO_ITEMS if e["item_id"] not in skip]
+    if mock:
+        from api import match_api
+
+        for entry in entries:
+            row = dynamo.get("items", Item.make_pk(entry["item_id"]))
+            if row is not None:
+                match_api.run_demo_check(row)
+    else:
+        import boto3
+
+        from api import match_api
+
+        machine = os.environ["MATCH_STATE_MACHINE_ARN"]
+        sfn = boto3.client("stepfunctions")
+        for index, entry in enumerate(entries):
+            item_id = entry["item_id"]
+            now = now_iso()
+            resp = sfn.start_execution(
+                stateMachineArn=machine,
+                name=match_api.execution_name(item_id, now),
+                input=json.dumps({"item_id": item_id}),
+            )
+            row = dynamo.get("items", Item.make_pk(item_id))
+            if row is not None:
+                row.update({"last_check_arn": resp["executionArn"], "last_check_at": now})
+                dynamo.put("items", row)
+            if index % 3 == 2:  # three at a time, like the household copy does
+                time.sleep(1.5)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            pending = []
+            for entry in entries:
+                row = dynamo.get("items", Item.make_pk(entry["item_id"])) or {}
+                if not row.get("last_checked_at"):
+                    pending.append(entry["item_id"])
+            if not pending:
+                break
+            time.sleep(3)
+
+    # count the faces the wall shows, not the item statuses: a dismissed near miss keeps
+    # status "clear" but reads as "not on the notice" on its card
+    counts = {"on a notice": 0, "near miss": 0, "needs you": 0, "clear": 0, "not checked": 0}
+    from common.schemas import Case
+
+    for entry in demo_world.DEMO_ITEMS:
+        row = dynamo.get("items", Item.make_pk(entry["item_id"])) or {}
+        case_id = str(row.get("case_id") or "")
+        case = dynamo.get("cases", Case.make_pk(case_id)) if case_id else None
+        if not row.get("last_checked_at"):
+            counts["not checked"] += 1
+        elif row.get("status") == "alert":
+            counts["on a notice"] += 1
+        elif row.get("status") == "hold":
+            counts["needs you"] += 1
+        elif (case or {}).get("decision") == "dismiss":
+            counts["near miss"] += 1
+        else:
+            counts["clear"] += 1
+    return {k: v for k, v in counts.items() if v}
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.mock:
@@ -157,6 +237,11 @@ def main(argv: list[str] | None = None) -> int:
     seeded_case = seed_demo_case.main(case_args)
     if seeded_case != 0:
         print("seed_demo: the demo case could not be sealed (see above)", file=sys.stderr)
+
+    # the wall a visitor lands on has to show outcomes, not 15 unchecked cards
+    if not args.no_check:
+        counts = check_seeded(args.mock, skip={seed_demo_case.ITEM_ID})
+        print(f"seed_demo: checked the demo items -> {counts}")
     print(
         f"seed_demo: alert notice {alert['notice_pk']} published {alert['published_at']} -> "
         f"purchase_date {alert['purchase_date']} (+{demo_world.PURCHASE_OFFSET_DAYS} days)\n"
