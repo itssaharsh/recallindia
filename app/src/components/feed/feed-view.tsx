@@ -4,10 +4,12 @@ import { CloudOff, FilterX, Inbox } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { EmptyState } from "@/components/common/empty-state";
+import Link from "next/link";
+
 import { useAppState } from "@/components/shell/app-state";
 import { Button } from "@/components/ui/button";
 import { apiGet, apiHost, query } from "@/lib/api";
-import { fmtCount, sourceLabel } from "@/lib/format";
+import { fmtCount, fmtWhen, sourceLabel } from "@/lib/format";
 import type { Notice, NoticesPage } from "@/lib/types";
 import { usePoll } from "@/lib/use-poll";
 
@@ -33,6 +35,10 @@ export function FeedView() {
   const [more, setMore] = useState(false);
   const [open, setOpen] = useState<Notice | null>(null);
   const fresh = useRef<Set<string>>(new Set());
+  // ?replay=poll (no flag needed): hold the newest 3 rows back for a beat, then land them the
+  // way a real poll does. It makes the feed's one live moment recordable on demand.
+  const [replaying, setReplaying] = useState<string | null>(null);
+  const replayed = useRef(false);
   const seen = useRef<Set<string>>(new Set());
 
   // ?source=cdsco_nsq deep link (static export: read on the client)
@@ -86,6 +92,24 @@ export function FeedView() {
     ready && load === "ready",
   );
 
+  // the replay runs once, after the first page is on screen
+  useEffect(() => {
+    if (load !== "ready" || replayed.current) return;
+    if (new URLSearchParams(window.location.search).get("replay") !== "poll") return;
+    replayed.current = true;
+    setRows((prev) => {
+      const held = prev.slice(0, 3);
+      if (!held.length) return prev;
+      setReplaying(held[0].first_seen_at ?? held[0].published_at ?? null);
+      const rest = prev.slice(3);
+      window.setTimeout(() => {
+        held.forEach((n) => fresh.current.add(n.pk));
+        setRows((now) => [...held, ...now].sort(newestFirst));
+      }, 900);
+      return rest;
+    });
+  }, [load]);
+
   const loadMore = async () => {
     if (!cursor) return;
     setMore(true);
@@ -119,12 +143,41 @@ export function FeedView() {
 
   const shown = source ? stats?.sources.find((s) => s.source === source) : null;
 
+  const latest = stats?.cdsco_latest;
+
   return (
     <section aria-labelledby="feed-title" className="flex flex-col">
-      <div className="flex flex-col gap-3 border-b border-line px-5 py-4">
-        <h1 id="feed-title" className="font-display text-lg font-semibold text-ink">
-          Feed <span className="font-sans text-sm font-normal text-muted">· newest first{shown ? ` · ${shown.label} only` : ""}</span>
-        </h1>
+      <div className="flex flex-col gap-6 border-b border-line px-5 pt-8 pb-4 md:px-8">
+        {/* C-02: the hero counter is the proof the feed is live, without the word "live" */}
+        <div className="space-y-2">
+          <h1 id="feed-title" className="tnum font-display text-[44px] leading-[1.04] font-extrabold tracking-[-0.03em] text-ink md:text-[64px]">
+            {stats ? `${fmtCount(stats.total)} notices` : "Notices"}
+          </h1>
+          <p className="text-[16px] text-muted md:text-[18px]">
+            from CDSCO, CPSC, NHTSA and openFDA
+            {stats?.last_poll_at ? ` · last poll ${fmtWhen(stats.last_poll_at)} IST` : ""}
+            {shown ? ` · showing ${shown.label} only` : ""}
+          </p>
+          {replaying && (
+            <p role="status" className="text-[13px] text-primary">
+              Replaying the {fmtWhen(replaying)} poll
+            </p>
+          )}
+        </div>
+
+        {/* the callout says what the newest CDSCO month holds; hidden when the field is missing */}
+        {latest?.month && latest.count ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-line bg-surface-1 px-4 py-3">
+            <p className="text-[15px] text-ink">
+              <span className="tnum">{fmtCount(latest.count)}</span> drug samples failed CDSCO quality tests in{" "}
+              {latest.month}.
+            </p>
+            <Link href="/mine/" className="text-[15px] font-medium text-primary hover:underline">
+              Check what you own →
+            </Link>
+          </div>
+        ) : null}
+
         <SourceFilters stats={stats} value={source} onChange={setSource} />
       </div>
 

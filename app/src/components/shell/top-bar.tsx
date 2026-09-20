@@ -1,5 +1,7 @@
 "use client";
 
+import { usePathname } from "next/navigation";
+
 import { fmtCount, fmtTime } from "@/lib/format";
 
 import { useAppState } from "./app-state";
@@ -8,10 +10,12 @@ import { HouseholdPill } from "./household-pill";
 /** The live counter: "N notices · S sources · last poll hh:mm:ss", tabular numerals throughout. */
 export function TopBar() {
   const { stats, statsError, demo } = useAppState();
+  // the feed's hero is the counter; the header would say the same thing twice
+  const onFeed = usePathname() === "/";
 
   return (
     <header className="flex min-h-14 flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-line bg-canvas px-5 py-3">
-      <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1" aria-live="polite">
+      <p className={`flex flex-wrap items-baseline gap-x-2 gap-y-1 ${onFeed ? "invisible" : ""}`} aria-live="polite">
         {stats ? (
           <>
             {/* each figure stays on one line with its label; the groups wrap on a phone */}

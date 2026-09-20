@@ -77,6 +77,33 @@ def _meta_view(name: str) -> dict | None:
     return {"name": name, **{k: row.get(k) for k in _META_FIELDS}}
 
 
+def cdsco_latest() -> dict | None:
+    """The newest CDSCO NSQ month and how many samples failed in it (the feed's callout).
+
+    One page of the ``source-published_at-index`` GSI, newest first: the first row names the
+    month, and the rows that share it are that month's list. A month has been at most 239 rows,
+    so one page covers it; no scan.
+    """
+    rows, _ = dynamo.query_source("cdsco_nsq", limit=400)
+    if not rows:
+        return None
+
+    def month_of(row: dict) -> str:
+        ref = row.get("row_ref") or {}
+        return str(ref.get("month") or str(row.get("notice_id", "")).split("-cdsco")[0] or "")
+
+    month = month_of(rows[0])
+    if not month:
+        return None
+    same = [r for r in rows if month_of(r) == month]
+    return {
+        "month": month,
+        "count": len(same),
+        "published_at": str(rows[0].get("published_at") or ""),
+        "complete": len(same) < len(rows),  # false when the page ran out mid-month
+    }
+
+
 def compute_stats() -> dict:
     sources: list[dict] = []
     runs: list[str] = []
@@ -101,6 +128,7 @@ def compute_stats() -> dict:
         "total": sum(s["count"] for s in sources),
         "sources_count": len(sources),
         "sources": sources,
+        "cdsco_latest": cdsco_latest(),
         "last_poll_at": max(runs) if runs else None,
         "generated_at": match_api._now(),
     }

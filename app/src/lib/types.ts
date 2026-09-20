@@ -36,6 +36,8 @@ export interface Notice {
   hazard_or_failed_test?: string;
   remedy?: string | null;
   published_at: string;
+  /** when the poller first saw it (a new row on the feed is new by this, not by published_at) */
+  first_seen_at?: string | null;
   url: string;
   raw_excerpt?: string;
   pdf_s3_key?: string | null;
@@ -64,8 +66,17 @@ export interface SourceStat {
   polls_every: string;
 }
 
+export interface CdscoLatest {
+  month: string;
+  count: number;
+  published_at?: string;
+  complete?: boolean;
+}
+
 export interface Stats {
   total: number;
+  /** the newest CDSCO NSQ month and how many samples failed in it (the feed's callout) */
+  cdsco_latest?: CdscoLatest | null;
   sources_count: number;
   sources: SourceStat[];
   last_poll_at: string | null;
