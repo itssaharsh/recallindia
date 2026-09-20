@@ -238,7 +238,9 @@ def test_api_health_and_notices():
     health = app.handler(_api_event("GET", "/health"), None)
     assert health["statusCode"] == 200
     assert health["headers"]["access-control-allow-origin"] == "*"
-    assert json.loads(health["body"]) == {"ok": True, "demo": True}
+    body = json.loads(health["body"])
+    assert body["ok"] is True and body["demo"] is True
+    assert isinstance(body["search_rows"], int)  # /health also warms the search index
 
     notices = app.handler(_api_event("GET", "/v1/notices"), None)
     assert notices["statusCode"] == 200

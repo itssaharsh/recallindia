@@ -106,7 +106,14 @@ def _wrap(fn: Callable[[dict, dict], tuple[int, dict]]) -> Route:
 
 
 def health(_params: dict, _event: dict) -> dict:
-    return respond(200, {"ok": True, "demo": is_demo()})
+    """``GET /health``: also warms the search index, so the first search a visitor types
+    answers from memory (the app pings this on load and does not wait for it)."""
+    warmed = None
+    try:
+        warmed = len(search_index.rows())
+    except Exception:  # noqa: BLE001 - health never fails because of an optimisation
+        log.exception("search index warm-up failed")
+    return respond(200, {"ok": True, "demo": is_demo(), "search_rows": warmed})
 
 
 # --- public API -------------------------------------------------------------------

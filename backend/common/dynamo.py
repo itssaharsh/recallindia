@@ -186,7 +186,7 @@ def _source_sort_key(item: dict) -> tuple[str, str]:
     return (str(item.get("published_at", "")), str(item.get("pk", "")))
 
 
-def _source_items(source: str, since: str | None) -> list[dict]:
+def _source_items(source: str, since: str | None, until: str | None = None) -> list[dict]:
     """Demo: rows of ``source`` that the GSI would hold (a string published_at), filtered."""
     out = []
     for item in _load("notices").values():
@@ -194,6 +194,8 @@ def _source_items(source: str, since: str | None) -> list[dict]:
         if item.get("source") != source or not isinstance(published, str) or not published:
             continue
         if since and published < since:
+            continue
+        if until and published >= until:
             continue
         out.append(item)
     return out
@@ -206,11 +208,14 @@ def query_source(
     limit: int = 100,
     exclusive_start_key: dict | None = None,
     ascending: bool = False,
+    until: str | None = None,
 ) -> tuple[list[dict], dict | None]:
     """One page of ``source``'s notices from the ``source-published_at-index`` GSI.
 
     Newest first by default (``published_at`` desc), optionally only those with
-    ``published_at >= since``; ``limit`` items per page. Returns ``(items, last_evaluated_key)``
+    ``published_at >= since`` and, with ``until``, ``published_at < until`` (a date range, so
+    a source can be read in parallel slices); ``limit`` items per page. Returns
+    ``(items, last_evaluated_key)``
     where the key (``{pk, source, published_at}``) is passed back as ``exclusive_start_key`` to
     continue, and is None once the last page is reached. As on DynamoDB the key is present
     whenever the page is full, so the last page may be empty (``[]``, None).
@@ -220,7 +225,9 @@ def query_source(
     """
     limit = max(1, int(limit))
     if is_demo():
-        items = sorted(_source_items(source, since), key=_source_sort_key, reverse=not ascending)
+        items = sorted(
+            _source_items(source, since, until), key=_source_sort_key, reverse=not ascending
+        )
         if exclusive_start_key:
             start = _source_sort_key(exclusive_start_key)
             if ascending:
@@ -243,8 +250,14 @@ def query_source(
     from boto3.dynamodb.conditions import Key
 
     condition = Key("source").eq(source)
-    if since:
+    if since and until:
+        # between is inclusive on both ends; the range key is a date string, so step the upper
+        # bound back one character to keep `until` exclusive
+        condition = condition & Key("published_at").between(since, _just_before(until))
+    elif since:
         condition = condition & Key("published_at").gte(since)
+    elif until:
+        condition = condition & Key("published_at").lt(until)
     kwargs: dict[str, Any] = {
         "IndexName": SOURCE_INDEX,
         "KeyConditionExpression": condition,
@@ -255,6 +268,11 @@ def query_source(
         kwargs["ExclusiveStartKey"] = exclusive_start_key
     resp = _table("notices").query(**kwargs)
     return list(resp.get("Items", [])), resp.get("LastEvaluatedKey") or None
+
+
+def _just_before(text: str) -> str:
+    """The greatest string below ``text`` in DynamoDB's byte order (for an exclusive bound)."""
+    return text[:-1] + chr(ord(text[-1]) - 1) + "\uffff" if text else text
 
 
 def count_source(source: str, *, since: str | None = None, max_items: int = 5000) -> int:

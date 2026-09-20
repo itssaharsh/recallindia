@@ -30,7 +30,21 @@ except ModuleNotFoundError:  # Lambda layout: siblings at /var/task
 log = logging.getLogger(__name__)
 
 PAGE = 100
-MAX_PAGES_PER_SOURCE = 100  # 10,000 rows per source: well past today's 2,700, still bounded
+MAX_PAGES_PER_SLICE = 40  # 4,000 rows per slice: a slice is a source over one date range
+# Date slices: one query chain per (source, range), all in parallel, so the biggest source
+# (CDSCO, ~2,700 rows) is read as several short chains rather than one 27-page walk.
+SLICE_EDGES = (
+    "2020-01-01",
+    "2023-01-01",
+    "2024-01-01",
+    "2025-01-01",
+    "2025-07-01",
+    "2026-01-01",
+    "2026-04-01",
+    "2026-07-01",
+    "2026-10-01",
+)
+WORKERS = 8
 
 _lock = threading.Lock()
 _cache: dict = {"built_at": 0.0, "rows": []}
@@ -45,11 +59,21 @@ def ttl_seconds() -> int:
         return 600
 
 
-def _rows_for(source: str) -> list[dict]:
+def _slices() -> list[tuple[str | None, str | None]]:
+    """(since, until) pairs covering all time: before the first edge, between each pair of
+    edges, and after the last."""
+    edges = list(SLICE_EDGES)
+    return [(None, edges[0])] + list(zip(edges, edges[1:], strict=False)) + [(edges[-1], None)]
+
+
+def _rows_for(job: tuple[str, str | None, str | None]) -> list[dict]:
+    source, since, until = job
     rows: list[dict] = []
     esk = None
-    for _ in range(MAX_PAGES_PER_SOURCE):
-        page, esk = dynamo.query_source(source, limit=PAGE, exclusive_start_key=esk)
+    for _ in range(MAX_PAGES_PER_SLICE):
+        page, esk = dynamo.query_source(
+            source, since=since, until=until, limit=PAGE, exclusive_start_key=esk
+        )
         rows.extend(item for item in page if not is_meta(item))
         if esk is None:
             break
@@ -61,10 +85,18 @@ def _published(item: dict) -> str:
 
 
 def build() -> list[dict]:
-    """Every notice, newest first. One set of index queries per source, sources in parallel."""
-    with ThreadPoolExecutor(max_workers=len(ALL_SOURCES)) as pool:
-        per_source = list(pool.map(_rows_for, ALL_SOURCES))
-    rows = [item for group in per_source for item in group]
+    """Every notice, newest first: one query chain per (source, date slice), all in parallel."""
+    jobs = [(source, since, until) for source in ALL_SOURCES for since, until in _slices()]
+    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        groups = list(pool.map(_rows_for, jobs))
+    seen: set[str] = set()
+    rows: list[dict] = []
+    for group in groups:
+        for item in group:
+            pk = str(item.get("pk", ""))
+            if pk not in seen:  # a row exactly on a slice edge belongs to one slice, but be sure
+                seen.add(pk)
+                rows.append(item)
     rows.sort(key=lambda item: (_published(item), str(item.get("pk", ""))), reverse=True)
     return rows
 

@@ -397,3 +397,28 @@ def test_cursor_roundtrip_and_validation():
     assert notices_query.parse_limit("100000") == 100
     with pytest.raises(ValueError):
         notices_query.parse_limit("abc")
+
+
+def test_search_index_slices_cover_every_row_once(seeded):
+    from api import search_index
+
+    rows = search_index.build()
+    expected = sum(len(v) for v in seeded.values())
+    assert len(rows) == expected
+    assert len({r["pk"] for r in rows}) == expected
+    stamps = [r["published_at"] for r in rows]
+    assert stamps == sorted(stamps, reverse=True)
+
+
+def test_query_source_until_is_exclusive(seeded):
+    july, _ = dynamo.query_source("cdsco_nsq", since="2026-07-01", until="2026-07-02", limit=500)
+    june, _ = dynamo.query_source("cdsco_nsq", since="2026-06-01", until="2026-07-01", limit=500)
+    assert {r["published_at"] for r in july} == {"2026-07-01"}
+    assert {r["published_at"] for r in june} == {"2026-06-01"}
+    assert len(july) + len(june) == len(seeded["cdsco_nsq"])
+
+
+def test_health_reports_the_warmed_index(seeded):
+    status, body = _get("/health")
+    assert status == 200 and body["ok"] is True
+    assert body["search_rows"] == sum(len(v) for v in seeded.values())

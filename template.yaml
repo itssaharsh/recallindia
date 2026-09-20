@@ -332,6 +332,8 @@ Resources:
   ApiFunction:
     Type: AWS::Serverless::Function
     Properties:
+      # one full vCPU: the search index deserialises every notice once per container
+      MemorySize: 1769
       FunctionName: !Sub recallindia-api-${AWS::AccountId}
       CodeUri: backend/api/
       Handler: app.handler
